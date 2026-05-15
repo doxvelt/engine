@@ -5,7 +5,7 @@ import test from "node:test";
 import { compileWorld } from "../src/core/compiler.ts";
 import { assembleActorContext } from "../src/core/context.ts";
 import { initWorld } from "../src/core/init.ts";
-import type { EntityRecord } from "../src/core/types.ts";
+import type { AssetRecord, EntityRecord } from "../src/core/types.ts";
 import { openRuntimeStore } from "../src/store/sqlite.ts";
 
 test("initWorld creates a compilable demo source", async () => {
@@ -17,6 +17,7 @@ test("initWorld creates a compilable demo source", async () => {
 
   assert.equal(compiled.entities.length, 3);
   assert.equal(compiled.scenarios.at(0)?.id, "executive-interviews");
+  assert.ok(compiled.models.some((model) => model.id === "local-openai-compatible"));
   assert.ok(compiled.beliefs.length >= 5);
   assert.ok(compiled.beliefs.at(0)?.sourceSpan.file);
 });
@@ -39,10 +40,13 @@ test("runtime store saves compiled actors and manual turns", async () => {
     });
 
     const actors = store.listActors("default");
+    const models = store.listCompiledRecords<AssetRecord>("default", "model");
+
     assert.deepEqual(
       actors.map((actor) => actor.id),
       ["ceo", "coo", "student-team"]
     );
+    assert.ok(models.some((model) => model.id === "local-openai-compatible"));
 
     const turn = store.appendTurn({
       simulationId: "default",

@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { generateDoxveltText } from "../ai/generate.ts";
 import { compileWorld } from "../core/compiler.ts";
 import { assembleActorContext } from "../core/context.ts";
 import { initWorld } from "../core/init.ts";
 import type { AssetRecord, EntityRecord } from "../core/types.ts";
-import { openRuntimeStore } from "../store/sqlite.ts";
+import { openRuntimeStore, type RuntimeStore } from "../store/sqlite.ts";
 
 async function main() {
   const [command, ...args] = process.argv.slice(2);
@@ -131,10 +132,7 @@ async function contextCommand(args: string[]): Promise<void> {
 
 async function turnCommand(args: string[]): Promise<void> {
   const actorId = args.find((arg) => !arg.startsWith("--"));
-  if (!actorId) throw new CliError("Usage: doxvelt turn <actor-id> --manual <text>", 1);
-
-  const text = optionValue(args, "--manual");
-  if (!text) throw new CliError("Only manual turns are implemented. Use --manual <text>.", 1);
+  if (!actorId) throw new CliError("Usage: doxvelt turn <actor-id> (--manual <text> | --ai --model <id>)", 1);
 
   const simulationId = optionValue(args, "--simulation") || "default";
   const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
@@ -142,11 +140,65 @@ async function turnCommand(args: string[]): Promise<void> {
   const store = await openRuntimeStore(dbPath).open();
 
   try {
+    const isAiTurn = hasFlag(args, "--ai");
+    const text = hasFlag(args, "--ai")
+      ? await generateAiTurnText({ args, actorId, simulationId, store })
+      : optionValue(args, "--manual");
+
+    if (!text) {
+      throw new CliError("Use --manual <text> or --ai --model <id>.", 1);
+    }
+
     const turn = store.appendTurn({ simulationId, actorId, text, audience });
-    print({ message: "Appended manual turn.", turn }, hasFlag(args, "--json"));
+    print({ message: `Appended ${isAiTurn ? "AI" : "manual"} turn.`, turn }, hasFlag(args, "--json"));
   } finally {
     store.close();
   }
+}
+
+async function generateAiTurnText({
+  args,
+  actorId,
+  simulationId,
+  store
+}: {
+  args: string[];
+  actorId: string;
+  simulationId: string;
+  store: RuntimeStore;
+}): Promise<string> {
+  const modelId = optionValue(args, "--model");
+  if (!modelId) throw new CliError("Use --ai with --model <id>.", 1);
+
+  const simulation = store.getSimulation(simulationId);
+  if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
+
+  const actor = store.getCompiledRecord<EntityRecord>(simulationId, "entity", actorId);
+  if (!actor) throw new CliError(`Actor not found: ${actorId}`, 1);
+
+  const model = store.getCompiledRecord<AssetRecord>(simulationId, "model", modelId);
+  if (!model) throw new CliError(`Model not found: ${modelId}`, 1);
+
+  const context = assembleActorContext({
+    simulation,
+    actor,
+    worlds: store.listCompiledRecords<AssetRecord>(simulationId, "world"),
+    scenario: simulation.scenarioId
+      ? store.getCompiledRecord<AssetRecord>(simulationId, "scenario", simulation.scenarioId)
+      : null,
+    formats: store.listCompiledRecords<AssetRecord>(simulationId, "format"),
+    beliefs: store.listBeliefs(simulationId),
+    turns: store.listAccessibleTurns(simulationId, actorId)
+  });
+
+  const result = await generateDoxveltText({
+    actorId,
+    purpose: "turn",
+    model,
+    prompt: context.promptPreview
+  });
+
+  return result.text;
 }
 
 function printHelp() {
@@ -159,6 +211,7 @@ Usage:
   doxvelt actors [--simulation <id>] [--db <path>] [--json]
   doxvelt context <actor-id> [--simulation <id>] [--db <path>] [--json]
   doxvelt turn <actor-id> --manual <text> [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
+  doxvelt turn <actor-id> --ai --model <id> [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
 `);
 }
 

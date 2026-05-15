@@ -20,6 +20,15 @@ model: manual
 ---
 `);
 
+  await writeSeed(root, "models/local-openai-compatible.yaml", `---
+id: local-openai-compatible
+provider: openai-compatible
+base_url: http://localhost:11434/v1
+model: llama3.1
+api_key_env: OLLAMA_API_KEY
+---
+`);
+
   await writeSeed(root, "worlds/strategy-class.md", `---
 id: strategy-class
 name: Strategy Class

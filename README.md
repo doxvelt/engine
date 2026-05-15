@@ -81,12 +81,18 @@ This repository currently contains design documents and the first local CLI slic
 Try the current slice:
 
 ```sh
-npm run doxvelt -- init world/demo
-npm run doxvelt -- compile world/demo --json
-npm run doxvelt -- start world/demo --scenario executive-interviews --json
-npm run doxvelt -- actors --json
-npm run doxvelt -- turn ceo --manual "We need to understand what is really going on." --audience ceo,student-team --json
-npm run doxvelt -- context ceo --json
+bun run doxvelt -- init world/demo
+bun run doxvelt -- compile world/demo --json
+bun run doxvelt -- start world/demo --scenario executive-interviews --json
+bun run doxvelt -- actors --json
+bun run doxvelt -- turn ceo --manual "We need to understand what is really going on." --audience ceo,student-team --json
+bun run doxvelt -- context ceo --json
 ```
 
-The next implementation step is one AI SDK-backed actor turn.
+If a local OpenAI-compatible endpoint is running, try an AI-backed turn:
+
+```sh
+bun run doxvelt -- turn coo --ai --model local-openai-compatible --audience coo,student-team --json
+```
+
+The next implementation step is episode closure with simple memory writing.
