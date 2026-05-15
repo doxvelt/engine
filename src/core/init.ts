@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { SOURCE_FOLDERS } from "./source.js";
+import { SOURCE_FOLDERS } from "./source.ts";
 
-export async function initWorld(targetPath) {
+export async function initWorld(targetPath: string): Promise<{ root: string }> {
   const root = path.resolve(targetPath);
 
   for (const folder of SOURCE_FOLDERS) {
@@ -100,6 +100,6 @@ types: [interview]
   return { root };
 }
 
-async function writeSeed(root, relativePath, content) {
+async function writeSeed(root: string, relativePath: string, content: string): Promise<void> {
   await writeFile(path.join(root, relativePath), content, { flag: "wx" });
 }

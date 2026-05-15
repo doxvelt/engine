@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { compileWorld } from "../core/compiler.js";
-import { assembleActorContext } from "../core/context.js";
-import { initWorld } from "../core/init.js";
-import { openRuntimeStore } from "../store/sqlite.js";
+import { compileWorld } from "../core/compiler.ts";
+import { assembleActorContext } from "../core/context.ts";
+import { initWorld } from "../core/init.ts";
+import type { AssetRecord, EntityRecord } from "../core/types.ts";
+import { openRuntimeStore } from "../store/sqlite.ts";
 
 async function main() {
   const [command, ...args] = process.argv.slice(2);
@@ -29,12 +30,13 @@ async function main() {
       process.exit(error.exitCode);
     }
 
-    console.error(error.stack || error.message);
+    const detail = error instanceof Error ? error.stack || error.message : String(error);
+    console.error(detail);
     process.exit(1);
   }
 }
 
-async function initCommand(args) {
+async function initCommand(args: string[]): Promise<void> {
   const target = args[0] || "world/demo";
   if (existsSync(path.resolve(target))) {
     throw new CliError(`Target already exists: ${target}`, 1);
@@ -44,13 +46,13 @@ async function initCommand(args) {
   print({ message: "Initialized Doxvelt world source.", root: result.root }, hasFlag(args, "--json"));
 }
 
-async function compileCommand(args) {
+async function compileCommand(args: string[]): Promise<void> {
   const worldPath = args.find((arg) => !arg.startsWith("--")) || "world/demo";
   const compiled = await compileWorld(worldPath);
   print(compiled, hasFlag(args, "--json"));
 }
 
-async function startCommand(args) {
+async function startCommand(args: string[]): Promise<void> {
   const worldPath = args.find((arg) => !arg.startsWith("--")) || "world/demo";
   const scenarioId = optionValue(args, "--scenario") || "default";
   const simulationId = optionValue(args, "--simulation") || "default";
@@ -81,7 +83,7 @@ async function startCommand(args) {
   );
 }
 
-async function actorsCommand(args) {
+async function actorsCommand(args: string[]): Promise<void> {
   const simulationId = optionValue(args, "--simulation") || "default";
   const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
   const store = await openRuntimeStore(dbPath).open();
@@ -94,7 +96,7 @@ async function actorsCommand(args) {
   }
 }
 
-async function contextCommand(args) {
+async function contextCommand(args: string[]): Promise<void> {
   const actorId = args.find((arg) => !arg.startsWith("--"));
   if (!actorId) throw new CliError("Usage: doxvelt context <actor-id> [--json]", 1);
 
@@ -106,17 +108,17 @@ async function contextCommand(args) {
     const simulation = store.getSimulation(simulationId);
     if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
 
-    const actor = store.getCompiledRecord(simulationId, "entity", actorId);
+    const actor = store.getCompiledRecord<EntityRecord>(simulationId, "entity", actorId);
     if (!actor) throw new CliError(`Actor not found: ${actorId}`, 1);
 
     const context = assembleActorContext({
       simulation,
       actor,
-      worlds: store.listCompiledRecords(simulationId, "world"),
+      worlds: store.listCompiledRecords<AssetRecord>(simulationId, "world"),
       scenario: simulation.scenarioId
-        ? store.getCompiledRecord(simulationId, "scenario", simulation.scenarioId)
+        ? store.getCompiledRecord<AssetRecord>(simulationId, "scenario", simulation.scenarioId)
         : null,
-      formats: store.listCompiledRecords(simulationId, "format"),
+      formats: store.listCompiledRecords<AssetRecord>(simulationId, "format"),
       beliefs: store.listBeliefs(simulationId),
       turns: store.listAccessibleTurns(simulationId, actorId)
     });
@@ -127,7 +129,7 @@ async function contextCommand(args) {
   }
 }
 
-async function turnCommand(args) {
+async function turnCommand(args: string[]): Promise<void> {
   const actorId = args.find((arg) => !arg.startsWith("--"));
   if (!actorId) throw new CliError("Usage: doxvelt turn <actor-id> --manual <text>", 1);
 
@@ -160,36 +162,58 @@ Usage:
 `);
 }
 
-function print(value, asJson) {
+function print(value: unknown, asJson: boolean): void {
   if (asJson) {
     console.log(JSON.stringify(value, null, 2));
     return;
   }
 
-  if (value.message) console.log(value.message);
-  if (value.root) console.log(`root: ${value.root}`);
-  if (value.dbPath) console.log(`db: ${value.dbPath}`);
-  if (value.actors) console.log(`actors: ${value.actors.map((actor) => actor.id || actor).join(", ")}`);
+  if (!isPrintableRecord(value)) {
+    console.log(JSON.stringify(value, null, 2));
+    return;
+  }
+
+  if (typeof value.message === "string") console.log(value.message);
+  if (typeof value.root === "string") console.log(`root: ${value.root}`);
+  if (typeof value.dbPath === "string") console.log(`db: ${value.dbPath}`);
+  if (Array.isArray(value.actors)) {
+    console.log(`actors: ${value.actors.map((actor) => actorLabel(actor)).join(", ")}`);
+  }
   if (!value.message && !value.root && !value.dbPath && !value.actors) {
     console.log(JSON.stringify(value, null, 2));
   }
 }
 
-function hasFlag(args, flag) {
+function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
 }
 
-function optionValue(args, flag) {
+function optionValue(args: string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
   if (index === -1) return undefined;
   return args[index + 1];
 }
 
 class CliError extends Error {
-  constructor(message, exitCode) {
+  exitCode: number;
+
+  constructor(message: string, exitCode: number) {
     super(message);
     this.exitCode = exitCode;
   }
+}
+
+function isPrintableRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function actorLabel(actor: unknown): string {
+  if (typeof actor === "string") return actor;
+  if (typeof actor === "object" && actor !== null && "id" in actor && typeof actor.id === "string") {
+    return actor.id;
+  }
+
+  return String(actor);
 }
 
 await main();

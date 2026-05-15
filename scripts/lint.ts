@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 const roots = ["src", "test", "scripts"];
-const files = [];
+const files: string[] = [];
 
 for (const root of roots) {
   await collectFiles(path.resolve(root), files);
@@ -42,14 +42,14 @@ if (errors.length > 0) {
 
 console.log(`lint ok (${files.length} files)`);
 
-async function collectFiles(dir, result) {
+async function collectFiles(dir: string, result: string[]) {
   const entries = await readdir(dir, { withFileTypes: true });
 
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       await collectFiles(fullPath, result);
-    } else if (entry.isFile() && entry.name.endsWith(".js")) {
+    } else if (entry.isFile() && entry.name.endsWith(".ts")) {
       result.push(fullPath);
     }
   }

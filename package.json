@@ -4,16 +4,21 @@
   "private": true,
   "type": "module",
   "bin": {
-    "doxvelt": "./src/cli/index.js"
+    "doxvelt": "./src/cli/index.ts"
   },
   "scripts": {
-    "check": "npm run lint && npm test && npm run smoke",
-    "doxvelt": "node ./src/cli/index.js",
-    "lint": "node ./scripts/lint.js",
-    "smoke": "node ./scripts/smoke.js",
-    "test": "node --test"
+    "check": "npm run lint && npm run typecheck && npm test && npm run smoke",
+    "doxvelt": "node ./src/cli/index.ts",
+    "lint": "node ./scripts/lint.ts",
+    "smoke": "node ./scripts/smoke.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "engines": {
     "node": ">=24"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
   }
 }

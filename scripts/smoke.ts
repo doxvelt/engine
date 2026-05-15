@@ -1,9 +1,10 @@
 import { mkdir, mkdtemp } from "node:fs/promises";
 import path from "node:path";
-import { compileWorld } from "../src/core/compiler.js";
-import { assembleActorContext } from "../src/core/context.js";
-import { initWorld } from "../src/core/init.js";
-import { openRuntimeStore } from "../src/store/sqlite.js";
+import { compileWorld } from "../src/core/compiler.ts";
+import { assembleActorContext } from "../src/core/context.ts";
+import { initWorld } from "../src/core/init.ts";
+import type { EntityRecord } from "../src/core/types.ts";
+import { openRuntimeStore } from "../src/store/sqlite.ts";
 
 const root = path.resolve(".doxvelt", "smoke-runs");
 await mkdir(root, { recursive: true });
@@ -38,7 +39,11 @@ try {
   });
 
   const simulation = store.getSimulation("default");
-  const actor = store.getCompiledRecord("default", "entity", "ceo");
+  if (!simulation) throw new Error("Expected simulation to exist.");
+
+  const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "ceo");
+  if (!actor) throw new Error("Expected actor to exist.");
+
   const context = assembleActorContext({
     simulation,
     actor,

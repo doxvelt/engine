@@ -1,4 +1,12 @@
-import { readWorldSource } from "./source.js";
+import { readWorldSource } from "./source.ts";
+import type {
+  AssetKind,
+  AssetRecord,
+  BeliefRecord,
+  CompiledWorld,
+  LineRecordContext,
+  SourceFile
+} from "./types.ts";
 
 const MENTION_PATTERN = /@([a-zA-Z0-9_-]+)/g;
 const TAG_PATTERN = /(^|\s):([a-zA-Z0-9_+@.-]+(?::[a-zA-Z0-9_+@.,-]+)?)/g;
@@ -10,7 +18,7 @@ const STRENGTHS = new Map([
   ["-3", -3]
 ]);
 
-export async function compileWorld(worldPath) {
+export async function compileWorld(worldPath: string): Promise<CompiledWorld> {
   const source = await readWorldSource(worldPath);
   const records = {
     sourceRoot: source.root,
@@ -49,18 +57,18 @@ export async function compileWorld(worldPath) {
   return records;
 }
 
-function toAssetRecord(kind) {
-  return (asset) => ({
+function toAssetRecord(kind: AssetKind): (asset: SourceFile) => AssetRecord {
+  return (asset: SourceFile): AssetRecord => ({
     id: asset.id,
     kind,
-    name: asset.data.name || asset.id,
+    name: stringValue(asset.data.name) || asset.id,
     path: asset.path,
     metadata: asset.data,
     body: asset.body
   });
 }
 
-function collectLineRecords(records, file, context) {
+function collectLineRecords(records: CompiledWorld, file: SourceFile, context: LineRecordContext): void {
   const lines = file.body.replace(/\r\n/g, "\n").split("\n");
 
   lines.forEach((line, index) => {
@@ -68,8 +76,12 @@ function collectLineRecords(records, file, context) {
     const text = line.trim();
     if (!text || text.startsWith("#")) return;
 
-    const mentions = [...text.matchAll(MENTION_PATTERN)].map((match) => match[1]);
-    const tags = [...text.matchAll(TAG_PATTERN)].map((match) => match[2]);
+    const mentions = [...text.matchAll(MENTION_PATTERN)]
+      .map((match) => match[1])
+      .filter(isString);
+    const tags = [...text.matchAll(TAG_PATTERN)]
+      .map((match) => match[2])
+      .filter(isString);
     if (mentions.length === 0 && tags.length === 0) return;
 
     const sourceSpan = {
@@ -94,9 +106,9 @@ function collectLineRecords(records, file, context) {
     const strengthTag = tags.find((tag) => STRENGTHS.has(tag));
     if (strengthTag) {
       const holder = context.holder || mentions[0] || context.connectionId || "unknown";
-      const belief = {
+      const belief: BeliefRecord = {
         holder,
-        strength: STRENGTHS.get(strengthTag),
+        strength: STRENGTHS.get(strengthTag) ?? 0,
         propositionText: stripTags(text),
         mentions,
         sourceSpan
@@ -125,7 +137,7 @@ function collectLineRecords(records, file, context) {
   });
 }
 
-function validateRecords(records) {
+function validateRecords(records: CompiledWorld): void {
   const entityIds = new Set(records.entities.map((entity) => entity.id));
   const knownIds = new Set([
     ...entityIds,
@@ -152,6 +164,14 @@ function validateRecords(records) {
   }
 }
 
-function stripTags(text) {
+function stripTags(text: string): string {
   return text.replace(TAG_PATTERN, "").replace(/\s+/g, " ").trim();
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }

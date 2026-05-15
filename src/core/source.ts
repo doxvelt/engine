@@ -1,6 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import path from "node:path";
-import { parseFrontmatter } from "./frontmatter.js";
+import { parseFrontmatter } from "./frontmatter.ts";
+import type { EntityKind, EntitySource, EntitySourceFile, SourceFile, WorldSource } from "./types.ts";
 
 export const SOURCE_FOLDERS = [
   "models",
@@ -11,7 +13,7 @@ export const SOURCE_FOLDERS = [
   "connections"
 ];
 
-export async function readWorldSource(worldPath) {
+export async function readWorldSource(worldPath: string): Promise<WorldSource> {
   const root = path.resolve(worldPath);
 
   return {
@@ -25,7 +27,7 @@ export async function readWorldSource(worldPath) {
   };
 }
 
-async function readFlatMarkdownLike(root, folder) {
+async function readFlatMarkdownLike(root: string, folder: string): Promise<SourceFile[]> {
   const dir = path.join(root, folder);
   const entries = await safeReaddir(dir, { withFileTypes: true });
   const files = [];
@@ -40,7 +42,7 @@ async function readFlatMarkdownLike(root, folder) {
     files.push({
       path: path.relative(root, absolutePath).replaceAll("\\", "/"),
       name: entry.name,
-      id: parsed.data.id || idFromFilename(entry.name),
+      id: stringValue(parsed.data.id) || idFromFilename(entry.name),
       data: parsed.data,
       body: parsed.body,
       text
@@ -50,7 +52,7 @@ async function readFlatMarkdownLike(root, folder) {
   return files;
 }
 
-async function readEntityFolders(root) {
+async function readEntityFolders(root: string): Promise<EntitySource[]> {
   const dir = path.join(root, "entities");
   const entries = await safeReaddir(dir, { withFileTypes: true });
   const entities = [];
@@ -59,7 +61,7 @@ async function readEntityFolders(root) {
     if (!entry.isDirectory()) continue;
 
     const entityDir = path.join(dir, entry.name);
-    const files = [];
+    const files: EntitySourceFile[] = [];
     const fileEntries = await safeReaddir(entityDir, { withFileTypes: true });
 
     for (const fileEntry of fileEntries) {
@@ -70,6 +72,7 @@ async function readEntityFolders(root) {
       const text = await readFile(absolutePath, "utf8");
       const parsed = parseFrontmatter(text);
       files.push({
+        id: idFromFilename(fileEntry.name),
         path: path.relative(root, absolutePath).replaceAll("\\", "/"),
         name: fileEntry.name,
         section: fileEntry.name.replace(/\.md$/i, ""),
@@ -81,10 +84,10 @@ async function readEntityFolders(root) {
 
     const identity = files.find((file) => file.name.toUpperCase() === "IDENTITY.MD");
     entities.push({
-      id: identity?.data.id || entry.name,
-      kind: identity?.data.kind || "agent",
-      name: identity?.data.name || titleFromId(entry.name),
-      visibility: identity?.data.visibility || "public",
+      id: stringValue(identity?.data.id) || entry.name,
+      kind: entityKindValue(identity?.data.kind) || "agent",
+      name: stringValue(identity?.data.name) || titleFromId(entry.name),
+      visibility: stringValue(identity?.data.visibility) || "public",
       folder: `entities/${entry.name}`,
       files
     });
@@ -93,23 +96,39 @@ async function readEntityFolders(root) {
   return entities;
 }
 
-async function safeReaddir(dir, options) {
+async function safeReaddir(dir: string, options: { withFileTypes: true }): Promise<Dirent[]> {
   try {
     return await readdir(dir, options);
-  } catch (error) {
-    if (error.code === "ENOENT") return [];
+  } catch (error: unknown) {
+    if (isNodeError(error) && error.code === "ENOENT") return [];
     throw error;
   }
 }
 
-function idFromFilename(filename) {
+function idFromFilename(filename: string): string {
   return filename.replace(/\.(md|markdown|ya?ml|json)$/i, "");
 }
 
-function titleFromId(id) {
+function titleFromId(id: string): string {
   return id
     .split(/[-_]/)
     .filter(Boolean)
-    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .map((part: string) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function entityKindValue(value: unknown): EntityKind | undefined {
+  if (value === "agent" || value === "affiliation" || value === "artifact" || value === "stateless") {
+    return value;
+  }
+
+  return undefined;
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }

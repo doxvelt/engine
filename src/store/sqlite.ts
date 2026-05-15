@@ -1,6 +1,14 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import type {
+  AssetRecord,
+  BeliefRecord,
+  CompiledWorld,
+  EntityRecord,
+  SimulationRecord,
+  TranscriptTurn
+} from "../core/types.ts";
 
 export function openRuntimeStore(dbPath = ".doxvelt/runtime.sqlite") {
   const resolved = path.resolve(dbPath);
@@ -8,12 +16,15 @@ export function openRuntimeStore(dbPath = ".doxvelt/runtime.sqlite") {
 }
 
 export class RuntimeStore {
-  constructor(dbPath) {
+  dbPath: string;
+  db: DatabaseSync | null;
+
+  constructor(dbPath: string) {
     this.dbPath = dbPath;
     this.db = null;
   }
 
-  async open() {
+  async open(): Promise<this> {
     await mkdir(path.dirname(this.dbPath), { recursive: true });
     this.db = new DatabaseSync(this.dbPath);
     this.db.exec(`
@@ -44,14 +55,24 @@ export class RuntimeStore {
     return this;
   }
 
-  close() {
+  close(): void {
     this.db?.close();
     this.db = null;
   }
 
-  saveSimulation({ id, sourceRoot, scenarioId, compiled }) {
+  saveSimulation({
+    id,
+    sourceRoot,
+    scenarioId,
+    compiled
+  }: {
+    id: string;
+    sourceRoot: string;
+    scenarioId: string | null;
+    compiled: CompiledWorld;
+  }): void {
     const createdAt = new Date().toISOString();
-    this.db
+    this.requireDb()
       .prepare(`
         INSERT INTO simulations (id, source_root, scenario_id, created_at)
         VALUES (?, ?, ?, ?)
@@ -61,9 +82,9 @@ export class RuntimeStore {
       `)
       .run(id, sourceRoot, scenarioId || null, createdAt);
 
-    this.db.prepare("DELETE FROM compiled_records WHERE simulation_id = ?").run(id);
+    this.requireDb().prepare("DELETE FROM compiled_records WHERE simulation_id = ?").run(id);
 
-    const insert = this.db.prepare(`
+    const insert = this.requireDb().prepare(`
       INSERT INTO compiled_records (simulation_id, kind, id, json)
       VALUES (?, ?, ?, ?)
     `);
@@ -97,8 +118,8 @@ export class RuntimeStore {
     }
   }
 
-  listActors(simulationId = "default") {
-    const rows = this.db
+  listActors(simulationId = "default"): EntityRecord[] {
+    const rows = this.requireDb()
       .prepare(`
         SELECT json FROM compiled_records
         WHERE simulation_id = ? AND kind = 'entity'
@@ -106,11 +127,13 @@ export class RuntimeStore {
       `)
       .all(simulationId);
 
-    return rows.map((row) => JSON.parse(row.json)).filter((entity) => entity.kind !== "artifact");
+    return rows
+      .map((row) => JSON.parse(row.json as string) as EntityRecord)
+      .filter((entity) => entity.kind !== "artifact");
   }
 
-  getSimulation(simulationId = "default") {
-    const row = this.db
+  getSimulation(simulationId = "default"): SimulationRecord | null {
+    const row = this.requireDb()
       .prepare(`
         SELECT id, source_root, scenario_id, created_at
         FROM simulations
@@ -121,26 +144,33 @@ export class RuntimeStore {
     if (!row) return null;
 
     return {
-      id: row.id,
-      sourceRoot: row.source_root,
-      scenarioId: row.scenario_id,
-      createdAt: row.created_at
+      id: row.id as string,
+      sourceRoot: row.source_root as string,
+      scenarioId: row.scenario_id as string | null,
+      createdAt: row.created_at as string
     };
   }
 
-  getCompiledRecord(simulationId, kind, id) {
-    const row = this.db
+  getCompiledRecord<TRecord extends AssetRecord | EntityRecord | BeliefRecord>(
+    simulationId: string,
+    kind: string,
+    id: string
+  ): TRecord | null {
+    const row = this.requireDb()
       .prepare(`
         SELECT json FROM compiled_records
         WHERE simulation_id = ? AND kind = ? AND id = ?
       `)
       .get(simulationId, kind, id);
 
-    return row ? JSON.parse(row.json) : null;
+    return row ? (JSON.parse(row.json as string) as TRecord) : null;
   }
 
-  listCompiledRecords(simulationId, kind) {
-    const rows = this.db
+  listCompiledRecords<TRecord extends AssetRecord | EntityRecord | BeliefRecord>(
+    simulationId: string,
+    kind: string
+  ): TRecord[] {
+    const rows = this.requireDb()
       .prepare(`
         SELECT json FROM compiled_records
         WHERE simulation_id = ? AND kind = ?
@@ -148,15 +178,15 @@ export class RuntimeStore {
       `)
       .all(simulationId, kind);
 
-    return rows.map((row) => JSON.parse(row.json));
+    return rows.map((row) => JSON.parse(row.json as string) as TRecord);
   }
 
-  listBeliefs(simulationId = "default") {
-    return this.listCompiledRecords(simulationId, "belief");
+  listBeliefs(simulationId = "default"): BeliefRecord[] {
+    return this.listCompiledRecords<BeliefRecord>(simulationId, "belief");
   }
 
-  listAccessibleTurns(simulationId = "default", actorId) {
-    const rows = this.db
+  listAccessibleTurns(simulationId = "default", actorId: string): TranscriptTurn[] {
+    const rows = this.requireDb()
       .prepare(`
         SELECT id, simulation_id, actor_id, text, audience_json, created_at
         FROM transcript_turns
@@ -167,19 +197,29 @@ export class RuntimeStore {
 
     return rows
       .map((row) => ({
-        id: row.id,
-        simulationId: row.simulation_id,
-        actorId: row.actor_id,
-        text: row.text,
-        audience: JSON.parse(row.audience_json),
-        createdAt: row.created_at
+        id: row.id as number | bigint,
+        simulationId: row.simulation_id as string,
+        actorId: row.actor_id as string,
+        text: row.text as string,
+        audience: JSON.parse(row.audience_json as string) as string[],
+        createdAt: row.created_at as string
       }))
       .filter((turn) => turn.audience.length === 0 || turn.audience.includes(actorId));
   }
 
-  appendTurn({ simulationId = "default", actorId, text, audience = [] }) {
+  appendTurn({
+    simulationId = "default",
+    actorId,
+    text,
+    audience = []
+  }: {
+    simulationId?: string;
+    actorId: string;
+    text: string;
+    audience?: string[];
+  }): TranscriptTurn {
     const createdAt = new Date().toISOString();
-    const result = this.db
+    const result = this.requireDb()
       .prepare(`
         INSERT INTO transcript_turns (simulation_id, actor_id, text, audience_json, created_at)
         VALUES (?, ?, ?, ?, ?)
@@ -194,5 +234,13 @@ export class RuntimeStore {
       audience,
       createdAt
     };
+  }
+
+  private requireDb(): DatabaseSync {
+    if (!this.db) {
+      throw new Error("Runtime store is not open.");
+    }
+
+    return this.db;
   }
 }

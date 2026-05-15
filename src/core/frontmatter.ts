@@ -1,4 +1,6 @@
-export function parseFrontmatter(text) {
+import type { FrontmatterData, YamlValue } from "./types.ts";
+
+export function parseFrontmatter(text: string): { data: FrontmatterData; body: string } {
   if (!text.startsWith("---\n") && !text.startsWith("---\r\n")) {
     return { data: {}, body: text };
   }
@@ -14,8 +16,8 @@ export function parseFrontmatter(text) {
   return { data: parseSimpleYaml(raw), body };
 }
 
-function parseSimpleYaml(raw) {
-  const data = {};
+function parseSimpleYaml(raw: string): FrontmatterData {
+  const data: FrontmatterData = {};
 
   for (const line of raw.split("\n")) {
     const trimmed = line.trim();
@@ -32,7 +34,7 @@ function parseSimpleYaml(raw) {
   return data;
 }
 
-function parseYamlValue(value) {
+function parseYamlValue(value: string): YamlValue {
   if (value.startsWith("[") && value.endsWith("]")) {
     const inner = value.slice(1, -1).trim();
     if (!inner) return [];
@@ -46,7 +48,7 @@ function parseYamlValue(value) {
   return stripQuotes(value);
 }
 
-function stripQuotes(value) {
+function stripQuotes(value: string): string {
   if (
     (value.startsWith('"') && value.endsWith('"')) ||
     (value.startsWith("'") && value.endsWith("'"))

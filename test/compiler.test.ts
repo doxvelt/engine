@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { compileWorld } from "../src/core/compiler.js";
-import { assembleActorContext } from "../src/core/context.js";
-import { initWorld } from "../src/core/init.js";
-import { openRuntimeStore } from "../src/store/sqlite.js";
+import { compileWorld } from "../src/core/compiler.ts";
+import { assembleActorContext } from "../src/core/context.ts";
+import { initWorld } from "../src/core/init.ts";
+import type { EntityRecord } from "../src/core/types.ts";
+import { openRuntimeStore } from "../src/store/sqlite.ts";
 
 test("initWorld creates a compilable demo source", async () => {
   const root = await createRepoLocalRunRoot();
@@ -15,9 +16,9 @@ test("initWorld creates a compilable demo source", async () => {
   const compiled = await compileWorld(worldPath);
 
   assert.equal(compiled.entities.length, 3);
-  assert.equal(compiled.scenarios[0].id, "executive-interviews");
+  assert.equal(compiled.scenarios.at(0)?.id, "executive-interviews");
   assert.ok(compiled.beliefs.length >= 5);
-  assert.ok(compiled.beliefs[0].sourceSpan.file);
+  assert.ok(compiled.beliefs.at(0)?.sourceSpan.file);
 });
 
 test("runtime store saves compiled actors and manual turns", async () => {
@@ -89,7 +90,11 @@ test("actor context includes subjective beliefs and accessible transcript only",
     });
 
     const simulation = store.getSimulation("default");
-    const actor = store.getCompiledRecord("default", "entity", "ceo");
+    assert.ok(simulation);
+
+    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "ceo");
+    assert.ok(actor);
+
     const context = assembleActorContext({
       simulation,
       actor,
