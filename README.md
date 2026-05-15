@@ -76,6 +76,16 @@ The engine compiles this prose into runtime fabric: entities, connections, propo
 
 ## Status
 
-This repository currently contains design documents only. No runtime implementation exists yet.
+This repository currently contains design documents and the first local CLI slice.
 
-Recommended next step: build the first vertical slice around source layout, dossier parsing, compile review output, local SQLite runtime state, one manually advanced turn, and one AI SDK-backed turn.
+Try the current slice:
+
+```sh
+npm run doxvelt -- init world/demo
+npm run doxvelt -- compile world/demo --json
+npm run doxvelt -- start world/demo --scenario executive-interviews --json
+npm run doxvelt -- actors --json
+npm run doxvelt -- turn ceo --manual "We need to understand what is really going on." --audience ceo,student-team --json
+```
+
+The next implementation step is one AI SDK-backed actor turn.

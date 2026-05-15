@@ -1,0 +1,16 @@
+{
+  "name": "@doxvelt/engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "doxvelt": "./src/cli/index.js"
+  },
+  "scripts": {
+    "doxvelt": "node ./src/cli/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
