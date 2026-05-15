@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp } from "node:fs/promises";
 import path from "node:path";
 import { compileWorld } from "../src/core/compiler.js";
+import { assembleActorContext } from "../src/core/context.js";
 import { initWorld } from "../src/core/init.js";
 import { openRuntimeStore } from "../src/store/sqlite.js";
 
@@ -35,6 +36,22 @@ try {
     text: "We need to understand what is really going on.",
     audience: ["ceo", "student-team"]
   });
+
+  const simulation = store.getSimulation("default");
+  const actor = store.getCompiledRecord("default", "entity", "ceo");
+  const context = assembleActorContext({
+    simulation,
+    actor,
+    worlds: store.listCompiledRecords("default", "world"),
+    scenario: store.getCompiledRecord("default", "scenario", "executive-interviews"),
+    formats: store.listCompiledRecords("default", "format"),
+    beliefs: store.listBeliefs("default"),
+    turns: store.listAccessibleTurns("default", "ceo")
+  });
+
+  if (!context.promptPreview.includes("We need to understand what is really going on.")) {
+    throw new Error("Expected context preview to include the accessible manual turn.");
+  }
 } finally {
   store.close();
 }

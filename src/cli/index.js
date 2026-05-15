@@ -2,6 +2,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { compileWorld } from "../core/compiler.js";
+import { assembleActorContext } from "../core/context.js";
 import { initWorld } from "../core/init.js";
 import { openRuntimeStore } from "../store/sqlite.js";
 
@@ -18,6 +19,7 @@ async function main() {
     if (command === "compile") return await compileCommand(args);
     if (command === "start") return await startCommand(args);
     if (command === "actors") return await actorsCommand(args);
+    if (command === "context") return await contextCommand(args);
     if (command === "turn") return await turnCommand(args);
 
     throw new CliError(`Unknown command: ${command}`, 1);
@@ -92,6 +94,39 @@ async function actorsCommand(args) {
   }
 }
 
+async function contextCommand(args) {
+  const actorId = args.find((arg) => !arg.startsWith("--"));
+  if (!actorId) throw new CliError("Usage: doxvelt context <actor-id> [--json]", 1);
+
+  const simulationId = optionValue(args, "--simulation") || "default";
+  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    const simulation = store.getSimulation(simulationId);
+    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
+
+    const actor = store.getCompiledRecord(simulationId, "entity", actorId);
+    if (!actor) throw new CliError(`Actor not found: ${actorId}`, 1);
+
+    const context = assembleActorContext({
+      simulation,
+      actor,
+      worlds: store.listCompiledRecords(simulationId, "world"),
+      scenario: simulation.scenarioId
+        ? store.getCompiledRecord(simulationId, "scenario", simulation.scenarioId)
+        : null,
+      formats: store.listCompiledRecords(simulationId, "format"),
+      beliefs: store.listBeliefs(simulationId),
+      turns: store.listAccessibleTurns(simulationId, actorId)
+    });
+
+    print(context, hasFlag(args, "--json"));
+  } finally {
+    store.close();
+  }
+}
+
 async function turnCommand(args) {
   const actorId = args.find((arg) => !arg.startsWith("--"));
   if (!actorId) throw new CliError("Usage: doxvelt turn <actor-id> --manual <text>", 1);
@@ -120,6 +155,7 @@ Usage:
   doxvelt compile [world-path] [--json]
   doxvelt start [world-path] --scenario <id> [--simulation <id>] [--db <path>] [--json]
   doxvelt actors [--simulation <id>] [--db <path>] [--json]
+  doxvelt context <actor-id> [--simulation <id>] [--db <path>] [--json]
   doxvelt turn <actor-id> --manual <text> [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
 `);
 }

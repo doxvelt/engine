@@ -3,6 +3,7 @@ import { mkdir, mkdtemp } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { compileWorld } from "../src/core/compiler.js";
+import { assembleActorContext } from "../src/core/context.js";
 import { initWorld } from "../src/core/init.js";
 import { openRuntimeStore } from "../src/store/sqlite.js";
 
@@ -51,6 +52,59 @@ test("runtime store saves compiled actors and manual turns", async () => {
 
     assert.equal(turn.actorId, "ceo");
     assert.equal(turn.audience.length, 2);
+  } finally {
+    store.close();
+  }
+});
+
+test("actor context includes subjective beliefs and accessible transcript only", async () => {
+  const root = await createRepoLocalRunRoot();
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await initWorld(worldPath);
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "executive-interviews",
+      compiled
+    });
+
+    store.appendTurn({
+      simulationId: "default",
+      actorId: "ceo",
+      text: "The board is worried about strategy drift.",
+      audience: ["ceo", "student-team"]
+    });
+
+    store.appendTurn({
+      simulationId: "default",
+      actorId: "coo",
+      text: "The supplier situation is worse than we are saying.",
+      audience: ["coo"]
+    });
+
+    const simulation = store.getSimulation("default");
+    const actor = store.getCompiledRecord("default", "entity", "ceo");
+    const context = assembleActorContext({
+      simulation,
+      actor,
+      worlds: store.listCompiledRecords("default", "world"),
+      scenario: store.getCompiledRecord("default", "scenario", "executive-interviews"),
+      formats: store.listCompiledRecords("default", "format"),
+      beliefs: store.listBeliefs("default"),
+      turns: store.listAccessibleTurns("default", "ceo")
+    });
+
+    assert.equal(context.actor.id, "ceo");
+    assert.ok(context.subjective.beliefs.every((belief) => belief.holder === "ceo"));
+    assert.equal(context.subjective.transcript.length, 1);
+    assert.match(context.promptPreview, /The board is worried/);
+    assert.doesNotMatch(context.promptPreview, /supplier situation is worse/);
   } finally {
     store.close();
   }

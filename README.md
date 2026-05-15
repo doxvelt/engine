@@ -86,6 +86,7 @@ npm run doxvelt -- compile world/demo --json
 npm run doxvelt -- start world/demo --scenario executive-interviews --json
 npm run doxvelt -- actors --json
 npm run doxvelt -- turn ceo --manual "We need to understand what is really going on." --audience ceo,student-team --json
+npm run doxvelt -- context ceo --json
 ```
 
 The next implementation step is one AI SDK-backed actor turn.

@@ -55,7 +55,8 @@ function toAssetRecord(kind) {
     kind,
     name: asset.data.name || asset.id,
     path: asset.path,
-    metadata: asset.data
+    metadata: asset.data,
+    body: asset.body
   });
 }
 

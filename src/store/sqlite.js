@@ -72,6 +72,22 @@ export class RuntimeStore {
       insert.run(id, "entity", entity.id, JSON.stringify(entity));
     }
 
+    for (const model of compiled.models) {
+      insert.run(id, "model", model.id, JSON.stringify(model));
+    }
+
+    for (const world of compiled.worlds) {
+      insert.run(id, "world", world.id, JSON.stringify(world));
+    }
+
+    for (const scenario of compiled.scenarios) {
+      insert.run(id, "scenario", scenario.id, JSON.stringify(scenario));
+    }
+
+    for (const format of compiled.formats) {
+      insert.run(id, "format", format.id, JSON.stringify(format));
+    }
+
     for (const connection of compiled.connections) {
       insert.run(id, "connection", connection.id, JSON.stringify(connection));
     }
@@ -91,6 +107,74 @@ export class RuntimeStore {
       .all(simulationId);
 
     return rows.map((row) => JSON.parse(row.json)).filter((entity) => entity.kind !== "artifact");
+  }
+
+  getSimulation(simulationId = "default") {
+    const row = this.db
+      .prepare(`
+        SELECT id, source_root, scenario_id, created_at
+        FROM simulations
+        WHERE id = ?
+      `)
+      .get(simulationId);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      sourceRoot: row.source_root,
+      scenarioId: row.scenario_id,
+      createdAt: row.created_at
+    };
+  }
+
+  getCompiledRecord(simulationId, kind, id) {
+    const row = this.db
+      .prepare(`
+        SELECT json FROM compiled_records
+        WHERE simulation_id = ? AND kind = ? AND id = ?
+      `)
+      .get(simulationId, kind, id);
+
+    return row ? JSON.parse(row.json) : null;
+  }
+
+  listCompiledRecords(simulationId, kind) {
+    const rows = this.db
+      .prepare(`
+        SELECT json FROM compiled_records
+        WHERE simulation_id = ? AND kind = ?
+        ORDER BY id
+      `)
+      .all(simulationId, kind);
+
+    return rows.map((row) => JSON.parse(row.json));
+  }
+
+  listBeliefs(simulationId = "default") {
+    return this.listCompiledRecords(simulationId, "belief");
+  }
+
+  listAccessibleTurns(simulationId = "default", actorId) {
+    const rows = this.db
+      .prepare(`
+        SELECT id, simulation_id, actor_id, text, audience_json, created_at
+        FROM transcript_turns
+        WHERE simulation_id = ?
+        ORDER BY id
+      `)
+      .all(simulationId);
+
+    return rows
+      .map((row) => ({
+        id: row.id,
+        simulationId: row.simulation_id,
+        actorId: row.actor_id,
+        text: row.text,
+        audience: JSON.parse(row.audience_json),
+        createdAt: row.created_at
+      }))
+      .filter((turn) => turn.audience.length === 0 || turn.audience.includes(actorId));
   }
 
   appendTurn({ simulationId = "default", actorId, text, audience = [] }) {
