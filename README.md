@@ -87,6 +87,7 @@ bun run doxvelt -- start world/demo --scenario executive-interviews --json
 bun run doxvelt -- actors --json
 bun run doxvelt -- turn ceo --manual "We need to understand what is really going on." --audience ceo,student-team --json
 bun run doxvelt -- context ceo --json
+bun run doxvelt -- close-episode --label "Opening interviews" --json
 ```
 
 If a local OpenAI-compatible endpoint is running, try an AI-backed turn:
@@ -95,4 +96,4 @@ If a local OpenAI-compatible endpoint is running, try an AI-backed turn:
 bun run doxvelt -- turn coo --ai --model local-openai-compatible --audience coo,student-team --json
 ```
 
-The next implementation step is episode closure with simple memory writing.
+The next implementation step is belief extraction from episode memories.

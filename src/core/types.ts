@@ -139,6 +139,28 @@ export type TranscriptTurn = {
   createdAt: string;
 };
 
+export type EpisodeRecord = {
+  id: number | bigint;
+  simulationId: string;
+  label: string | null;
+  closedAt: string;
+};
+
+export type EpisodeMemoryRecord = {
+  id: number | bigint;
+  episodeId: number | bigint;
+  simulationId: string;
+  actorId: string;
+  text: string;
+  sourceTurnIds: Array<number | bigint>;
+  createdAt: string;
+};
+
+export type EpisodeClosure = {
+  episode: EpisodeRecord;
+  memories: EpisodeMemoryRecord[];
+};
+
 export type ActorContext = {
   simulation: {
     id: string;

@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { compileWorld } from "../src/core/compiler.ts";
 import { assembleActorContext } from "../src/core/context.ts";
+import { closeEpisode } from "../src/core/episode.ts";
 import { initWorld } from "../src/core/init.ts";
 import type { AssetRecord, EntityRecord } from "../src/core/types.ts";
 import { openRuntimeStore } from "../src/store/sqlite.ts";
@@ -114,6 +115,53 @@ test("actor context includes subjective beliefs and accessible transcript only",
     assert.equal(context.subjective.transcript.length, 1);
     assert.match(context.promptPreview, /The board is worried/);
     assert.doesNotMatch(context.promptPreview, /supplier situation is worse/);
+  } finally {
+    store.close();
+  }
+});
+
+test("episode closure writes deterministic memories from accessible turns", async () => {
+  const root = await createRepoLocalRunRoot();
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await initWorld(worldPath);
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "executive-interviews",
+      compiled
+    });
+
+    store.appendTurn({
+      simulationId: "default",
+      actorId: "ceo",
+      text: "The board is worried about strategy drift.",
+      audience: ["ceo", "student-team"]
+    });
+
+    store.appendTurn({
+      simulationId: "default",
+      actorId: "coo",
+      text: "The supplier situation is worse than we are saying.",
+      audience: ["coo"]
+    });
+
+    const closure = closeEpisode({ store, simulationId: "default", label: "Opening interviews" });
+    const ceoMemory = closure.memories.find((memory) => memory.actorId === "ceo");
+    const cooMemory = closure.memories.find((memory) => memory.actorId === "coo");
+
+    assert.equal(closure.episode.label, "Opening interviews");
+    assert.ok(ceoMemory);
+    assert.ok(cooMemory);
+    assert.match(ceoMemory.text, /board is worried/);
+    assert.doesNotMatch(ceoMemory.text, /supplier situation is worse/);
+    assert.match(cooMemory.text, /supplier situation is worse/);
+    assert.equal(store.listEpisodeMemories("default").length, 2);
   } finally {
     store.close();
   }

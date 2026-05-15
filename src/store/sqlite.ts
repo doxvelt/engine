@@ -6,6 +6,8 @@ import type {
   BeliefRecord,
   CompiledWorld,
   EntityRecord,
+  EpisodeMemoryRecord,
+  EpisodeRecord,
   SimulationRecord,
   TranscriptTurn
 } from "../core/types.ts";
@@ -49,6 +51,23 @@ export class RuntimeStore {
         actor_id TEXT NOT NULL,
         text TEXT NOT NULL,
         audience_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS episodes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        simulation_id TEXT NOT NULL,
+        label TEXT,
+        closed_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS episode_memories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        episode_id INTEGER NOT NULL,
+        simulation_id TEXT NOT NULL,
+        actor_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        source_turn_ids_json TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
     `);
@@ -234,6 +253,89 @@ export class RuntimeStore {
       audience,
       createdAt
     };
+  }
+
+  createEpisode({
+    simulationId = "default",
+    label = null
+  }: {
+    simulationId?: string;
+    label?: string | null;
+  }): EpisodeRecord {
+    const closedAt = new Date().toISOString();
+    const result = this.requireDb()
+      .prepare(`
+        INSERT INTO episodes (simulation_id, label, closed_at)
+        VALUES (?, ?, ?)
+      `)
+      .run(simulationId, label, closedAt);
+
+    return {
+      id: result.lastInsertRowid,
+      simulationId,
+      label,
+      closedAt
+    };
+  }
+
+  createEpisodeMemory({
+    episodeId,
+    simulationId = "default",
+    actorId,
+    text,
+    sourceTurnIds
+  }: {
+    episodeId: number | bigint;
+    simulationId?: string;
+    actorId: string;
+    text: string;
+    sourceTurnIds: Array<number | bigint>;
+  }): EpisodeMemoryRecord {
+    const createdAt = new Date().toISOString();
+    const result = this.requireDb()
+      .prepare(`
+        INSERT INTO episode_memories (
+          episode_id,
+          simulation_id,
+          actor_id,
+          text,
+          source_turn_ids_json,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+      .run(episodeId, simulationId, actorId, text, JSON.stringify(sourceTurnIds), createdAt);
+
+    return {
+      id: result.lastInsertRowid,
+      episodeId,
+      simulationId,
+      actorId,
+      text,
+      sourceTurnIds,
+      createdAt
+    };
+  }
+
+  listEpisodeMemories(simulationId = "default"): EpisodeMemoryRecord[] {
+    const rows = this.requireDb()
+      .prepare(`
+        SELECT id, episode_id, simulation_id, actor_id, text, source_turn_ids_json, created_at
+        FROM episode_memories
+        WHERE simulation_id = ?
+        ORDER BY id
+      `)
+      .all(simulationId);
+
+    return rows.map((row) => ({
+      id: row.id as number | bigint,
+      episodeId: row.episode_id as number | bigint,
+      simulationId: row.simulation_id as string,
+      actorId: row.actor_id as string,
+      text: row.text as string,
+      sourceTurnIds: JSON.parse(row.source_turn_ids_json as string) as Array<number | bigint>,
+      createdAt: row.created_at as string
+    }));
   }
 
   private requireDb(): DatabaseSync {

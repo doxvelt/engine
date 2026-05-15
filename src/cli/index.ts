@@ -4,6 +4,7 @@ import path from "node:path";
 import { generateDoxveltText } from "../ai/generate.ts";
 import { compileWorld } from "../core/compiler.ts";
 import { assembleActorContext } from "../core/context.ts";
+import { closeEpisode } from "../core/episode.ts";
 import { initWorld } from "../core/init.ts";
 import type { AssetRecord, EntityRecord } from "../core/types.ts";
 import { openRuntimeStore, type RuntimeStore } from "../store/sqlite.ts";
@@ -23,6 +24,7 @@ async function main() {
     if (command === "actors") return await actorsCommand(args);
     if (command === "context") return await contextCommand(args);
     if (command === "turn") return await turnCommand(args);
+    if (command === "close-episode") return await closeEpisodeCommand(args);
 
     throw new CliError(`Unknown command: ${command}`, 1);
   } catch (error) {
@@ -156,6 +158,23 @@ async function turnCommand(args: string[]): Promise<void> {
   }
 }
 
+async function closeEpisodeCommand(args: string[]): Promise<void> {
+  const simulationId = optionValue(args, "--simulation") || "default";
+  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
+  const label = optionValue(args, "--label") || null;
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    const simulation = store.getSimulation(simulationId);
+    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
+
+    const closure = closeEpisode({ store, simulationId, label });
+    print({ message: "Closed episode.", ...closure }, hasFlag(args, "--json"));
+  } finally {
+    store.close();
+  }
+}
+
 async function generateAiTurnText({
   args,
   actorId,
@@ -212,6 +231,7 @@ Usage:
   doxvelt context <actor-id> [--simulation <id>] [--db <path>] [--json]
   doxvelt turn <actor-id> --manual <text> [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
   doxvelt turn <actor-id> --ai --model <id> [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
+  doxvelt close-episode [--label <text>] [--simulation <id>] [--db <path>] [--json]
 `);
 }
 

@@ -2,6 +2,7 @@ import { mkdir, mkdtemp } from "node:fs/promises";
 import path from "node:path";
 import { compileWorld } from "../src/core/compiler.ts";
 import { assembleActorContext } from "../src/core/context.ts";
+import { closeEpisode } from "../src/core/episode.ts";
 import { initWorld } from "../src/core/init.ts";
 import type { EntityRecord } from "../src/core/types.ts";
 import { openRuntimeStore } from "../src/store/sqlite.ts";
@@ -56,6 +57,11 @@ try {
 
   if (!context.promptPreview.includes("We need to understand what is really going on.")) {
     throw new Error("Expected context preview to include the accessible manual turn.");
+  }
+
+  const closure = closeEpisode({ store, simulationId: "default", label: "Smoke episode" });
+  if (closure.memories.length === 0) {
+    throw new Error("Expected closeEpisode to create at least one memory.");
   }
 } finally {
   store.close();
