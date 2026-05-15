@@ -4,6 +4,8 @@ Doxvelt is an early-stage design for a turn-based chat RPG and role-play simulat
 
 The goal is not a normal group chatbot. The goal is an engine where agents, affiliations, artifacts, memories, secrets, mistaken beliefs, and player direction can produce emerging social dynamics for games, education, strategy work, and training simulations.
 
+The first product target is a local single-user app. Simulations and games should be portable through import/export before Doxvelt grows hosted collaboration or publishing features.
+
 ## Core Idea
 
 Canonical reality is singular, but access to it is subjective.
@@ -18,6 +20,7 @@ The design is documented in:
 - [Subjective Context Model](docs/design/SUBJECTIVE_CONTEXT_MODEL.md)
 - [Entity Dossier Format](docs/design/ENTITY_DOSSIER_FORMAT.md)
 - [System Loop](docs/design/SYSTEM_LOOP.md)
+- [MVP Architecture](docs/design/MVP_ARCHITECTURE.md)
 
 ## Example Uses
 
@@ -75,4 +78,4 @@ The engine compiles this prose into runtime fabric: entities, connections, propo
 
 This repository currently contains design documents only. No runtime implementation exists yet.
 
-Recommended next step: define the first vertical slice around source layout, dossier parsing, compile review output, and one manually advanced turn.
+Recommended next step: build the first vertical slice around source layout, dossier parsing, compile review output, local SQLite runtime state, one manually advanced turn, and one AI SDK-backed turn.

@@ -8,8 +8,11 @@ Read these first:
 2. `docs/design/SUBJECTIVE_CONTEXT_MODEL.md`
 3. `docs/design/ENTITY_DOSSIER_FORMAT.md`
 4. `docs/design/SYSTEM_LOOP.md`
+5. `docs/design/MVP_ARCHITECTURE.md`
 
 Doxvelt can support entertainment play, education, strategy work, and training simulations. Preserve the hard-turn, subjective-context model even when adding non-game examples such as executive interviews, crisis exercises, or coordination simulations.
+
+The first product target is a local single-user app with import/export for simulations and games. Do not assume hosted accounts, real-time collaboration, or a marketplace in MVP. Packaging and distribution are undecided.
 
 ## Core Product Shape
 
@@ -112,6 +115,10 @@ Extraction happens at episode closure for MVP, not after every turn.
 ## Implementation Guidance
 
 Prefer making design decisions explicit in `docs/design/` before coding large mechanics.
+
+Doxvelt owns simulation semantics. Use a mature AI substrate for provider mechanics. The preferred MVP substrate is Vercel AI SDK behind a thin Doxvelt generation boundary; do not build a custom provider matrix, streaming protocol, model gateway, inference runtime, or authentication framework.
+
+Treat the core engine as a library, not as the CLI. The CLI is a first-class wrapper for users, tests, automations, coding agents, and future LLM tools. A future local API server should be a sibling wrapper over the same core engine, not an HTTP wrapper around the CLI.
 
 When implementing, preserve source spans from compiled records back to dossier prose. The graph is generated fabric, and users tune prose when compilation goes wrong.
 
