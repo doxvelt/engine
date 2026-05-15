@@ -63,6 +63,10 @@ try {
   if (closure.memories.length === 0) {
     throw new Error("Expected closeEpisode to create at least one memory.");
   }
+
+  if (closure.extractedBeliefs.length === 0) {
+    throw new Error("Expected closeEpisode to create at least one extracted belief.");
+  }
 } finally {
   store.close();
 }

@@ -156,9 +156,21 @@ export type EpisodeMemoryRecord = {
   createdAt: string;
 };
 
+export type ExtractedBeliefRecord = {
+  id: number | bigint;
+  episodeId: number | bigint;
+  memoryId: number | bigint;
+  simulationId: string;
+  holder: string;
+  strength: number;
+  propositionText: string;
+  createdAt: string;
+};
+
 export type EpisodeClosure = {
   episode: EpisodeRecord;
   memories: EpisodeMemoryRecord[];
+  extractedBeliefs: ExtractedBeliefRecord[];
 };
 
 export type ActorContext = {

@@ -162,6 +162,13 @@ test("episode closure writes deterministic memories from accessible turns", asyn
     assert.doesNotMatch(ceoMemory.text, /supplier situation is worse/);
     assert.match(cooMemory.text, /supplier situation is worse/);
     assert.equal(store.listEpisodeMemories("default").length, 2);
+    assert.equal(closure.extractedBeliefs.length, 2);
+    assert.equal(store.listExtractedBeliefs("default").length, 2);
+    assert.ok(
+      closure.extractedBeliefs.some((belief) => {
+        return belief.holder === "ceo" && belief.propositionText.includes("accessible turn");
+      })
+    );
   } finally {
     store.close();
   }

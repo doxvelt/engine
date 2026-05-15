@@ -96,4 +96,4 @@ If a local OpenAI-compatible endpoint is running, try an AI-backed turn:
 bun run doxvelt -- turn coo --ai --model local-openai-compatible --audience coo,student-team --json
 ```
 
-The next implementation step is belief extraction from episode memories.
+The next implementation step is replacing deterministic episode closure placeholders with AI SDK-backed memory writing and structured belief extraction.

@@ -8,6 +8,7 @@ import type {
   EntityRecord,
   EpisodeMemoryRecord,
   EpisodeRecord,
+  ExtractedBeliefRecord,
   SimulationRecord,
   TranscriptTurn
 } from "../core/types.ts";
@@ -68,6 +69,17 @@ export class RuntimeStore {
         actor_id TEXT NOT NULL,
         text TEXT NOT NULL,
         source_turn_ids_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS extracted_beliefs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        episode_id INTEGER NOT NULL,
+        memory_id INTEGER NOT NULL,
+        simulation_id TEXT NOT NULL,
+        holder TEXT NOT NULL,
+        strength INTEGER NOT NULL,
+        proposition_text TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
     `);
@@ -204,6 +216,13 @@ export class RuntimeStore {
     return this.listCompiledRecords<BeliefRecord>(simulationId, "belief");
   }
 
+  listBeliefHistory(simulationId = "default"): Array<BeliefRecord | ExtractedBeliefRecord> {
+    return [
+      ...this.listBeliefs(simulationId),
+      ...this.listExtractedBeliefs(simulationId)
+    ];
+  }
+
   listAccessibleTurns(simulationId = "default", actorId: string): TranscriptTurn[] {
     const rows = this.requireDb()
       .prepare(`
@@ -334,6 +353,79 @@ export class RuntimeStore {
       actorId: row.actor_id as string,
       text: row.text as string,
       sourceTurnIds: JSON.parse(row.source_turn_ids_json as string) as Array<number | bigint>,
+      createdAt: row.created_at as string
+    }));
+  }
+
+  createExtractedBelief({
+    episodeId,
+    memoryId,
+    simulationId = "default",
+    holder,
+    strength,
+    propositionText
+  }: {
+    episodeId: number | bigint;
+    memoryId: number | bigint;
+    simulationId?: string;
+    holder: string;
+    strength: number;
+    propositionText: string;
+  }): ExtractedBeliefRecord {
+    const createdAt = new Date().toISOString();
+    const result = this.requireDb()
+      .prepare(`
+        INSERT INTO extracted_beliefs (
+          episode_id,
+          memory_id,
+          simulation_id,
+          holder,
+          strength,
+          proposition_text,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(episodeId, memoryId, simulationId, holder, strength, propositionText, createdAt);
+
+    return {
+      id: result.lastInsertRowid,
+      episodeId,
+      memoryId,
+      simulationId,
+      holder,
+      strength,
+      propositionText,
+      createdAt
+    };
+  }
+
+  listExtractedBeliefs(simulationId = "default"): ExtractedBeliefRecord[] {
+    const rows = this.requireDb()
+      .prepare(`
+        SELECT
+          id,
+          episode_id,
+          memory_id,
+          simulation_id,
+          holder,
+          strength,
+          proposition_text,
+          created_at
+        FROM extracted_beliefs
+        WHERE simulation_id = ?
+        ORDER BY id
+      `)
+      .all(simulationId);
+
+    return rows.map((row) => ({
+      id: row.id as number | bigint,
+      episodeId: row.episode_id as number | bigint,
+      memoryId: row.memory_id as number | bigint,
+      simulationId: row.simulation_id as string,
+      holder: row.holder as string,
+      strength: row.strength as number,
+      propositionText: row.proposition_text as string,
       createdAt: row.created_at as string
     }));
   }
