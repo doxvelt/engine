@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { compileWorld } from "../src/core/compiler.js";
@@ -8,7 +7,7 @@ import { initWorld } from "../src/core/init.js";
 import { openRuntimeStore } from "../src/store/sqlite.js";
 
 test("initWorld creates a compilable demo source", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "doxvelt-"));
+  const root = await createRepoLocalRunRoot();
   const worldPath = path.join(root, "world");
 
   await initWorld(worldPath);
@@ -21,7 +20,7 @@ test("initWorld creates a compilable demo source", async () => {
 });
 
 test("runtime store saves compiled actors and manual turns", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "doxvelt-"));
+  const root = await createRepoLocalRunRoot();
   const worldPath = path.join(root, "world");
   const dbPath = path.join(root, "runtime.sqlite");
 
@@ -56,3 +55,9 @@ test("runtime store saves compiled actors and manual turns", async () => {
     store.close();
   }
 });
+
+async function createRepoLocalRunRoot() {
+  const root = path.resolve(".doxvelt", "test-runs");
+  await mkdir(root, { recursive: true });
+  return await mkdtemp(path.join(root, "run-"));
+}
