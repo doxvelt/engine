@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { generateDoxveltText } from "../ai/generate.ts";
+import { generateDoxveltObject, generateDoxveltText } from "../ai/generate.ts";
 import { compileWorld } from "../core/compiler.ts";
 import { assembleActorContext } from "../core/context.ts";
-import { closeEpisode } from "../core/episode.ts";
+import { closeEpisode, type EpisodeClosureGenerator } from "../core/episode.ts";
 import { initWorld } from "../core/init.ts";
+import { loadModelRecord } from "../core/models.ts";
 import type { AssetRecord, EntityRecord } from "../core/types.ts";
 import { openRuntimeStore, type RuntimeStore } from "../store/sqlite.ts";
 
@@ -40,13 +41,21 @@ async function main() {
 }
 
 async function initCommand(args: string[]): Promise<void> {
-  const target = args[0] || "world/demo";
+  const target = args.find((arg) => !arg.startsWith("--")) || "world/demo";
+  const template = optionValue(args, "--template") || null;
   if (existsSync(path.resolve(target))) {
     throw new CliError(`Target already exists: ${target}`, 1);
   }
 
-  const result = await initWorld(target);
-  print({ message: "Initialized Doxvelt world source.", root: result.root }, hasFlag(args, "--json"));
+  const result = await initWorld(target, { template });
+  print(
+    {
+      message: template ? `Initialized Doxvelt world source from ${template}.` : "Initialized Doxvelt world scaffold.",
+      root: result.root,
+      template
+    },
+    hasFlag(args, "--json")
+  );
 }
 
 async function compileCommand(args: string[]): Promise<void> {
@@ -168,8 +177,13 @@ async function closeEpisodeCommand(args: string[]): Promise<void> {
     const simulation = store.getSimulation(simulationId);
     if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
 
-    const closure = closeEpisode({ store, simulationId, label });
-    print({ message: "Closed episode.", ...closure }, hasFlag(args, "--json"));
+    const generator = hasFlag(args, "--ai")
+      ? await createAiEpisodeClosureGenerator({ args, simulationId, store })
+      : null;
+    const closure = generator
+      ? await closeEpisode({ store, simulationId, label, generator })
+      : await closeEpisode({ store, simulationId, label });
+    print({ message: `Closed ${generator ? "AI" : "deterministic"} episode.`, ...closure }, hasFlag(args, "--json"));
   } finally {
     store.close();
   }
@@ -195,7 +209,7 @@ async function generateAiTurnText({
   const actor = store.getCompiledRecord<EntityRecord>(simulationId, "entity", actorId);
   if (!actor) throw new CliError(`Actor not found: ${actorId}`, 1);
 
-  const model = store.getCompiledRecord<AssetRecord>(simulationId, "model", modelId);
+  const model = await loadModelRecord(simulation.sourceRoot, modelId);
   if (!model) throw new CliError(`Model not found: ${modelId}`, 1);
 
   const context = assembleActorContext({
@@ -220,11 +234,80 @@ async function generateAiTurnText({
   return result.text;
 }
 
+async function createAiEpisodeClosureGenerator({
+  args,
+  simulationId,
+  store
+}: {
+  args: string[];
+  simulationId: string;
+  store: RuntimeStore;
+}): Promise<EpisodeClosureGenerator> {
+  const modelId = optionValue(args, "--model");
+  if (!modelId) throw new CliError("Use close-episode --ai with --model <id>.", 1);
+
+  const simulation = store.getSimulation(simulationId);
+  if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
+
+  const model = await loadModelRecord(simulation.sourceRoot, modelId);
+  if (!model) throw new CliError(`Model not found: ${modelId}`, 1);
+
+  return {
+    async writeMemory({ actor, context, label }) {
+      const prompt = [
+        "Write one Doxvelt episode memory for the actor below.",
+        "The memory must be subjective: use only the actor's accessible context and transcript.",
+        "Write in the actor's own first-person perspective. Include feelings, interpretations, uncertainty, and what now matters to them.",
+        "Do not reveal objective truth the actor could not access. Do not list bullet points.",
+        label ? `Episode label: ${label}` : "Episode label: unlabeled",
+        "",
+        context.promptPreview
+      ].join("\n");
+
+      const result = await generateDoxveltText({
+        actorId: actor.id,
+        purpose: "memory",
+        model,
+        prompt
+      });
+
+      return result.text.trim();
+    },
+    async extractBeliefs({ actor, memory }) {
+      const result = await generateDoxveltObject<BeliefExtractionOutput>({
+        actorId: actor.id,
+        purpose: "belief_extraction",
+        model,
+        schemaName: "episode_belief_extraction",
+        schemaDescription: "Subjective beliefs extracted from one actor-written Doxvelt episode memory.",
+        schema: beliefExtractionSchema,
+        prompt: [
+          "Extract subjective belief candidates from this Doxvelt episode memory.",
+          "Only extract beliefs the actor appears to hold after writing the memory.",
+          "Use strength values from this exact scale: +3 treats as true, +1 suspects true, 0 neutral, -1 doubts, -3 treats as false.",
+          "Write propositionText as a concise claim, preserving @entity handles when present.",
+          "Return an empty beliefs array if the memory contains no meaningful belief change.",
+          "",
+          `Actor: ${actor.name} (${actor.id})`,
+          "",
+          "# Memory",
+          memory.text
+        ].join("\n")
+      });
+
+      return result.output.beliefs.map((belief) => ({
+        strength: belief.strength,
+        propositionText: belief.propositionText.trim()
+      }));
+    }
+  };
+}
+
 function printHelp() {
   console.log(`Doxvelt engine CLI
 
 Usage:
-  doxvelt init [world-path] [--json]
+  doxvelt init [world-path] [--template executive-interviews] [--json]
   doxvelt compile [world-path] [--json]
   doxvelt start [world-path] --scenario <id> [--simulation <id>] [--db <path>] [--json]
   doxvelt actors [--simulation <id>] [--db <path>] [--json]
@@ -232,6 +315,7 @@ Usage:
   doxvelt turn <actor-id> --manual <text> [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
   doxvelt turn <actor-id> --ai --model <id> [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
   doxvelt close-episode [--label <text>] [--simulation <id>] [--db <path>] [--json]
+  doxvelt close-episode --ai --model <id> [--label <text>] [--simulation <id>] [--db <path>] [--json]
 `);
 }
 
@@ -288,5 +372,38 @@ function actorLabel(actor: unknown): string {
 
   return String(actor);
 }
+
+type BeliefExtractionOutput = {
+  beliefs: Array<{
+    strength: -3 | -1 | 0 | 1 | 3;
+    propositionText: string;
+  }>;
+};
+
+const beliefExtractionSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["beliefs"],
+  properties: {
+    beliefs: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["strength", "propositionText"],
+        properties: {
+          strength: {
+            type: "integer",
+            enum: [-3, -1, 0, 1, 3]
+          },
+          propositionText: {
+            type: "string",
+            minLength: 1
+          }
+        }
+      }
+    }
+  }
+} as const;
 
 await main();

@@ -6,14 +6,29 @@ import { compileWorld } from "../src/core/compiler.ts";
 import { assembleActorContext } from "../src/core/context.ts";
 import { closeEpisode } from "../src/core/episode.ts";
 import { initWorld } from "../src/core/init.ts";
+import { loadModelRecord } from "../src/core/models.ts";
 import type { AssetRecord, EntityRecord } from "../src/core/types.ts";
 import { openRuntimeStore } from "../src/store/sqlite.ts";
 
-test("initWorld creates a compilable demo source", async () => {
+test("initWorld creates a sparse compilable scaffold", async () => {
   const root = await createRepoLocalRunRoot();
   const worldPath = path.join(root, "world");
 
   await initWorld(worldPath);
+  const compiled = await compileWorld(worldPath);
+
+  assert.equal(compiled.entities.length, 1);
+  assert.equal(compiled.scenarios.at(0)?.id, "scenario");
+  assert.ok(compiled.models.some((model) => model.id === "local-openai-compatible"));
+  assert.ok(compiled.beliefs.length >= 1);
+  assert.ok(compiled.beliefs.at(0)?.sourceSpan.file);
+});
+
+test("initWorld can seed the executive interviews example", async () => {
+  const root = await createRepoLocalRunRoot();
+  const worldPath = path.join(root, "world");
+
+  await initWorld(worldPath, { template: "executive-interviews" });
   const compiled = await compileWorld(worldPath);
 
   assert.equal(compiled.entities.length, 3);
@@ -23,12 +38,45 @@ test("initWorld creates a compilable demo source", async () => {
   assert.ok(compiled.beliefs.at(0)?.sourceSpan.file);
 });
 
+test("initWorld template lookup works outside the repository root", async () => {
+  const previousCwd = process.cwd();
+  const root = await createRepoLocalRunRoot();
+  const worldPath = path.join(root, "world");
+
+  try {
+    process.chdir(root);
+    await initWorld(worldPath, { template: "executive-interviews" });
+  } finally {
+    process.chdir(previousCwd);
+  }
+
+  const compiled = await compileWorld(worldPath);
+  assert.equal(compiled.entities.length, 3);
+});
+
+test("initWorld rejects unknown templates", async () => {
+  const root = await createRepoLocalRunRoot();
+  const worldPath = path.join(root, "world");
+
+  await assert.rejects(
+    () => initWorld(worldPath, { template: "missing-template" }),
+    /Unknown Doxvelt init template/
+  );
+});
+
+test("compiled example source is inspectable without running init", async () => {
+  const compiled = await compileWorld("examples/executive-interviews");
+
+  assert.equal(compiled.entities.length, 3);
+  assert.equal(compiled.scenarios.at(0)?.id, "executive-interviews");
+});
+
 test("runtime store saves compiled actors and manual turns", async () => {
   const root = await createRepoLocalRunRoot();
   const worldPath = path.join(root, "world");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath);
+  await initWorld(worldPath, { template: "executive-interviews" });
   const compiled = await compileWorld(worldPath);
   const store = await openRuntimeStore(dbPath).open();
 
@@ -41,13 +89,14 @@ test("runtime store saves compiled actors and manual turns", async () => {
     });
 
     const actors = store.listActors("default");
-    const models = store.listCompiledRecords<AssetRecord>("default", "model");
-
     assert.deepEqual(
       actors.map((actor) => actor.id),
       ["ceo", "coo", "student-team"]
     );
-    assert.ok(models.some((model) => model.id === "local-openai-compatible"));
+    assert.deepEqual(store.listCompiledRecords<AssetRecord>("default", "model"), []);
+
+    const model = await loadModelRecord(compiled.sourceRoot, "local-openai-compatible");
+    assert.equal(model?.metadata.provider, "openai-compatible");
 
     const turn = store.appendTurn({
       simulationId: "default",
@@ -68,7 +117,7 @@ test("actor context includes subjective beliefs and accessible transcript only",
   const worldPath = path.join(root, "world");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath);
+  await initWorld(worldPath, { template: "executive-interviews" });
   const compiled = await compileWorld(worldPath);
   const store = await openRuntimeStore(dbPath).open();
 
@@ -125,7 +174,7 @@ test("episode closure writes deterministic memories from accessible turns", asyn
   const worldPath = path.join(root, "world");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath);
+  await initWorld(worldPath, { template: "executive-interviews" });
   const compiled = await compileWorld(worldPath);
   const store = await openRuntimeStore(dbPath).open();
 
@@ -151,7 +200,7 @@ test("episode closure writes deterministic memories from accessible turns", asyn
       audience: ["coo"]
     });
 
-    const closure = closeEpisode({ store, simulationId: "default", label: "Opening interviews" });
+    const closure = await closeEpisode({ store, simulationId: "default", label: "Opening interviews" });
     const ceoMemory = closure.memories.find((memory) => memory.actorId === "ceo");
     const cooMemory = closure.memories.find((memory) => memory.actorId === "coo");
 
@@ -169,6 +218,65 @@ test("episode closure writes deterministic memories from accessible turns", asyn
         return belief.holder === "ceo" && belief.propositionText.includes("accessible turn");
       })
     );
+  } finally {
+    store.close();
+  }
+});
+
+test("episode closure can use injected AI-style generation", async () => {
+  const root = await createRepoLocalRunRoot();
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await initWorld(worldPath, { template: "executive-interviews" });
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "executive-interviews",
+      compiled
+    });
+
+    store.appendTurn({
+      simulationId: "default",
+      actorId: "ceo",
+      text: "The board is worried about strategy drift.",
+      audience: ["ceo", "student-team"]
+    });
+
+    const closure = await closeEpisode({
+      store,
+      simulationId: "default",
+      label: "Opening interviews",
+      generator: {
+        writeMemory({ actor, context }) {
+          assert.equal(context.actor.id, actor.id);
+          assert.match(context.promptPreview, /The board is worried/);
+          return `I am ${actor.id}, and I now think the board pressure matters.`;
+        },
+        extractBeliefs({ actor, memory }) {
+          return [
+            {
+              strength: 3,
+              propositionText: `@${actor.id} treats board pressure as important after memory ${memory.id}.`
+            },
+            {
+              strength: 99,
+              propositionText: `@${actor.id} has an overconfident normalized belief.`
+            }
+          ];
+        }
+      }
+    });
+
+    assert.equal(closure.memories.length, 1);
+    assert.equal(closure.extractedBeliefs.length, 2);
+    assert.ok(closure.memories.every((memory) => memory.text.includes("board pressure matters")));
+    assert.ok(closure.extractedBeliefs.every((belief) => belief.strength === 3));
+    assert.equal(store.listBeliefHistory("default").length, compiled.beliefs.length + 2);
   } finally {
     store.close();
   }

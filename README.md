@@ -74,14 +74,27 @@ This connection gives @jade access to @mafia knowledge. :access:member
 
 The engine compiles this prose into runtime fabric: entities, connections, propositions, beliefs, events, surfaces, and memories.
 
+Model files are resolved from source by ID when an AI turn or AI-backed episode closure runs. Endpoint details such as `base_url`, `model`, and `api_key_env` are operational config, not durable simulation state, so they are not copied into SQLite.
+
 ## Status
 
-This repository currently contains design documents and the first local CLI slice.
+This repository currently contains design documents, an inspectable example, and the first local CLI slice.
 
-Try the current slice:
+Create a blank source scaffold for your own simulation:
 
 ```sh
 bun run doxvelt -- init world/demo
+```
+
+Or seed the executive-interviews example from [examples/executive-interviews](examples/executive-interviews):
+
+```sh
+bun run doxvelt -- init world/demo --template executive-interviews
+```
+
+Then try the current slice:
+
+```sh
 bun run doxvelt -- compile world/demo --json
 bun run doxvelt -- start world/demo --scenario executive-interviews --json
 bun run doxvelt -- actors --json
@@ -95,5 +108,3 @@ If a local OpenAI-compatible endpoint is running, try an AI-backed turn:
 ```sh
 bun run doxvelt -- turn coo --ai --model local-openai-compatible --audience coo,student-team --json
 ```
-
-The next implementation step is replacing deterministic episode closure placeholders with AI SDK-backed memory writing and structured belief extraction.

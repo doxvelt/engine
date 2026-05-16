@@ -14,7 +14,7 @@ const runRoot = await mkdtemp(path.join(root, "run-"));
 const worldPath = path.join(runRoot, "world");
 const dbPath = path.join(runRoot, "runtime.sqlite");
 
-await initWorld(worldPath);
+await initWorld(worldPath, { template: "executive-interviews" });
 const compiled = await compileWorld(worldPath);
 
 const store = await openRuntimeStore(dbPath).open();
@@ -59,7 +59,7 @@ try {
     throw new Error("Expected context preview to include the accessible manual turn.");
   }
 
-  const closure = closeEpisode({ store, simulationId: "default", label: "Smoke episode" });
+  const closure = await closeEpisode({ store, simulationId: "default", label: "Smoke episode" });
   if (closure.memories.length === 0) {
     throw new Error("Expected closeEpisode to create at least one memory.");
   }

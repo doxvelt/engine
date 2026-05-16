@@ -1,112 +1,100 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { SOURCE_FOLDERS } from "./source.ts";
 
-export async function initWorld(targetPath: string): Promise<{ root: string }> {
-  const root = path.resolve(targetPath);
+export type InitWorldOptions = {
+  template?: string | null;
+};
 
+export async function initWorld(targetPath: string, options: InitWorldOptions = {}): Promise<{ root: string }> {
+  const root = path.resolve(targetPath);
+  const template = options.template || null;
+
+  if (template) {
+    await copyTemplateWorld(root, template);
+    return { root };
+  }
+
+  await scaffoldWorld(root);
+  return { root };
+}
+
+async function scaffoldWorld(root: string): Promise<void> {
   for (const folder of SOURCE_FOLDERS) {
     await mkdir(path.join(root, folder), { recursive: true });
   }
 
-  await mkdir(path.join(root, "entities", "ceo"), { recursive: true });
-  await mkdir(path.join(root, "entities", "coo"), { recursive: true });
-  await mkdir(path.join(root, "entities", "student-team"), { recursive: true });
-
-  await writeSeed(root, "models/manual.yaml", `---
-id: manual
-provider: manual
-model: manual
----
-`);
+  await mkdir(path.join(root, "entities", "actor"), { recursive: true });
 
   await writeSeed(root, "models/local-openai-compatible.yaml", `---
 id: local-openai-compatible
 provider: openai-compatible
 base_url: http://localhost:11434/v1
-model: llama3.1
+model: replace-with-model-name
 api_key_env: OLLAMA_API_KEY
 ---
 `);
 
-  await writeSeed(root, "worlds/strategy-class.md", `---
-id: strategy-class
-name: Strategy Class
+  await writeSeed(root, "worlds/world.md", `---
+id: world
+name: New World
 ---
 
-The simulation is a strategy education interview. Students are trying to understand what is happening inside a company from partial stakeholder accounts. :canonical
+Describe the objective laws, norms, genre rules, or training constraints for this world. :canonical
 `);
 
-  await writeSeed(root, "scenarios/executive-interviews.md", `---
-id: executive-interviews
-name: Executive Interviews
+  await writeSeed(root, "scenarios/scenario.md", `---
+id: scenario
+name: New Scenario
 ---
 
-@student-team is interviewing executives at Northstar Appliances after two weak quarters. :canonical
-@ceo knows the board is worried about strategy drift. :canonical :hidden
-@coo knows the operations team is hiding a supplier reliability problem. :canonical :hidden
+Describe the objective starting situation for this simulation. :canonical
 `);
 
-  await writeSeed(root, "formats/interview.md", `---
-id: interview
-name: Interview
+  await writeSeed(root, "formats/default.md", `---
+id: default
+name: Default Format
 ---
 
-Answer in first person as the selected actor. Keep the response concise and specific. Do not reveal information the actor cannot access.
+Describe how actors should answer during turns.
 `);
 
-  await writeSeed(root, "entities/ceo/IDENTITY.md", `---
-id: ceo
+  await writeSeed(root, "entities/actor/IDENTITY.md", `---
+id: actor
 kind: agent
-name: CEO
+name: Actor
 visibility: public
 ---
 
-@ceo is the chief executive of Northstar Appliances.
+@actor is a participant in the simulation.
 `);
 
-  await writeSeed(root, "entities/ceo/BELIEFS.md", `@ceo treats Northstar's market position as recoverable but fragile. :+3
-@ceo suspects @coo is understating operational risk. :+1
-@ceo believes @student-team should first understand the competitive context. :+3
+  await writeSeed(root, "entities/actor/BELIEFS.md", `@actor treats this new simulation as ready for authoring. :+1
 `);
 
-  await writeSeed(root, "entities/coo/IDENTITY.md", `---
-id: coo
-kind: agent
-name: COO
-visibility: public
----
+  await writeSeed(root, "connections/README.md", `# Connections
 
-@coo is the chief operating officer of Northstar Appliances.
+Add connection files here when entities need relationships, memberships, access links, rivalries, ownership, or other authored links.
 `);
+}
 
-  await writeSeed(root, "entities/coo/BELIEFS.md", `@coo treats supplier reliability as the most urgent operational issue. :+3
-@coo doubts @ceo understands how brittle the current delivery promises are. :-1
-@coo believes @student-team will miss the real problem if they only ask about strategy. :+1
-`);
+async function copyTemplateWorld(root: string, template: string): Promise<void> {
+  const source = templateRoot(template);
+  await mkdir(path.dirname(root), { recursive: true });
+  await cp(source, root, {
+    recursive: true,
+    errorOnExist: true,
+    force: false
+  });
+}
 
-  await writeSeed(root, "entities/student-team/IDENTITY.md", `---
-id: student-team
-kind: affiliation
-name: Student Team
-visibility: public
----
+function templateRoot(template: string): string {
+  if (template !== "executive-interviews") {
+    throw new Error(`Unknown Doxvelt init template: ${template}`);
+  }
 
-@student-team represents the students conducting the strategy interview.
-`);
-
-  await writeSeed(root, "connections/executives-students.md", `---
-id: executives-students
-kind: connection
-entities: [ceo, coo, student-team]
-types: [interview]
----
-
-@ceo knows @student-team has limited time and wants a clear executive narrative. :+3
-@coo suspects @student-team may uncover the supplier issue if they ask operational questions. :+1
-`);
-
-  return { root };
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "examples", template);
 }
 
 async function writeSeed(root: string, relativePath: string, content: string): Promise<void> {
