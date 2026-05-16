@@ -1,5 +1,5 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { generateText } from "ai";
+import { generateText, jsonSchema, Output } from "ai";
 import type { AssetRecord } from "../core/types.ts";
 
 export type DoxveltGenerationPurpose = "turn" | "memory" | "belief_extraction";
@@ -16,6 +16,18 @@ export type DoxveltGenerationResult = {
   raw?: unknown;
 };
 
+export type DoxveltObjectGenerationRequest<TOutput> = DoxveltGenerationRequest & {
+  schema: Parameters<typeof jsonSchema<TOutput>>[0];
+  schemaName?: string;
+  schemaDescription?: string;
+};
+
+export type DoxveltObjectGenerationResult<TOutput> = {
+  output: TOutput;
+  text: string;
+  raw?: unknown;
+};
+
 export async function generateDoxveltText(
   request: DoxveltGenerationRequest
 ): Promise<DoxveltGenerationResult> {
@@ -27,6 +39,30 @@ export async function generateDoxveltText(
   });
 
   return {
+    text: result.text,
+    raw: result
+  };
+}
+
+export async function generateDoxveltObject<TOutput>(
+  request: DoxveltObjectGenerationRequest<TOutput>
+): Promise<DoxveltObjectGenerationResult<TOutput>> {
+  const model = resolveLanguageModel(request.model);
+  const outputOptions: Parameters<typeof Output.object<TOutput>>[0] = {
+    schema: jsonSchema<TOutput>(request.schema)
+  };
+
+  if (request.schemaName) outputOptions.name = request.schemaName;
+  if (request.schemaDescription) outputOptions.description = request.schemaDescription;
+
+  const result = await generateText({
+    model,
+    output: Output.object(outputOptions),
+    prompt: request.prompt
+  });
+
+  return {
+    output: result.output,
     text: result.text,
     raw: result
   };

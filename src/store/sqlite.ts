@@ -124,10 +124,6 @@ export class RuntimeStore {
       insert.run(id, "entity", entity.id, JSON.stringify(entity));
     }
 
-    for (const model of compiled.models) {
-      insert.run(id, "model", model.id, JSON.stringify(model));
-    }
-
     for (const world of compiled.worlds) {
       insert.run(id, "world", world.id, JSON.stringify(world));
     }

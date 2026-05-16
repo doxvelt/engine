@@ -167,6 +167,8 @@ export type ExtractedBeliefRecord = {
   createdAt: string;
 };
 
+export type SubjectiveBeliefRecord = BeliefRecord | ExtractedBeliefRecord;
+
 export type EpisodeClosure = {
   episode: EpisodeRecord;
   memories: EpisodeMemoryRecord[];
@@ -186,7 +188,7 @@ export type ActorContext = {
     formats: AssetRecord[];
   };
   subjective: {
-    beliefs: BeliefRecord[];
+    beliefs: SubjectiveBeliefRecord[];
     transcript: TranscriptTurn[];
   };
   diagnostics: DiagnosticRecord[];

@@ -1,10 +1,10 @@
 import type {
   ActorContext,
   AssetRecord,
-  BeliefRecord,
   DiagnosticRecord,
   EntityRecord,
   SimulationRecord,
+  SubjectiveBeliefRecord,
   TranscriptTurn
 } from "./types.ts";
 
@@ -23,7 +23,7 @@ export function assembleActorContext({
   worlds?: AssetRecord[];
   scenario: AssetRecord | null;
   formats?: AssetRecord[];
-  beliefs?: BeliefRecord[];
+  beliefs?: SubjectiveBeliefRecord[];
   turns?: TranscriptTurn[];
   diagnostics?: DiagnosticRecord[];
 }): ActorContext {
@@ -60,7 +60,7 @@ function buildPromptPreview({
   worlds: AssetRecord[];
   scenario: AssetRecord | null;
   formats: AssetRecord[];
-  beliefs: BeliefRecord[];
+  beliefs: SubjectiveBeliefRecord[];
   turns: TranscriptTurn[];
 }): string {
   const sections = [
@@ -84,7 +84,7 @@ function renderAsset(label: string, asset: AssetRecord): string {
   return `# ${label}: ${asset.name}\n${asset.body || "(No body text.)"}`;
 }
 
-function renderBeliefs(beliefs: BeliefRecord[]): string {
+function renderBeliefs(beliefs: SubjectiveBeliefRecord[]): string {
   if (beliefs.length === 0) return "# Subjective Beliefs\nNone.";
 
   const lines = beliefs.map((belief) => {
