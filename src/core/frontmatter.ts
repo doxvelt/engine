@@ -6,14 +6,22 @@ export function parseFrontmatter(text: string): { data: FrontmatterData; body: s
   }
 
   const normalized = text.replace(/\r\n/g, "\n");
-  const end = normalized.indexOf("\n---\n", 4);
+  const end = findFrontmatterEnd(normalized);
   if (end === -1) {
     return { data: {}, body: text };
   }
 
   const raw = normalized.slice(4, end).trim();
-  const body = normalized.slice(end + 5);
+  const closingLength = normalized.startsWith("\n---\n", end) ? 5 : 4;
+  const body = normalized.slice(end + closingLength);
   return { data: parseSimpleYaml(raw), body };
+}
+
+function findFrontmatterEnd(text: string): number {
+  const withBody = text.indexOf("\n---\n", 4);
+  if (withBody !== -1) return withBody;
+  if (text.endsWith("\n---")) return text.length - 4;
+  return -1;
 }
 
 function parseSimpleYaml(raw: string): FrontmatterData {

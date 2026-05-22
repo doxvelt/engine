@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { DoxveltGenerationError, describeModelForDiagnostics, generateDoxveltText } from "../src/ai/generate.ts";
 import { compileWorld } from "../src/core/compiler.ts";
 import { assembleActorContext } from "../src/core/context.ts";
 import { closeEpisode } from "../src/core/episode.ts";
+import { parseFrontmatter } from "../src/core/frontmatter.ts";
 import { initWorld } from "../src/core/init.ts";
 import { loadModelRecord } from "../src/core/models.ts";
-import type { AssetRecord, EntityRecord } from "../src/core/types.ts";
+import type { AssetRecord, EntityRecord, SimulationRecord, TranscriptTurn } from "../src/core/types.ts";
 import { openRuntimeStore } from "../src/store/sqlite.ts";
 
 test("initWorld creates a sparse compilable scaffold", async (context) => {
@@ -69,6 +71,46 @@ test("compiled example source is inspectable without running init", async () => 
 
   assert.equal(compiled.entities.length, 3);
   assert.equal(compiled.scenarios.at(0)?.id, "executive-interviews");
+});
+
+test("frontmatter parser accepts yaml-only files with closing fence at EOF", () => {
+  const parsed = parseFrontmatter("---\nid: local\nprovider: openai-compatible\n---");
+
+  assert.equal(parsed.data.id, "local");
+  assert.equal(parsed.data.provider, "openai-compatible");
+  assert.equal(parsed.body, "");
+});
+
+test("OpenAI-compatible model diagnostics normalize valid base URLs", () => {
+  const model = modelRecord({
+    base_url: "http://localhost:11434/v1/"
+  });
+
+  assert.match(describeModelForDiagnostics(model), /Base URL: http:\/\/localhost:11434\/v1/);
+});
+
+test("AI generation reports invalid OpenAI-compatible base URLs without SDK retry noise", async () => {
+  const model = modelRecord({
+    base_url: "https://https://inf1-ein.tail8a1c20.ts.net/v1"
+  });
+
+  await assert.rejects(
+    () =>
+      generateDoxveltText({
+        actorId: "coo",
+        purpose: "turn",
+        model,
+        prompt: "Speak as the COO."
+      }),
+    (error) => {
+      assert.ok(error instanceof DoxveltGenerationError);
+      assert.match(error.message, /AI generation failed for turn actor coo/);
+      assert.match(error.message, /invalid base_url metadata/);
+      assert.match(error.message, /more than one URL scheme/);
+      assert.doesNotMatch(error.message, /AI_RetryError/);
+      return true;
+    }
+  );
 });
 
 test("runtime store saves compiled actors and manual turns", async (context) => {
@@ -164,6 +206,94 @@ test("actor context includes subjective beliefs and accessible transcript only",
     assert.equal(context.subjective.transcript.length, 1);
     assert.match(context.promptPreview, /The board is worried/);
     assert.doesNotMatch(context.promptPreview, /supplier situation is worse/);
+    assert.doesNotMatch(context.promptPreview, /operations team is hiding a supplier reliability problem/);
+  } finally {
+    store.close();
+  }
+});
+
+test("actor context enforces subjective isolation without fixture source", () => {
+  const simulation: SimulationRecord = {
+    id: "test-sim",
+    sourceRoot: "/tmp/no-world-source",
+    scenarioId: "subjective-room",
+    createdAt: "2026-05-22T00:00:00.000Z"
+  };
+  const actor = entityRecord("alice");
+  const scenario = assetRecord("scenario", "subjective-room", [
+    "@alice knows the safe code is 1234. :canonical :hidden",
+    "@bob knows the vault is already empty. :canonical :hidden",
+    "Everyone sees the lobby is open. :canonical"
+  ].join("\n"));
+  const beliefs = [
+    beliefRecord("alice", "@alice believes @bob is nervous."),
+    beliefRecord("bob", "@bob believes @alice is distracted.")
+  ];
+  const visibleTurns: TranscriptTurn[] = [
+    turnRecord(1, "alice", "I will keep my part quiet.", ["alice"]),
+    turnRecord(3, "bob", "The lobby is open.", ["alice", "bob"])
+  ];
+
+  const context = assembleActorContext({
+    simulation,
+    actor,
+    worlds: [],
+    scenario,
+    formats: [],
+    beliefs,
+    turns: visibleTurns
+  });
+
+  assert.match(context.promptPreview, /safe code is 1234/);
+  assert.doesNotMatch(context.promptPreview, /vault is already empty/);
+  assert.match(context.promptPreview, /Everyone sees the lobby is open/);
+  assert.deepEqual(
+    context.subjective.beliefs.map((belief) => belief.propositionText),
+    ["@alice believes @bob is nervous."]
+  );
+  assert.deepEqual(
+    context.subjective.transcript.map((turn) => turn.id),
+    [1, 3]
+  );
+});
+
+test("actor context filters hidden scenario lines for other actors", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await initWorld(worldPath, { template: "executive-interviews" });
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "executive-interviews",
+      compiled
+    });
+
+    const simulation = store.getSimulation("default");
+    assert.ok(simulation);
+
+    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "coo");
+    assert.ok(actor);
+
+    const context = assembleActorContext({
+      simulation,
+      actor,
+      worlds: store.listCompiledRecords("default", "world"),
+      scenario: store.getCompiledRecord("default", "scenario", "executive-interviews"),
+      formats: store.listCompiledRecords("default", "format"),
+      beliefs: store.listBeliefs("default"),
+      turns: []
+    });
+
+    assert.match(context.promptPreview, /operations team is hiding a supplier reliability problem/);
+    assert.doesNotMatch(context.promptPreview, /board is worried about strategy drift/);
+    assert.match(context.assets.scenario?.body || "", /operations team is hiding a supplier reliability problem/);
+    assert.doesNotMatch(context.assets.scenario?.body || "", /board is worried about strategy drift/);
   } finally {
     store.close();
   }
@@ -343,4 +473,68 @@ async function createRepoLocalRunRoot(context: test.TestContext) {
     await rm(runRoot, { recursive: true, force: true });
   });
   return runRoot;
+}
+
+function modelRecord(metadata: AssetRecord["metadata"]): AssetRecord {
+  return {
+    id: "local-openai-compatible",
+    kind: "model",
+    name: "local-openai-compatible",
+    path: "models/local-openai-compatible.yaml",
+    metadata: {
+      id: "local-openai-compatible",
+      provider: "openai-compatible",
+      model: "llama3.1",
+      ...metadata
+    },
+    body: ""
+  };
+}
+
+function entityRecord(id: string): EntityRecord {
+  return {
+    id,
+    kind: "agent",
+    name: id,
+    visibility: "public",
+    folder: `entities/${id}`,
+    files: []
+  };
+}
+
+function assetRecord(kind: AssetRecord["kind"], id: string, body: string): AssetRecord {
+  return {
+    id,
+    kind,
+    name: id,
+    path: `${kind}s/${id}.md`,
+    metadata: { id },
+    body
+  };
+}
+
+function beliefRecord(holder: string, propositionText: string) {
+  return {
+    holder,
+    strength: 3,
+    propositionText,
+    mentions: [],
+    sourceSpan: {
+      file: "inline",
+      line: 1,
+      quote: propositionText
+    }
+  };
+}
+
+function turnRecord(id: number, actorId: string, text: string, audience: string[]): TranscriptTurn {
+  return {
+    id,
+    simulationId: "test-sim",
+    actorId,
+    text,
+    audience,
+    episodeId: null,
+    createdAt: "2026-05-22T00:00:00.000Z"
+  };
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { generateDoxveltObject, generateDoxveltText } from "../ai/generate.ts";
+import { DoxveltGenerationError, generateDoxveltObject, generateDoxveltText } from "../ai/generate.ts";
 import { compileWorld } from "../core/compiler.ts";
 import { assembleActorContext } from "../core/context.ts";
 import { closeEpisode, type EpisodeClosureGenerator } from "../core/episode.ts";
@@ -32,6 +32,11 @@ async function main() {
     if (error instanceof CliError) {
       console.error(error.message);
       process.exit(error.exitCode);
+    }
+
+    if (error instanceof DoxveltGenerationError) {
+      console.error(error.message);
+      process.exit(1);
     }
 
     const detail = error instanceof Error ? error.stack || error.message : String(error);

@@ -108,3 +108,23 @@ If a local OpenAI-compatible endpoint is running, try an AI-backed turn:
 ```sh
 bun run doxvelt -- turn coo --ai --model local-openai-compatible --audience coo,student-team --json
 ```
+
+The default scaffold expects an OpenAI-compatible chat completions endpoint:
+
+```yaml
+---
+id: local-openai-compatible
+provider: openai-compatible
+base_url: http://localhost:11434/v1
+model: llama3.1
+api_key_env: OLLAMA_API_KEY
+---
+```
+
+For Ollama, start the server with:
+
+```sh
+ollama serve
+```
+
+Then set `model` to an installed Ollama model. `OLLAMA_API_KEY` may be unset for local Ollama; it is only needed for endpoints that require bearer-token authentication.

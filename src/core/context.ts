@@ -27,6 +27,9 @@ export function assembleActorContext({
   turns?: TranscriptTurn[];
   diagnostics?: DiagnosticRecord[];
 }): ActorContext {
+  const accessibleWorlds = worlds.map((world) => filterAssetForActor(world, actor));
+  const accessibleScenario = scenario ? filterAssetForActor(scenario, actor) : null;
+
   return {
     simulation: {
       id: simulation.id,
@@ -35,8 +38,8 @@ export function assembleActorContext({
     },
     actor,
     assets: {
-      worlds,
-      scenario,
+      worlds: accessibleWorlds,
+      scenario: accessibleScenario,
       formats
     },
     subjective: {
@@ -44,7 +47,14 @@ export function assembleActorContext({
       transcript: turns
     },
     diagnostics,
-    promptPreview: buildPromptPreview({ actor, worlds, scenario, formats, beliefs, turns })
+    promptPreview: buildPromptPreview({
+      actor,
+      worlds: accessibleWorlds,
+      scenario: accessibleScenario,
+      formats,
+      beliefs,
+      turns
+    })
   };
 }
 
@@ -82,6 +92,21 @@ function renderAssets(label: string, assets: AssetRecord[]): string {
 
 function renderAsset(label: string, asset: AssetRecord): string {
   return `# ${label}: ${asset.name}\n${asset.body || "(No body text.)"}`;
+}
+
+function filterAssetForActor(asset: AssetRecord, actor: EntityRecord): AssetRecord {
+  return {
+    ...asset,
+    body: asset.body
+      .split(/\r?\n/)
+      .filter((line) => isLineVisibleToActor(line, actor))
+      .join("\n")
+  };
+}
+
+function isLineVisibleToActor(line: string, actor: EntityRecord): boolean {
+  if (!line.includes(":hidden")) return true;
+  return line.includes(`@${actor.id}`);
 }
 
 function renderBeliefs(beliefs: SubjectiveBeliefRecord[]): string {
