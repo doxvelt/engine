@@ -223,6 +223,59 @@ test("episode closure writes deterministic memories from accessible turns", asyn
   }
 });
 
+test("episode closure only processes turns since the previous closure", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await initWorld(worldPath, { template: "executive-interviews" });
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "executive-interviews",
+      compiled
+    });
+
+    store.appendTurn({
+      simulationId: "default",
+      actorId: "ceo",
+      text: "First episode concern: the board is worried about strategy drift.",
+      audience: ["ceo", "student-team"]
+    });
+
+    const firstClosure = await closeEpisode({ store, simulationId: "default", label: "First beat" });
+    assert.equal(firstClosure.memories.length, 1);
+    assert.equal(store.listUnclosedTurns("default").length, 0);
+
+    store.appendTurn({
+      simulationId: "default",
+      actorId: "ceo",
+      text: "Second episode concern: the pricing story is becoming harder to defend.",
+      audience: ["ceo", "student-team"]
+    });
+
+    const secondClosure = await closeEpisode({ store, simulationId: "default", label: "Second beat" });
+    const secondCeoMemory = secondClosure.memories.find((memory) => memory.actorId === "ceo");
+
+    assert.ok(secondCeoMemory);
+    assert.match(secondCeoMemory.text, /Second episode concern/);
+    assert.doesNotMatch(secondCeoMemory.text, /First episode concern/);
+    assert.equal(secondCeoMemory.sourceTurnIds.length, 1);
+    assert.equal(store.listUnclosedTurns("default").length, 0);
+
+    await assert.rejects(
+      () => closeEpisode({ store, simulationId: "default", label: "Empty beat" }),
+      /No unclosed turns/
+    );
+  } finally {
+    store.close();
+  }
+});
+
 test("episode closure can use injected AI-style generation", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");

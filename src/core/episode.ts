@@ -48,16 +48,21 @@ export async function closeEpisode({
   const simulation = store.getSimulation(simulationId);
   if (!simulation) throw new Error(`Simulation not found: ${simulationId}`);
 
+  const unclosedTurns = store.listUnclosedTurns(simulationId);
+  if (unclosedTurns.length === 0) {
+    throw new Error(`No unclosed turns to close for simulation: ${simulationId}`);
+  }
+
   const actors = store.listActors(simulationId).filter((actor) => actor.kind === "agent");
   const episode = store.createEpisode({ simulationId, label: label || null });
   const memories: EpisodeMemoryRecord[] = [];
   const extractedBeliefs: ExtractedBeliefRecord[] = [];
 
   for (const actor of actors) {
-    const turns = store.listAccessibleTurns(simulationId, actor.id);
+    const turns = store.listUnclosedAccessibleTurns(simulationId, actor.id);
     if (turns.length === 0) continue;
 
-    const context = buildClosureContext({ store, simulation, actor });
+    const context = buildClosureContext({ store, simulation, actor, turns });
     const memoryText = await generator.writeMemory({
       actor,
       context,
@@ -93,6 +98,12 @@ export async function closeEpisode({
     }
   }
 
+  store.markTurnsClosed({
+    simulationId,
+    episodeId: episode.id,
+    turnIds: unclosedTurns.map((turn) => turn.id)
+  });
+
   return { episode, memories, extractedBeliefs };
 }
 
@@ -113,11 +124,13 @@ export const deterministicEpisodeClosureGenerator: EpisodeClosureGenerator = {
 function buildClosureContext({
   store,
   simulation,
-  actor
+  actor,
+  turns
 }: {
   store: RuntimeStore;
   simulation: SimulationRecord;
   actor: EntityRecord;
+  turns: TranscriptTurn[];
 }): ActorContext {
   return assembleActorContext({
     simulation,
@@ -128,7 +141,7 @@ function buildClosureContext({
       : null,
     formats: store.listCompiledRecords<AssetRecord>(simulation.id, "format"),
     beliefs: store.listBeliefHistory(simulation.id),
-    turns: store.listAccessibleTurns(simulation.id, actor.id)
+    turns
   });
 }
 

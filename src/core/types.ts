@@ -136,6 +136,7 @@ export type TranscriptTurn = {
   actorId: string;
   text: string;
   audience: string[];
+  episodeId: number | bigint | null;
   createdAt: string;
 };
 

@@ -52,6 +52,7 @@ export class RuntimeStore {
         actor_id TEXT NOT NULL,
         text TEXT NOT NULL,
         audience_json TEXT NOT NULL,
+        episode_id INTEGER,
         created_at TEXT NOT NULL
       );
 
@@ -83,6 +84,7 @@ export class RuntimeStore {
         created_at TEXT NOT NULL
       );
     `);
+    this.ensureColumn("transcript_turns", "episode_id", "INTEGER");
     return this;
   }
 
@@ -220,14 +222,57 @@ export class RuntimeStore {
   }
 
   listAccessibleTurns(simulationId = "default", actorId: string): TranscriptTurn[] {
+    return this.listTurns({ simulationId, actorId, unclosedOnly: false });
+  }
+
+  listUnclosedAccessibleTurns(simulationId = "default", actorId: string): TranscriptTurn[] {
+    return this.listTurns({ simulationId, actorId, unclosedOnly: true });
+  }
+
+  listUnclosedTurns(simulationId = "default"): TranscriptTurn[] {
+    return this.listTurns({ simulationId, unclosedOnly: true });
+  }
+
+  markTurnsClosed({
+    simulationId = "default",
+    episodeId,
+    turnIds
+  }: {
+    simulationId?: string;
+    episodeId: number | bigint;
+    turnIds: Array<number | bigint>;
+  }): void {
+    if (turnIds.length === 0) return;
+
+    const update = this.requireDb().prepare(`
+      UPDATE transcript_turns
+      SET episode_id = ?
+      WHERE simulation_id = ? AND id = ? AND episode_id IS NULL
+    `);
+
+    for (const turnId of turnIds) {
+      update.run(episodeId, simulationId, turnId);
+    }
+  }
+
+  private listTurns({
+    simulationId,
+    actorId,
+    unclosedOnly
+  }: {
+    simulationId: string;
+    actorId?: string;
+    unclosedOnly: boolean;
+  }): TranscriptTurn[] {
     const rows = this.requireDb()
       .prepare(`
-        SELECT id, simulation_id, actor_id, text, audience_json, created_at
+        SELECT id, simulation_id, actor_id, text, audience_json, episode_id, created_at
         FROM transcript_turns
         WHERE simulation_id = ?
+          AND (? = 0 OR episode_id IS NULL)
         ORDER BY id
       `)
-      .all(simulationId);
+      .all(simulationId, unclosedOnly ? 1 : 0);
 
     return rows
       .map((row) => ({
@@ -236,9 +281,10 @@ export class RuntimeStore {
         actorId: row.actor_id as string,
         text: row.text as string,
         audience: JSON.parse(row.audience_json as string) as string[],
+        episodeId: row.episode_id as number | bigint | null,
         createdAt: row.created_at as string
       }))
-      .filter((turn) => turn.audience.length === 0 || turn.audience.includes(actorId));
+      .filter((turn) => !actorId || turn.audience.length === 0 || turn.audience.includes(actorId));
   }
 
   appendTurn({
@@ -266,6 +312,7 @@ export class RuntimeStore {
       actorId,
       text,
       audience,
+      episodeId: null,
       createdAt
     };
   }
@@ -432,5 +479,12 @@ export class RuntimeStore {
     }
 
     return this.db;
+  }
+
+  private ensureColumn(table: string, column: string, definition: string): void {
+    const columns = this.requireDb().prepare(`PRAGMA table_info(${table})`).all();
+    if (columns.some((row) => row.name === column)) return;
+
+    this.requireDb().exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
 }
