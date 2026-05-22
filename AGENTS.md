@@ -36,7 +36,7 @@ Do not make users author graph atoms directly. Users should write dossiers, conn
 Planned source layout:
 
 ```text
-world/
+workspaces/demo/
   models/
   worlds/
   scenarios/

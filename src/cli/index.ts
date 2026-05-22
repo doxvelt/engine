@@ -46,7 +46,7 @@ async function main() {
 }
 
 async function initCommand(args: string[]): Promise<void> {
-  const target = args.find((arg) => !arg.startsWith("--")) || "world/demo";
+  const target = args.find((arg) => !arg.startsWith("--")) || "workspaces/demo";
   const template = optionValue(args, "--template") || null;
   if (existsSync(path.resolve(target))) {
     throw new CliError(`Target already exists: ${target}`, 1);
@@ -64,13 +64,13 @@ async function initCommand(args: string[]): Promise<void> {
 }
 
 async function compileCommand(args: string[]): Promise<void> {
-  const worldPath = args.find((arg) => !arg.startsWith("--")) || "world/demo";
+  const worldPath = args.find((arg) => !arg.startsWith("--")) || "workspaces/demo";
   const compiled = await compileWorld(worldPath);
   print(compiled, hasFlag(args, "--json"));
 }
 
 async function startCommand(args: string[]): Promise<void> {
-  const worldPath = args.find((arg) => !arg.startsWith("--")) || "world/demo";
+  const worldPath = args.find((arg) => !arg.startsWith("--")) || "workspaces/demo";
   const scenarioId = optionValue(args, "--scenario") || "default";
   const simulationId = optionValue(args, "--simulation") || "default";
   const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";

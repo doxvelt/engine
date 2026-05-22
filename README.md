@@ -45,7 +45,7 @@ The design is documented in:
 A Doxvelt simulation is assembled from source assets on disk:
 
 ```text
-world/
+workspaces/demo/
   models/
   worlds/
   scenarios/
@@ -83,20 +83,20 @@ This repository currently contains design documents, an inspectable example, and
 Create a blank source scaffold for your own simulation:
 
 ```sh
-bun run doxvelt -- init world/demo
+bun run doxvelt -- init workspaces/demo
 ```
 
 Or seed the executive-interviews example from [examples/executive-interviews](examples/executive-interviews):
 
 ```sh
-bun run doxvelt -- init world/demo --template executive-interviews
+bun run doxvelt -- init workspaces/demo --template executive-interviews
 ```
 
 Then try the current slice:
 
 ```sh
-bun run doxvelt -- compile world/demo --json
-bun run doxvelt -- start world/demo --scenario executive-interviews --json
+bun run doxvelt -- compile workspaces/demo --json
+bun run doxvelt -- start workspaces/demo --scenario executive-interviews --json
 bun run doxvelt -- actors --json
 bun run doxvelt -- turn ceo --manual "We need to understand what is really going on." --audience ceo,student-team --json
 bun run doxvelt -- context ceo --json

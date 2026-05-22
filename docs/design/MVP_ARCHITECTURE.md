@@ -176,7 +176,7 @@ Local-first means:
 The authored source remains natural-language Markdown:
 
 ```text
-world/
+workspaces/demo/
   models/
   worlds/
   scenarios/
@@ -314,8 +314,8 @@ The first slice should prefer boring CLI commands over UI:
 
 ```text
 doxvelt init
-doxvelt compile world/demo
-doxvelt start world/demo --scenario executive-interviews
+doxvelt compile workspaces/demo
+doxvelt start workspaces/demo --scenario executive-interviews
 doxvelt actors
 doxvelt turn ceo
 doxvelt turn coo --whisper "Do not reveal the planned layoffs yet."

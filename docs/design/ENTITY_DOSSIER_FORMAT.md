@@ -20,7 +20,7 @@ The runtime graph is powerful, but users should not have to author graph atoms d
 MVP uses folder dossiers only.
 
 ```text
-world/
+workspaces/demo/
   models/
     local-llama.yaml
     hosted-opus.yaml

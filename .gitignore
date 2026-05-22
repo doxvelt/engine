@@ -1,4 +1,5 @@
 node_modules/
 .doxvelt/
+workspaces/
 world/
 *.log
