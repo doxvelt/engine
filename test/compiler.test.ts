@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { compileWorld } from "../src/core/compiler.ts";
@@ -10,8 +10,8 @@ import { loadModelRecord } from "../src/core/models.ts";
 import type { AssetRecord, EntityRecord } from "../src/core/types.ts";
 import { openRuntimeStore } from "../src/store/sqlite.ts";
 
-test("initWorld creates a sparse compilable scaffold", async () => {
-  const root = await createRepoLocalRunRoot();
+test("initWorld creates a sparse compilable scaffold", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
 
   await initWorld(worldPath);
@@ -24,8 +24,8 @@ test("initWorld creates a sparse compilable scaffold", async () => {
   assert.ok(compiled.beliefs.at(0)?.sourceSpan.file);
 });
 
-test("initWorld can seed the executive interviews example", async () => {
-  const root = await createRepoLocalRunRoot();
+test("initWorld can seed the executive interviews example", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
 
   await initWorld(worldPath, { template: "executive-interviews" });
@@ -38,9 +38,9 @@ test("initWorld can seed the executive interviews example", async () => {
   assert.ok(compiled.beliefs.at(0)?.sourceSpan.file);
 });
 
-test("initWorld template lookup works outside the repository root", async () => {
+test("initWorld template lookup works outside the repository root", async (context) => {
   const previousCwd = process.cwd();
-  const root = await createRepoLocalRunRoot();
+  const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
 
   try {
@@ -54,8 +54,8 @@ test("initWorld template lookup works outside the repository root", async () => 
   assert.equal(compiled.entities.length, 3);
 });
 
-test("initWorld rejects unknown templates", async () => {
-  const root = await createRepoLocalRunRoot();
+test("initWorld rejects unknown templates", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
 
   await assert.rejects(
@@ -71,8 +71,8 @@ test("compiled example source is inspectable without running init", async () => 
   assert.equal(compiled.scenarios.at(0)?.id, "executive-interviews");
 });
 
-test("runtime store saves compiled actors and manual turns", async () => {
-  const root = await createRepoLocalRunRoot();
+test("runtime store saves compiled actors and manual turns", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
   const dbPath = path.join(root, "runtime.sqlite");
 
@@ -112,8 +112,8 @@ test("runtime store saves compiled actors and manual turns", async () => {
   }
 });
 
-test("actor context includes subjective beliefs and accessible transcript only", async () => {
-  const root = await createRepoLocalRunRoot();
+test("actor context includes subjective beliefs and accessible transcript only", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
   const dbPath = path.join(root, "runtime.sqlite");
 
@@ -169,8 +169,8 @@ test("actor context includes subjective beliefs and accessible transcript only",
   }
 });
 
-test("episode closure writes deterministic memories from accessible turns", async () => {
-  const root = await createRepoLocalRunRoot();
+test("episode closure writes deterministic memories from accessible turns", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
   const dbPath = path.join(root, "runtime.sqlite");
 
@@ -223,8 +223,8 @@ test("episode closure writes deterministic memories from accessible turns", asyn
   }
 });
 
-test("episode closure can use injected AI-style generation", async () => {
-  const root = await createRepoLocalRunRoot();
+test("episode closure can use injected AI-style generation", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
   const dbPath = path.join(root, "runtime.sqlite");
 
@@ -282,8 +282,12 @@ test("episode closure can use injected AI-style generation", async () => {
   }
 });
 
-async function createRepoLocalRunRoot() {
+async function createRepoLocalRunRoot(context: test.TestContext) {
   const root = path.resolve(".doxvelt", "test-runs");
   await mkdir(root, { recursive: true });
-  return await mkdtemp(path.join(root, "run-"));
+  const runRoot = await mkdtemp(path.join(root, "run-"));
+  context.after(async () => {
+    await rm(runRoot, { recursive: true, force: true });
+  });
+  return runRoot;
 }

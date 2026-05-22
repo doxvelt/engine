@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import { compileWorld } from "../src/core/compiler.ts";
 import { assembleActorContext } from "../src/core/context.ts";
@@ -69,6 +69,7 @@ try {
   }
 } finally {
   store.close();
+  await rm(runRoot, { recursive: true, force: true });
 }
 
 console.log(`smoke ok (${path.relative(process.cwd(), runRoot).replaceAll("\\", "/")})`);
