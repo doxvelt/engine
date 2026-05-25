@@ -155,6 +155,20 @@ export type SubjectiveBeliefAccess = {
   provenance: BeliefProvenance;
 };
 
+export type CurrentBeliefGroup = {
+  key: string;
+  current: SubjectiveBeliefAccess[];
+  superseded: SubjectiveBeliefAccess[];
+  conflicting: SubjectiveBeliefAccess[];
+};
+
+export type CurrentBeliefResolution = {
+  current: SubjectiveBeliefAccess[];
+  superseded: SubjectiveBeliefAccess[];
+  conflicting: SubjectiveBeliefAccess[];
+  groups: CurrentBeliefGroup[];
+};
+
 export type DiagnosticRecord = {
   severity: "warning" | "error";
   code: string;
@@ -287,6 +301,8 @@ export type ActorContext = {
   subjective: {
     beliefs: SubjectiveBeliefRecord[];
     beliefAccess: SubjectiveBeliefAccess[];
+    beliefHistoryAccess: SubjectiveBeliefAccess[];
+    beliefResolution: CurrentBeliefResolution;
     surfaces: SurfaceRecord[];
     transcript: TranscriptTurn[];
     stageWhispers: StageWhisperRecord[];

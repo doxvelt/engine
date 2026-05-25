@@ -146,6 +146,7 @@ Inspect runtime state:
 bun run doxvelt -- transcript --json
 bun run doxvelt -- memories --json
 bun run doxvelt -- beliefs --json
+bun run doxvelt -- beliefs ceo --json
 ```
 
 If a local OpenAI-compatible endpoint is running, try an AI-backed turn:

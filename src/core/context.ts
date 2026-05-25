@@ -1,3 +1,4 @@
+import { resolveCurrentBeliefs } from "./beliefs.ts";
 import type {
   AccessLinkRecord,
   ActorContext,
@@ -41,7 +42,8 @@ export function assembleActorContext({
 }): ActorContext {
   const accessibleWorlds = worlds.map((world) => filterAssetForActor(world, actor));
   const accessibleScenario = scenario ? filterAssetForActor(scenario, actor) : null;
-  const beliefAccess = resolveBeliefAccess(actor.id, beliefs, accessLinks);
+  const beliefHistoryAccess = resolveBeliefAccess(actor.id, beliefs, accessLinks);
+  const beliefResolution = resolveCurrentBeliefs(beliefHistoryAccess);
   const projectedSurfaces = resolveProjectedSurfaces(actor.id, surfaces, observedEntityIds);
 
   return {
@@ -57,8 +59,10 @@ export function assembleActorContext({
       formats
     },
     subjective: {
-      beliefs: beliefAccess.map((access) => access.belief),
-      beliefAccess,
+      beliefs: beliefResolution.current.map((access) => access.belief),
+      beliefAccess: beliefResolution.current,
+      beliefHistoryAccess,
+      beliefResolution,
       surfaces: projectedSurfaces,
       transcript: turns,
       stageWhispers
@@ -69,7 +73,7 @@ export function assembleActorContext({
       worlds: accessibleWorlds,
       scenario: accessibleScenario,
       formats,
-      beliefAccess,
+      beliefResolution,
       surfaces: projectedSurfaces,
       turns,
       stageWhispers
@@ -82,7 +86,7 @@ function buildPromptPreview({
   worlds,
   scenario,
   formats,
-  beliefAccess,
+  beliefResolution,
   surfaces,
   turns,
   stageWhispers
@@ -91,7 +95,7 @@ function buildPromptPreview({
   worlds: AssetRecord[];
   scenario: AssetRecord | null;
   formats: AssetRecord[];
-  beliefAccess: SubjectiveBeliefAccess[];
+  beliefResolution: ActorContext["subjective"]["beliefResolution"];
   surfaces: SurfaceRecord[];
   turns: TranscriptTurn[];
   stageWhispers: StageWhisperRecord[];
@@ -101,7 +105,7 @@ function buildPromptPreview({
     renderAssets("World", worlds),
     scenario ? renderAsset("Scenario", scenario) : "# Scenario\nNo scenario selected.",
     renderAssets("Format", formats),
-    renderBeliefs(beliefAccess),
+    renderBeliefs(beliefResolution),
     renderSurfaces(surfaces),
     renderStageWhispers(stageWhispers),
     renderTranscript(turns)
@@ -222,22 +226,30 @@ function resolveProjectedSurfaces(
   return surfaces.filter((surface) => observed.has(surface.entity));
 }
 
-function renderBeliefs(beliefAccess: SubjectiveBeliefAccess[]): string {
-  if (beliefAccess.length === 0) return "# Subjective Beliefs\nNone.";
+function renderBeliefs(beliefResolution: ActorContext["subjective"]["beliefResolution"]): string {
+  if (beliefResolution.current.length === 0) return "# Current Subjective Beliefs\nNone.";
 
-  const lines = beliefAccess.map((access) => {
-    const source =
-      access.provenance.mode === "accessed_through_membership"
-        ? ` (held by @${access.provenance.sourceHolder}; accessed through ${renderAccessPath(access.provenance.accessPath)})`
-        : access.provenance.mode === "observed"
-          ? ` (first impression of @${access.provenance.sourceHolder})`
-          : access.provenance.mode === "retained_after_access_loss"
-            ? ` (retained after losing access to @${access.provenance.sourceHolder}; old path ${renderAccessPath(access.provenance.accessPath)})`
-        : "";
-    return `- [${formatStrength(access.belief.strength)}]${source} ${access.belief.propositionText}`;
-  });
+  const currentLines = beliefResolution.current.map(renderBeliefAccess);
+  const conflictLines = beliefResolution.conflicting.map(renderBeliefAccess);
 
-  return `# Subjective Beliefs\n${lines.join("\n")}`;
+  const sections = [`# Current Subjective Beliefs\n${currentLines.join("\n")}`];
+  if (conflictLines.length > 0) {
+    sections.push(`# Conflicting Belief History\n${conflictLines.join("\n")}`);
+  }
+
+  return sections.join("\n\n");
+}
+
+function renderBeliefAccess(access: SubjectiveBeliefAccess): string {
+  const source =
+    access.provenance.mode === "accessed_through_membership"
+      ? ` (held by @${access.provenance.sourceHolder}; accessed through ${renderAccessPath(access.provenance.accessPath)})`
+      : access.provenance.mode === "observed"
+        ? ` (first impression of @${access.provenance.sourceHolder})`
+        : access.provenance.mode === "retained_after_access_loss"
+          ? ` (retained after losing access to @${access.provenance.sourceHolder}; old path ${renderAccessPath(access.provenance.accessPath)})`
+      : "";
+  return `- [${formatStrength(access.belief.strength)}]${source} ${access.belief.propositionText}`;
 }
 
 function renderSurfaces(surfaces: SurfaceRecord[]): string {

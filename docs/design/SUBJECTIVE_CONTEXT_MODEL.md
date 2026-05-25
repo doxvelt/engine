@@ -111,7 +111,8 @@ Belief history preserves the journey. Current belief supports fast context assem
 MVP approach:
 
 - Keep append-only belief history.
-- Maintain or derive current beliefs as the strongest and latest relevant records.
+- Derive current beliefs as the strongest and latest relevant accessible records.
+- Treat current-belief materialization as a future cache only, not as authoritative state.
 - Do not require explicit `supersedes` pointers.
 - A later belief can supersede earlier beliefs by strength and recency while keeping the earlier journey intact.
 
@@ -284,7 +285,6 @@ These invokable entities can be called by the player or engine to spice up play.
 
 ## Open Questions
 
-- Whether current beliefs should be physically stored or always derived.
 - How much source weighting should be handled by engine rules versus the acting agent.
 - Whether artifact access eventually needs first-class mechanics beyond propositions.
 - How strict cycle validation should be for nested memberships beyond preventing direct loops.

@@ -2,8 +2,9 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { DoxveltGenerationError, generateDoxveltObject, generateDoxveltText } from "../ai/generate.ts";
+import { resolveCurrentBeliefs } from "../core/beliefs.ts";
 import { compileWorld } from "../core/compiler.ts";
-import { assembleActorContext } from "../core/context.ts";
+import { assembleActorContext, resolveBeliefAccess } from "../core/context.ts";
 import { closeEpisode, type EpisodeClosureGenerator } from "../core/episode.ts";
 import { ensureFirstImpressions } from "../core/impressions.ts";
 import { initWorld } from "../core/init.ts";
@@ -446,6 +447,7 @@ async function memoriesCommand(args: string[]): Promise<void> {
 }
 
 async function beliefsCommand(args: string[]): Promise<void> {
+  const actorId = positionalArgs(args)[0];
   const simulationId = optionValue(args, "--simulation") || "default";
   const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
   const store = await openRuntimeStore(dbPath).open();
@@ -453,6 +455,31 @@ async function beliefsCommand(args: string[]): Promise<void> {
   try {
     const simulation = store.getSimulation(simulationId);
     if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
+
+    if (actorId) {
+      const actor = store.getCompiledRecord<EntityRecord>(simulationId, "entity", actorId);
+      if (!actor) throw new CliError(`Actor not found: ${actorId}`, 1);
+
+      const beliefAccess = resolveBeliefAccess(
+        actorId,
+        store.listBeliefHistory(simulationId),
+        store.listEffectiveAccessLinks(simulationId)
+      );
+      const resolution = resolveCurrentBeliefs(beliefAccess);
+      print(
+        {
+          simulationId,
+          actorId,
+          currentBeliefs: resolution.current,
+          conflictingBeliefs: resolution.conflicting,
+          supersededBeliefs: resolution.superseded,
+          groups: resolution.groups
+        },
+        hasFlag(args, "--json")
+      );
+      return;
+    }
+
     print({ simulationId, beliefs: store.listBeliefHistory(simulationId) }, hasFlag(args, "--json"));
   } finally {
     store.close();
@@ -626,7 +653,7 @@ Usage:
   doxvelt turn <actor-id> --ai --model <id> [--whisper <text>] [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
   doxvelt transcript [--simulation <id>] [--db <path>] [--json]
   doxvelt memories [--simulation <id>] [--db <path>] [--json]
-  doxvelt beliefs [--simulation <id>] [--db <path>] [--json]
+  doxvelt beliefs [actor-id] [--simulation <id>] [--db <path>] [--json]
   doxvelt close-episode [--label <text>] [--simulation <id>] [--db <path>] [--json]
   doxvelt close-episode --ai --model <id> [--label <text>] [--simulation <id>] [--db <path>] [--json]
 `);
@@ -674,6 +701,12 @@ function numericOptionValue(args: string[], flag: string): number | null {
   }
 
   return parsed;
+}
+
+function positionalArgs(args: string[]): string[] {
+  return args.filter((arg, index) => {
+    return !arg.startsWith("--") && !args[index - 1]?.startsWith("--");
+  });
 }
 
 function resolveTurnAudience({

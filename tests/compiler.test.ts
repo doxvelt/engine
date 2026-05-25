@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { DoxveltGenerationError, describeModelForDiagnostics, generateDoxveltText } from "../src/ai/generate.ts";
-import { createRetainedBeliefDraft, weakenRetainedStrength } from "../src/core/beliefs.ts";
+import { createRetainedBeliefDraft, resolveCurrentBeliefs, weakenRetainedStrength } from "../src/core/beliefs.ts";
 import { compileWorld } from "../src/core/compiler.ts";
 import { assembleActorContext } from "../src/core/context.ts";
 import { closeEpisode } from "../src/core/episode.ts";
@@ -418,6 +418,57 @@ test("retained beliefs weaken when membership access is lost", () => {
     sourceHolder: "mafia",
     accessPath: ["alice", "inner-circle", "mafia"]
   });
+});
+
+test("current belief resolution derives current, superseded, and conflicting beliefs", () => {
+  const older = beliefRecord("alice", "@alice believes @bob is reliable.", 1);
+  const current = beliefRecord("alice", "@alice believes @bob is reliable.", 3);
+  const conflicting = beliefRecord("alice", "@alice believes @bob is reliable.", -1);
+  const liveSource = beliefRecord("mafia", "@alice believes @bob is reliable.", -3);
+  const resolution = resolveCurrentBeliefs([
+    {
+      belief: older,
+      provenance: {
+        mode: "held",
+        holder: "alice",
+        sourceHolder: "alice",
+        accessPath: ["alice"]
+      }
+    },
+    {
+      belief: conflicting,
+      provenance: {
+        mode: "held",
+        holder: "alice",
+        sourceHolder: "alice",
+        accessPath: ["alice"]
+      }
+    },
+    {
+      belief: current,
+      provenance: {
+        mode: "held",
+        holder: "alice",
+        sourceHolder: "alice",
+        accessPath: ["alice"]
+      }
+    },
+    {
+      belief: liveSource,
+      provenance: {
+        mode: "accessed_through_membership",
+        holder: "alice",
+        sourceHolder: "mafia",
+        accessPath: ["alice", "mafia"]
+      }
+    }
+  ]);
+
+  assert.ok(resolution.current.some((access) => access.belief === current));
+  assert.ok(resolution.current.some((access) => access.belief === liveSource));
+  assert.ok(resolution.superseded.some((access) => access.belief === older));
+  assert.ok(resolution.conflicting.some((access) => access.belief === conflicting));
+  assert.equal(resolution.groups.length, 2);
 });
 
 test("runtime access events override compiled membership links", async (context) => {
@@ -1096,6 +1147,11 @@ test("CLI inspection commands list transcript memories and beliefs", async (cont
 
   const beliefs = await runCli(["beliefs", "--db", dbPath, "--json"]);
   assert.ok(beliefs.beliefs.length > compiled.beliefs.length);
+
+  const currentBeliefs = await runCli(["beliefs", "ceo", "--db", dbPath, "--json"]);
+  assert.equal(currentBeliefs.actorId, "ceo");
+  assert.ok(currentBeliefs.currentBeliefs.length > 0);
+  assert.ok(Array.isArray(currentBeliefs.supersededBeliefs));
 });
 
 test("episode closure writes deterministic memories from accessible turns", async (context) => {
@@ -1425,10 +1481,10 @@ function assetRecord(kind: AssetRecord["kind"], id: string, body: string): Asset
   };
 }
 
-function beliefRecord(holder: string, propositionText: string) {
+function beliefRecord(holder: string, propositionText: string, strength = 3) {
   return {
     holder,
-    strength: 3,
+    strength,
     propositionText,
     mentions: [],
     sourceSpan: {
