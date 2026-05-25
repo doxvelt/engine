@@ -14,5 +14,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"],
-  "exclude": ["src/local-ui/.nuxt", "src/local-ui/.output"]
+  "exclude": ["src/local-ui"]
 }

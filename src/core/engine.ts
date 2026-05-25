@@ -65,13 +65,15 @@ export function buildActorContext({
   simulationId = "default",
   actorId,
   observedEntityIds = store.listActiveAudienceIds(simulationId),
-  turns = store.listAccessibleTurns(simulationId, actorId)
+  turns = store.listAccessibleTurns(simulationId, actorId),
+  stageWhispers = store.listPendingStageWhispers(simulationId, actorId)
 }: {
   store: RuntimeStore;
   simulationId?: string;
   actorId: string;
   observedEntityIds?: string[];
   turns?: TranscriptTurn[];
+  stageWhispers?: StageWhisperRecord[];
 }): ActorContext {
   const simulation = store.getSimulation(simulationId);
   if (!simulation) throw new Error(`Simulation not found: ${simulationId}`);
@@ -99,8 +101,9 @@ export function buildActorContext({
     surfaces: store.listSurfaces(simulationId),
     longTermMemories: store.listLongTermMemories(simulationId, actorId),
     observedEntityIds,
+    currentAudience: [actorId, ...observedEntityIds],
     turns,
-    stageWhispers: store.listPendingStageWhispers(simulationId, actorId)
+    stageWhispers
   });
 }
 
@@ -148,7 +151,7 @@ export async function advanceTurn({
     actorId,
     observedEntityIds: resolvedAudience
   });
-  const text = manualText || (generateText ? await generateText({ actor, context, audience: resolvedAudience }) : null);
+  const text = (manualText || (generateText ? await generateText({ actor, context, audience: resolvedAudience }) : null))?.trim();
   if (!text) throw new Error("Turn text is empty.");
 
   const turn = store.appendTurn({

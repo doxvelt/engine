@@ -320,6 +320,7 @@ export type ActorContext = {
     surfaces: SurfaceRecord[];
     transcript: TranscriptTurn[];
     stageWhispers: StageWhisperRecord[];
+    currentAudience: string[];
   };
   diagnostics: DiagnosticRecord[];
   promptPreview: string;

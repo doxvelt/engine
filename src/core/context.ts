@@ -25,6 +25,7 @@ export function assembleActorContext({
   surfaces = [],
   longTermMemories = [],
   observedEntityIds = [],
+  currentAudience = [actor.id, ...observedEntityIds],
   turns = [],
   stageWhispers = [],
   diagnostics = []
@@ -39,6 +40,7 @@ export function assembleActorContext({
   surfaces?: SurfaceRecord[];
   longTermMemories?: LongTermMemoryRecord[];
   observedEntityIds?: string[];
+  currentAudience?: string[];
   turns?: TranscriptTurn[];
   stageWhispers?: StageWhisperRecord[];
   diagnostics?: DiagnosticRecord[];
@@ -69,7 +71,8 @@ export function assembleActorContext({
       longTermMemories,
       surfaces: projectedSurfaces,
       transcript: turns,
-      stageWhispers
+      stageWhispers,
+      currentAudience
     },
     diagnostics,
     promptPreview: buildPromptPreview({
@@ -80,6 +83,7 @@ export function assembleActorContext({
       beliefResolution,
       longTermMemories,
       surfaces: projectedSurfaces,
+      currentAudience,
       turns,
       stageWhispers
     })
@@ -94,6 +98,7 @@ function buildPromptPreview({
   beliefResolution,
   longTermMemories,
   surfaces,
+  currentAudience,
   turns,
   stageWhispers
 }: {
@@ -104,6 +109,7 @@ function buildPromptPreview({
   beliefResolution: ActorContext["subjective"]["beliefResolution"];
   longTermMemories: LongTermMemoryRecord[];
   surfaces: SurfaceRecord[];
+  currentAudience: string[];
   turns: TranscriptTurn[];
   stageWhispers: StageWhisperRecord[];
 }): string {
@@ -115,6 +121,7 @@ function buildPromptPreview({
     renderBeliefs(beliefResolution),
     renderLongTermMemories(longTermMemories),
     renderSurfaces(surfaces),
+    renderCurrentAudience(actor.id, currentAudience),
     renderStageWhispers(stageWhispers),
     renderTranscript(turns)
   ];
@@ -276,6 +283,23 @@ function renderSurfaces(surfaces: SurfaceRecord[]): string {
   });
 
   return `# Projected Surfaces\n${lines.join("\n")}`;
+}
+
+function renderCurrentAudience(actorId: string, currentAudience: string[]): string {
+  const audience = [...new Set(currentAudience)];
+  const listeners = audience.filter((id) => id !== actorId);
+  if (listeners.length === 0) {
+    return [
+      "# Current Turn Audience",
+      `Only @${actorId} is in the audience for this turn.`,
+      "Write as if this is private self-directed speech, narration, notes, or internal reflection unless the stage whisper or scenario says otherwise."
+    ].join("\n");
+  }
+
+  return [
+    "# Current Turn Audience",
+    `@${actorId} is speaking where these entities can hear or observe this turn: ${listeners.map((id) => `@${id}`).join(", ")}.`
+  ].join("\n");
 }
 
 function renderAccessPath(accessPath: string[]): string {

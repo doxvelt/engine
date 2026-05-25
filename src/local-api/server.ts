@@ -1,4 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { DoxveltGenerationError, generateDoxveltText } from "../ai/generate.ts";
 import { resolveCurrentBeliefs } from "../core/beliefs.ts";
 import { compileWorld } from "../core/compiler.ts";
@@ -50,7 +52,17 @@ export async function handleLocalApiRequest(
   if (method === "POST" && parts.length === 2 && parts[0] === "source" && parts[1] === "init") {
     const body = await readJsonBody(request);
     const worldPath = requireString(body, "worldPath");
+    const resolvedWorldPath = path.resolve(worldPath);
     const template = optionalString(body, "template") || null;
+    if (existsSync(resolvedWorldPath)) {
+      sendJson(response, 200, {
+        root: resolvedWorldPath,
+        created: false,
+        message: "World source already exists."
+      });
+      return;
+    }
+
     sendJson(response, 200, await initWorld(worldPath, { template }));
     return;
   }
@@ -113,6 +125,7 @@ export async function handleLocalApiRequest(
         simulationId: result.simulationId,
         scenarioId: result.scenarioId,
         actors: result.actors,
+        models: result.compiled.models,
         diagnostics: result.compiled.diagnostics
       });
     });
@@ -340,6 +353,52 @@ export async function handleLocalApiRequest(
         });
 
         sendJson(response, 200, result);
+      });
+      return;
+    }
+
+    if (method === "POST" && parts.length === 3 && parts[2] === "turn-draft") {
+      const body = await readJsonBody(request);
+      const actorId = requireString(body, "actorId");
+      const modelId = requireString(body, "modelId");
+      const whisperText = optionalString(body, "whisperText");
+      const activeAudience = optionalStringArray(body, "audience");
+
+      await withStore(options, async (store) => {
+        ensureSimulation(store, simulationId);
+        const syntheticWhispers = whisperText
+          ? [{
+              id: 0,
+              simulationId,
+              targetActorId: actorId,
+              text: whisperText,
+              consumedTurnId: null,
+              createdAt: new Date().toISOString(),
+              consumedAt: null
+            }]
+          : [];
+        const context = buildActorContext({
+          store,
+          simulationId,
+          actorId,
+          observedEntityIds: activeAudience || store.listActiveAudienceIds(simulationId),
+          stageWhispers: syntheticWhispers
+        });
+        const model = await loadModelRecord(context.simulation.sourceRoot, modelId);
+        if (!model) throw new HttpError(404, `Model not found: ${modelId}`);
+        const generation = await generateDoxveltText({
+          actorId,
+          purpose: "turn",
+          model,
+          prompt: context.promptPreview
+        });
+        sendJson(response, 200, {
+          simulationId,
+          actorId,
+          modelId,
+          text: generation.text.trim(),
+          context
+        });
       });
       return;
     }
