@@ -477,6 +477,10 @@ export class RuntimeStore {
     return this.listTurns({ simulationId, unclosedOnly: true });
   }
 
+  listTranscript(simulationId = "default"): TranscriptTurn[] {
+    return this.listTurns({ simulationId, unclosedOnly: false });
+  }
+
   createStageWhisper({
     simulationId = "default",
     targetActorId,

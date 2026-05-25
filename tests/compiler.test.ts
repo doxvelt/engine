@@ -875,6 +875,52 @@ test("CLI export and import round trip source and runtime state", async (context
   assert.equal(importedCompiled.entities.length, 3);
 });
 
+test("CLI inspection commands list transcript memories and beliefs", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await initWorld(worldPath, { template: "executive-interviews" });
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "executive-interviews",
+      compiled
+    });
+  } finally {
+    store.close();
+  }
+
+  await runCli([
+    "turn",
+    "ceo",
+    "--manual",
+    "The board needs a clearer operating picture.",
+    "--audience",
+    "ceo,student-team",
+    "--db",
+    dbPath,
+    "--json"
+  ]);
+
+  const transcript = await runCli(["transcript", "--db", dbPath, "--json"]);
+  assert.equal(transcript.transcript.length, 1);
+  assert.equal(transcript.transcript.at(0)?.actorId, "ceo");
+
+  await runCli(["close-episode", "--label", "Inspection beat", "--db", dbPath, "--json"]);
+
+  const memories = await runCli(["memories", "--db", dbPath, "--json"]);
+  assert.ok(memories.memories.length >= 1);
+  assert.match(memories.memories.at(0)?.text, /board needs a clearer operating picture/);
+
+  const beliefs = await runCli(["beliefs", "--db", dbPath, "--json"]);
+  assert.ok(beliefs.beliefs.length > compiled.beliefs.length);
+});
+
 test("episode closure writes deterministic memories from accessible turns", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");

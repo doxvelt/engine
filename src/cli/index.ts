@@ -31,6 +31,9 @@ async function main() {
     if (command === "whisper") return await whisperCommand(args);
     if (command === "context") return await contextCommand(args);
     if (command === "turn") return await turnCommand(args);
+    if (command === "transcript") return await transcriptCommand(args);
+    if (command === "memories") return await memoriesCommand(args);
+    if (command === "beliefs") return await beliefsCommand(args);
     if (command === "close-episode") return await closeEpisodeCommand(args);
 
     throw new CliError(`Unknown command: ${command}`, 1);
@@ -398,6 +401,48 @@ async function turnCommand(args: string[]): Promise<void> {
   }
 }
 
+async function transcriptCommand(args: string[]): Promise<void> {
+  const simulationId = optionValue(args, "--simulation") || "default";
+  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    const simulation = store.getSimulation(simulationId);
+    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
+    print({ simulationId, transcript: store.listTranscript(simulationId) }, hasFlag(args, "--json"));
+  } finally {
+    store.close();
+  }
+}
+
+async function memoriesCommand(args: string[]): Promise<void> {
+  const simulationId = optionValue(args, "--simulation") || "default";
+  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    const simulation = store.getSimulation(simulationId);
+    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
+    print({ simulationId, memories: store.listEpisodeMemories(simulationId) }, hasFlag(args, "--json"));
+  } finally {
+    store.close();
+  }
+}
+
+async function beliefsCommand(args: string[]): Promise<void> {
+  const simulationId = optionValue(args, "--simulation") || "default";
+  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    const simulation = store.getSimulation(simulationId);
+    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
+    print({ simulationId, beliefs: store.listBeliefHistory(simulationId) }, hasFlag(args, "--json"));
+  } finally {
+    store.close();
+  }
+}
+
 async function closeEpisodeCommand(args: string[]): Promise<void> {
   const simulationId = optionValue(args, "--simulation") || "default";
   const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
@@ -559,6 +604,9 @@ Usage:
   doxvelt context <actor-id> [--simulation <id>] [--db <path>] [--json]
   doxvelt turn <actor-id> --manual <text> [--whisper <text>] [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
   doxvelt turn <actor-id> --ai --model <id> [--whisper <text>] [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
+  doxvelt transcript [--simulation <id>] [--db <path>] [--json]
+  doxvelt memories [--simulation <id>] [--db <path>] [--json]
+  doxvelt beliefs [--simulation <id>] [--db <path>] [--json]
   doxvelt close-episode [--label <text>] [--simulation <id>] [--db <path>] [--json]
   doxvelt close-episode --ai --model <id> [--label <text>] [--simulation <id>] [--db <path>] [--json]
 `);
