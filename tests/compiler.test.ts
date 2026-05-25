@@ -15,6 +15,7 @@ import { ensureFirstImpressions } from "../src/core/impressions.ts";
 import { initWorld } from "../src/core/init.ts";
 import { loadModelRecord } from "../src/core/models.ts";
 import type { AssetRecord, EntityRecord, SimulationRecord, TranscriptTurn } from "../src/core/types.ts";
+import { createLocalApiServer } from "../src/local-api/server.ts";
 import { openRuntimeStore } from "../src/store/sqlite.ts";
 
 const execFileAsync = promisify(execFile);
@@ -359,6 +360,74 @@ test("core engine starts simulations and advances turns without CLI parsing", as
   } finally {
     store.close();
   }
+});
+
+test("local API exposes the core play loop without shelling out to the CLI", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await initWorld(worldPath, { template: "executive-interviews" });
+  const server = createLocalApiServer({ dbPath });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  context.after(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+  });
+
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  const started = await apiJson(`${baseUrl}/simulations/start`, {
+    method: "POST",
+    body: {
+      worldPath,
+      scenarioId: "executive-interviews"
+    }
+  });
+
+  assert.deepEqual(
+    started.actors.map((actor: EntityRecord) => actor.id),
+    ["ceo", "coo", "student-team"]
+  );
+
+  const actors = await apiJson(`${baseUrl}/simulations/default/actors`);
+  assert.deepEqual(
+    actors.actors.map((actor: EntityRecord) => actor.id),
+    ["ceo", "coo", "student-team"]
+  );
+
+  const turn = await apiJson(`${baseUrl}/simulations/default/turns`, {
+    method: "POST",
+    body: {
+      actorId: "ceo",
+      manualText: "The board needs a clearer operating picture.",
+      whisperText: "Keep the board panic private.",
+      audience: ["student-team"]
+    }
+  });
+
+  assert.deepEqual(turn.turn.audience, ["ceo", "student-team"]);
+  assert.equal(turn.consumedStageWhispers.length, 1);
+
+  const actorContext = await apiJson(`${baseUrl}/simulations/default/context/ceo`);
+  assert.match(actorContext.promptPreview, /The board needs a clearer operating picture/);
+  assert.doesNotMatch(actorContext.promptPreview, /Keep the board panic private/);
+
+  const transcript = await apiJson(`${baseUrl}/simulations/default/transcript`);
+  assert.equal(transcript.transcript.length, 1);
+
+  const closure = await apiJson(`${baseUrl}/simulations/default/episodes/close`, {
+    method: "POST",
+    body: { label: "API smoke" }
+  });
+  assert.equal(closure.episode.label, "API smoke");
+  assert.ok(closure.memories.length > 0);
 });
 
 test("actor context includes subjective beliefs and accessible transcript only", async (context) => {
@@ -1772,6 +1841,25 @@ async function runCli(args: string[]): Promise<any> {
   });
 
   return JSON.parse(result.stdout);
+}
+
+async function apiJson(
+  url: string,
+  options: { method?: string; body?: Record<string, unknown> } = {}
+): Promise<any> {
+  const init: RequestInit = { method: options.method || "GET" };
+  if (options.body) {
+    init.headers = { "content-type": "application/json" };
+    init.body = JSON.stringify(options.body);
+  }
+
+  const response = await fetch(url, init);
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(JSON.stringify(body));
+  }
+
+  return body;
 }
 
 function modelRecord(metadata: AssetRecord["metadata"]): AssetRecord {
