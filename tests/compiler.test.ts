@@ -402,13 +402,45 @@ test("local API exposes the core play loop without shelling out to the CLI", asy
     ["ceo", "coo", "student-team"]
   );
 
+  const audience = await apiJson(`${baseUrl}/simulations/default/audience`, {
+    method: "POST",
+    body: {
+      actorId: "student-team",
+      action: "add",
+      reason: "Students join the interview."
+    }
+  });
+  assert.deepEqual(audience.activeAudience, ["student-team"]);
+
+  const access = await apiJson(`${baseUrl}/simulations/default/access`, {
+    method: "POST",
+    body: {
+      action: "grant",
+      member: "ceo",
+      container: "coo",
+      reason: "The CEO receives the COO briefing."
+    }
+  });
+  assert.ok(
+    access.effectiveAccessLinks.some((link: { member: string; container: string }) => {
+      return link.member === "ceo" && link.container === "coo";
+    })
+  );
+
+  const whisper = await apiJson(`${baseUrl}/simulations/default/whispers`, {
+    method: "POST",
+    body: {
+      targetActorId: "ceo",
+      text: "Keep the board panic private."
+    }
+  });
+  assert.equal(whisper.whisper.targetActorId, "ceo");
+
   const turn = await apiJson(`${baseUrl}/simulations/default/turns`, {
     method: "POST",
     body: {
       actorId: "ceo",
-      manualText: "The board needs a clearer operating picture.",
-      whisperText: "Keep the board panic private.",
-      audience: ["student-team"]
+      manualText: "The board needs a clearer operating picture."
     }
   });
 
@@ -422,12 +454,19 @@ test("local API exposes the core play loop without shelling out to the CLI", asy
   const transcript = await apiJson(`${baseUrl}/simulations/default/transcript`);
   assert.equal(transcript.transcript.length, 1);
 
+  const beliefs = await apiJson(`${baseUrl}/simulations/default/beliefs?actorId=ceo`);
+  assert.equal(beliefs.actorId, "ceo");
+  assert.ok(beliefs.currentBeliefs.length > 0);
+
   const closure = await apiJson(`${baseUrl}/simulations/default/episodes/close`, {
     method: "POST",
     body: { label: "API smoke" }
   });
   assert.equal(closure.episode.label, "API smoke");
   assert.ok(closure.memories.length > 0);
+
+  const memories = await apiJson(`${baseUrl}/simulations/default/memories`);
+  assert.ok(memories.memories.length > 0);
 });
 
 test("actor context includes subjective beliefs and accessible transcript only", async (context) => {

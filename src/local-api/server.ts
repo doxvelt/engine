@@ -1,8 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { DoxveltGenerationError, generateDoxveltText } from "../ai/generate.ts";
+import { resolveCurrentBeliefs } from "../core/beliefs.ts";
+import { resolveBeliefAccess } from "../core/context.ts";
 import { advanceTurn, buildActorContext, startSimulation } from "../core/engine.ts";
 import { closeEpisode } from "../core/episode.ts";
 import { loadModelRecord } from "../core/models.ts";
+import type { EntityRecord } from "../core/types.ts";
 import { openRuntimeStore, type RuntimeStore } from "../store/sqlite.ts";
 
 const DEFAULT_DB_PATH = ".doxvelt/runtime.sqlite";
@@ -90,6 +93,155 @@ export async function handleLocalApiRequest(
         sendJson(response, 200, {
           simulationId,
           transcript: store.listTranscript(simulationId)
+        });
+      });
+      return;
+    }
+
+    if (method === "GET" && parts.length === 3 && parts[2] === "audience") {
+      await withStore(options, async (store) => {
+        ensureSimulation(store, simulationId);
+        sendJson(response, 200, {
+          simulationId,
+          audienceEvents: store.listAudienceEvents(simulationId),
+          audienceMembers: store.listAudienceMembers(simulationId),
+          activeAudience: store.listActiveAudienceIds(simulationId)
+        });
+      });
+      return;
+    }
+
+    if (method === "POST" && parts.length === 3 && parts[2] === "audience") {
+      const body = await readJsonBody(request);
+      const actorId = requireString(body, "actorId");
+      const action = requireAudienceAction(body, "action");
+
+      await withStore(options, async (store) => {
+        ensureSimulation(store, simulationId);
+        const event = store.appendAudienceEvent({
+          simulationId,
+          actorId,
+          action,
+          reason: optionalString(body, "reason") || null,
+          turnId: optionalNonNegativeInteger(body, "turnId"),
+          episodeId: optionalNonNegativeInteger(body, "episodeId")
+        });
+        sendJson(response, 200, {
+          simulationId,
+          event,
+          audienceMembers: store.listAudienceMembers(simulationId),
+          activeAudience: store.listActiveAudienceIds(simulationId)
+        });
+      });
+      return;
+    }
+
+    if (method === "GET" && parts.length === 3 && parts[2] === "access") {
+      await withStore(options, async (store) => {
+        ensureSimulation(store, simulationId);
+        sendJson(response, 200, {
+          simulationId,
+          accessEvents: store.listRuntimeAccessEvents(simulationId),
+          effectiveAccessLinks: store.listEffectiveAccessLinks(simulationId)
+        });
+      });
+      return;
+    }
+
+    if (method === "POST" && parts.length === 3 && parts[2] === "access") {
+      const body = await readJsonBody(request);
+      const action = requireAccessAction(body, "action");
+      const member = requireString(body, "member");
+      const container = requireString(body, "container");
+
+      await withStore(options, async (store) => {
+        ensureSimulation(store, simulationId);
+        const event = store.appendRuntimeAccessEvent({
+          simulationId,
+          action,
+          member,
+          container,
+          reason: optionalString(body, "reason") || null,
+          turnId: optionalNonNegativeInteger(body, "turnId"),
+          episodeId: optionalNonNegativeInteger(body, "episodeId")
+        });
+        sendJson(response, 200, {
+          simulationId,
+          event,
+          effectiveAccessLinks: store.listEffectiveAccessLinks(simulationId)
+        });
+      });
+      return;
+    }
+
+    if (method === "GET" && parts.length === 3 && parts[2] === "whispers") {
+      await withStore(options, async (store) => {
+        ensureSimulation(store, simulationId);
+        sendJson(response, 200, {
+          simulationId,
+          stageWhispers: store.listStageWhispers(simulationId)
+        });
+      });
+      return;
+    }
+
+    if (method === "POST" && parts.length === 3 && parts[2] === "whispers") {
+      const body = await readJsonBody(request);
+      const targetActorId = requireString(body, "targetActorId");
+      const text = requireString(body, "text");
+
+      await withStore(options, async (store) => {
+        ensureSimulation(store, simulationId);
+        const whisper = store.createStageWhisper({ simulationId, targetActorId, text });
+        sendJson(response, 200, {
+          simulationId,
+          whisper
+        });
+      });
+      return;
+    }
+
+    if (method === "GET" && parts.length === 3 && parts[2] === "memories") {
+      await withStore(options, async (store) => {
+        ensureSimulation(store, simulationId);
+        sendJson(response, 200, {
+          simulationId,
+          memories: store.listEpisodeMemories(simulationId),
+          longTermMemories: store.listLongTermMemories(simulationId)
+        });
+      });
+      return;
+    }
+
+    if (method === "GET" && parts.length === 3 && parts[2] === "beliefs") {
+      const actorId = url.searchParams.get("actorId");
+
+      await withStore(options, async (store) => {
+        ensureSimulation(store, simulationId);
+        if (!actorId) {
+          sendJson(response, 200, {
+            simulationId,
+            beliefs: store.listBeliefHistory(simulationId)
+          });
+          return;
+        }
+
+        const actor = store.getCompiledRecord<EntityRecord>(simulationId, "entity", actorId);
+        if (!actor) throw new HttpError(404, `Actor not found: ${actorId}`);
+
+        const beliefAccess = resolveBeliefAccess(
+          actorId,
+          store.listBeliefHistory(simulationId),
+          store.listEffectiveAccessLinks(simulationId)
+        );
+        const resolution = resolveCurrentBeliefs(beliefAccess);
+        sendJson(response, 200, {
+          simulationId,
+          actorId,
+          currentBeliefs: resolution.current,
+          conflictingBeliefs: resolution.conflicting,
+          supersededBeliefs: resolution.superseded,
+          groups: resolution.groups
         });
       });
       return;
@@ -208,6 +360,28 @@ function optionalStringArray(body: Record<string, unknown>, key: string): string
   if (value === undefined || value === null) return undefined;
   if (Array.isArray(value) && value.every((item) => typeof item === "string")) return value;
   throw new HttpError(400, `${key} must be an array of strings.`);
+}
+
+function optionalNonNegativeInteger(body: Record<string, unknown>, key: string): number | null {
+  const value = body[key];
+  if (value === undefined || value === null) return null;
+  if (Number.isInteger(value) && typeof value === "number" && value >= 0) return value;
+  throw new HttpError(400, `${key} must be a non-negative integer.`);
+}
+
+function requireAudienceAction(
+  body: Record<string, unknown>,
+  key: string
+): "add" | "remove" | "deactivate" | "reactivate" {
+  const value = requireString(body, key);
+  if (value === "add" || value === "remove" || value === "deactivate" || value === "reactivate") return value;
+  throw new HttpError(400, `${key} must be add, remove, deactivate, or reactivate.`);
+}
+
+function requireAccessAction(body: Record<string, unknown>, key: string): "grant" | "revoke" {
+  const value = requireString(body, key);
+  if (value === "grant" || value === "revoke") return value;
+  throw new HttpError(400, `${key} must be grant or revoke.`);
 }
 
 function sendJson(response: ServerResponse, status: number, value: unknown): void {
