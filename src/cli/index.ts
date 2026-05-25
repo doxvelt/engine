@@ -57,7 +57,7 @@ async function main() {
 }
 
 async function initCommand(args: string[]): Promise<void> {
-  const target = args.find((arg) => !arg.startsWith("--")) || "workspaces/demo";
+  const target = positionalArgs(args)[0] || "workspaces/demo";
   const template = optionValue(args, "--template") || null;
   if (existsSync(path.resolve(target))) {
     throw new CliError(`Target already exists: ${target}`, 1);
@@ -75,13 +75,13 @@ async function initCommand(args: string[]): Promise<void> {
 }
 
 async function compileCommand(args: string[]): Promise<void> {
-  const worldPath = args.find((arg) => !arg.startsWith("--")) || "workspaces/demo";
+  const worldPath = positionalArgs(args)[0] || "workspaces/demo";
   const compiled = await compileWorld(worldPath);
   print(compiled, hasFlag(args, "--json"));
 }
 
 async function startCommand(args: string[]): Promise<void> {
-  const worldPath = args.find((arg) => !arg.startsWith("--")) || "workspaces/demo";
+  const worldPath = positionalArgs(args)[0] || "workspaces/demo";
   const scenarioId = optionValue(args, "--scenario") || "default";
   const simulationId = optionValue(args, "--simulation") || "default";
   const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
@@ -113,7 +113,7 @@ async function startCommand(args: string[]): Promise<void> {
 }
 
 async function exportCommand(args: string[]): Promise<void> {
-  const targetDir = args.find((arg) => !arg.startsWith("--"));
+  const targetDir = positionalArgs(args)[0];
   if (!targetDir) throw new CliError("Usage: doxvelt export <target-dir> [--simulation <id>] [--db <path>] [--json]", 1);
 
   const simulationId = optionValue(args, "--simulation") || "default";
@@ -129,7 +129,7 @@ async function exportCommand(args: string[]): Promise<void> {
 }
 
 async function importCommand(args: string[]): Promise<void> {
-  const packageDir = args.find((arg) => !arg.startsWith("--"));
+  const packageDir = positionalArgs(args)[0];
   if (!packageDir) {
     throw new CliError("Usage: doxvelt import <package-dir> --world <target-source-dir> --db <target-db-path> [--json]", 1);
   }
@@ -168,7 +168,7 @@ async function actorsCommand(args: string[]): Promise<void> {
 }
 
 async function accessCommand(args: string[]): Promise<void> {
-  const [action, member, container] = args.filter((arg) => !arg.startsWith("--"));
+  const [action, member, container] = positionalArgs(args);
   if (action !== "grant" && action !== "revoke" && action !== "list") {
     throw new CliError("Usage: doxvelt access (grant|revoke|list) [member-id] [container-id] [--reason <text>] [--json]", 1);
   }
@@ -221,7 +221,7 @@ async function accessCommand(args: string[]): Promise<void> {
 }
 
 async function audienceCommand(args: string[]): Promise<void> {
-  const [action, actorId] = args.filter((arg) => !arg.startsWith("--"));
+  const [action, actorId] = positionalArgs(args);
   if (action !== "add" && action !== "remove" && action !== "deactivate" && action !== "reactivate" && action !== "list") {
     throw new CliError("Usage: doxvelt audience (add|remove|deactivate|reactivate|list) [actor-id] [--reason <text>] [--json]", 1);
   }
@@ -275,7 +275,7 @@ async function audienceCommand(args: string[]): Promise<void> {
 }
 
 async function whisperCommand(args: string[]): Promise<void> {
-  const actionOrActor = args.find((arg) => !arg.startsWith("--"));
+  const actionOrActor = positionalArgs(args)[0];
   const simulationId = optionValue(args, "--simulation") || "default";
   const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
   const store = await openRuntimeStore(dbPath).open();
@@ -320,7 +320,7 @@ async function whisperCommand(args: string[]): Promise<void> {
 }
 
 async function contextCommand(args: string[]): Promise<void> {
-  const actorId = args.find((arg) => !arg.startsWith("--"));
+  const actorId = positionalArgs(args)[0];
   if (!actorId) throw new CliError("Usage: doxvelt context <actor-id> [--json]", 1);
 
   const simulationId = optionValue(args, "--simulation") || "default";
@@ -364,7 +364,7 @@ async function contextCommand(args: string[]): Promise<void> {
 }
 
 async function turnCommand(args: string[]): Promise<void> {
-  const actorId = args.find((arg) => !arg.startsWith("--"));
+  const actorId = positionalArgs(args)[0];
   if (!actorId) throw new CliError("Usage: doxvelt turn <actor-id> (--manual <text> | --ai --model <id>)", 1);
 
   const simulationId = optionValue(args, "--simulation") || "default";
@@ -718,10 +718,43 @@ function numericOptionValue(args: string[], flag: string): number | null {
 }
 
 function positionalArgs(args: string[]): string[] {
-  return args.filter((arg, index) => {
-    return !arg.startsWith("--") && !args[index - 1]?.startsWith("--");
-  });
+  const positional: string[] = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (!arg) continue;
+
+    if (arg.startsWith("--")) {
+      if (optionTakesValue(arg)) index += 1;
+      continue;
+    }
+
+    positional.push(arg);
+  }
+
+  return positional;
 }
+
+function optionTakesValue(flag: string): boolean {
+  return VALUE_OPTIONS.has(flag);
+}
+
+const VALUE_OPTIONS = new Set([
+  "--template",
+  "--scenario",
+  "--simulation",
+  "--db",
+  "--world",
+  "--reason",
+  "--turn",
+  "--episode",
+  "--text",
+  "--whisper",
+  "--manual",
+  "--model",
+  "--audience",
+  "--label"
+]);
 
 function resolveTurnAudience({
   explicitAudience,

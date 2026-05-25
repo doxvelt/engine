@@ -136,6 +136,27 @@ This connection gives @inner-circle access to @alice knowledge. :access:member
   );
 });
 
+test("CLI positional parsing ignores option values", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await writeMembershipWorld(worldPath);
+
+  const started = await runCli([
+    "start",
+    "--scenario",
+    "membership-room",
+    worldPath,
+    "--db",
+    dbPath,
+    "--json"
+  ]);
+
+  assert.equal(started.scenarioId, "membership-room");
+  assert.deepEqual(started.actors, ["alice", "inner-circle", "mafia"]);
+});
+
 test("frontmatter parser accepts yaml-only files with closing fence at EOF", () => {
   const parsed = parseFrontmatter("---\nid: local\nprovider: openai-compatible\n---");
 
