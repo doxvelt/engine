@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
+  AccessLinkRecord,
   AssetRecord,
   BeliefRecord,
   CompiledWorld,
@@ -145,6 +146,15 @@ export class RuntimeStore {
     for (const belief of compiled.beliefs) {
       insert.run(id, "belief", `${belief.holder}:${belief.sourceSpan.file}:${belief.sourceSpan.line}`, JSON.stringify(belief));
     }
+
+    for (const accessLink of compiled.accessLinks) {
+      insert.run(
+        id,
+        "access_link",
+        `${accessLink.member}:${accessLink.container}:${accessLink.sourceSpan.file}:${accessLink.sourceSpan.line}`,
+        JSON.stringify(accessLink)
+      );
+    }
   }
 
   listActors(simulationId = "default"): EntityRecord[] {
@@ -180,7 +190,7 @@ export class RuntimeStore {
     };
   }
 
-  getCompiledRecord<TRecord extends AssetRecord | EntityRecord | BeliefRecord>(
+  getCompiledRecord<TRecord extends AssetRecord | EntityRecord | BeliefRecord | AccessLinkRecord>(
     simulationId: string,
     kind: string,
     id: string
@@ -195,7 +205,7 @@ export class RuntimeStore {
     return row ? (JSON.parse(row.json as string) as TRecord) : null;
   }
 
-  listCompiledRecords<TRecord extends AssetRecord | EntityRecord | BeliefRecord>(
+  listCompiledRecords<TRecord extends AssetRecord | EntityRecord | BeliefRecord | AccessLinkRecord>(
     simulationId: string,
     kind: string
   ): TRecord[] {
@@ -212,6 +222,10 @@ export class RuntimeStore {
 
   listBeliefs(simulationId = "default"): BeliefRecord[] {
     return this.listCompiledRecords<BeliefRecord>(simulationId, "belief");
+  }
+
+  listAccessLinks(simulationId = "default"): AccessLinkRecord[] {
+    return this.listCompiledRecords<AccessLinkRecord>(simulationId, "access_link");
   }
 
   listBeliefHistory(simulationId = "default"): Array<BeliefRecord | ExtractedBeliefRecord> {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { DoxveltGenerationError, describeModelForDiagnostics, generateDoxveltText } from "../src/ai/generate.ts";
@@ -299,6 +299,60 @@ test("actor context filters hidden scenario lines for other actors", async (cont
   }
 });
 
+test("actor context includes affiliation beliefs through transitive membership access", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await writeMembershipWorld(worldPath);
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "membership-room",
+      compiled
+    });
+
+    assert.deepEqual(
+      store.listAccessLinks("default").map((link) => [link.member, link.container]),
+      [
+        ["alice", "inner-circle"],
+        ["inner-circle", "mafia"]
+      ]
+    );
+
+    const simulation = store.getSimulation("default");
+    assert.ok(simulation);
+
+    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "alice");
+    assert.ok(actor);
+
+    const actorContext = assembleActorContext({
+      simulation,
+      actor,
+      worlds: [],
+      scenario: store.getCompiledRecord("default", "scenario", "membership-room"),
+      formats: [],
+      beliefs: store.listBeliefs("default"),
+      accessLinks: store.listAccessLinks("default"),
+      turns: []
+    });
+
+    assert.deepEqual(
+      actorContext.subjective.beliefs.map((belief) => belief.holder),
+      ["alice", "inner-circle", "mafia"]
+    );
+    assert.match(actorContext.promptPreview, /from @inner-circle via @alice -> @inner-circle/);
+    assert.match(actorContext.promptPreview, /from @mafia via @alice -> @inner-circle -> @mafia/);
+    assert.match(actorContext.promptPreview, /@mafia treats the docks as controlled territory/);
+  } finally {
+    store.close();
+  }
+});
+
 test("episode closure writes deterministic memories from accessible turns", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
@@ -473,6 +527,99 @@ async function createRepoLocalRunRoot(context: test.TestContext) {
     await rm(runRoot, { recursive: true, force: true });
   });
   return runRoot;
+}
+
+async function writeMembershipWorld(root: string): Promise<void> {
+  const files = new Map([
+    [
+      "scenarios/membership-room.md",
+      `---
+id: membership-room
+name: Membership Room
+---
+
+Everyone is meeting in the back room. :canonical
+`
+    ],
+    [
+      "entities/alice/IDENTITY.md",
+      `---
+id: alice
+kind: agent
+name: Alice
+visibility: public
+---
+
+@alice is testing membership context.
+`
+    ],
+    [
+      "entities/alice/BELIEFS.md",
+      "@alice treats her own assignment as urgent. :+3\n"
+    ],
+    [
+      "entities/inner-circle/IDENTITY.md",
+      `---
+id: inner-circle
+kind: affiliation
+name: Inner Circle
+visibility: public
+---
+
+@inner-circle is a nested group.
+`
+    ],
+    [
+      "entities/inner-circle/BELIEFS.md",
+      "@inner-circle treats the password as changed. :+3\n"
+    ],
+    [
+      "entities/mafia/IDENTITY.md",
+      `---
+id: mafia
+kind: affiliation
+name: Mafia
+visibility: public
+---
+
+@mafia is a larger faction.
+`
+    ],
+    [
+      "entities/mafia/BELIEFS.md",
+      "@mafia treats the docks as controlled territory. :+3\n"
+    ],
+    [
+      "connections/alice-inner-circle.md",
+      `---
+id: alice-inner-circle
+kind: connection
+entities: [alice, inner-circle]
+---
+
+@inner-circle gives @alice access. :access:member
+`
+    ],
+    [
+      "connections/inner-circle-mafia.md",
+      `---
+id: inner-circle-mafia
+kind: connection
+entities: [inner-circle, mafia]
+---
+
+This connection gives @inner-circle access to @mafia knowledge. :access:member
+`
+    ]
+  ]);
+
+  for (const relativePath of files.keys()) {
+    await mkdir(path.dirname(path.join(root, relativePath)), { recursive: true });
+  }
+
+  for (const [relativePath, content] of files.entries()) {
+    await writeFile(path.join(root, relativePath), content);
+  }
 }
 
 function modelRecord(metadata: AssetRecord["metadata"]): AssetRecord {

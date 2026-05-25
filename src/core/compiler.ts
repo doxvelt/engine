@@ -1,5 +1,6 @@
 import { readWorldSource } from "./source.ts";
 import type {
+  AccessLinkRecord,
   AssetKind,
   AssetRecord,
   BeliefRecord,
@@ -127,12 +128,7 @@ function collectLineRecords(records: CompiledWorld, file: SourceFile, context: L
     }
 
     if (tags.includes("access:member")) {
-      records.accessLinks.push({
-        member: mentions[0] || context.holder || "unknown",
-        container: mentions[1] || "unknown",
-        mode: "member",
-        sourceSpan
-      });
+      records.accessLinks.push(resolveAccessLink({ file, context, text, mentions, sourceSpan }));
     }
   });
 }
@@ -166,6 +162,48 @@ function validateRecords(records: CompiledWorld): void {
 
 function stripTags(text: string): string {
   return text.replace(TAG_PATTERN, "").replace(/\s+/g, " ").trim();
+}
+
+function resolveAccessLink({
+  file,
+  context,
+  text,
+  mentions,
+  sourceSpan
+}: {
+  file: SourceFile;
+  context: LineRecordContext;
+  text: string;
+  mentions: string[];
+  sourceSpan: AccessLinkRecord["sourceSpan"];
+}): AccessLinkRecord {
+  const member = mentionBeforeAccess(text) || context.holder || mentions[0] || "unknown";
+  const container = mentionAfterAccessTo(text) || connectionPeer(file, member) || mentions.find((mention) => mention !== member) || "unknown";
+
+  return {
+    member,
+    container,
+    mode: "member",
+    sourceSpan
+  };
+}
+
+function mentionBeforeAccess(text: string): string | undefined {
+  const accessIndex = text.toLowerCase().indexOf("access");
+  if (accessIndex === -1) return undefined;
+
+  return [...text.slice(0, accessIndex).matchAll(MENTION_PATTERN)].at(-1)?.[1];
+}
+
+function mentionAfterAccessTo(text: string): string | undefined {
+  return /access\s+to\b[\s\S]*?@([a-zA-Z0-9_-]+)/i.exec(text)?.[1];
+}
+
+function connectionPeer(file: SourceFile, member: string): string | undefined {
+  const entities = file.data.entities;
+  if (!Array.isArray(entities)) return undefined;
+
+  return entities.find((entity) => entity !== member);
 }
 
 function isString(value: unknown): value is string {

@@ -1,9 +1,11 @@
 import type {
+  AccessLinkRecord,
   ActorContext,
   AssetRecord,
   DiagnosticRecord,
   EntityRecord,
   SimulationRecord,
+  SubjectiveBeliefAccess,
   SubjectiveBeliefRecord,
   TranscriptTurn
 } from "./types.ts";
@@ -15,6 +17,7 @@ export function assembleActorContext({
   scenario,
   formats = [],
   beliefs = [],
+  accessLinks = [],
   turns = [],
   diagnostics = []
 }: {
@@ -24,11 +27,13 @@ export function assembleActorContext({
   scenario: AssetRecord | null;
   formats?: AssetRecord[];
   beliefs?: SubjectiveBeliefRecord[];
+  accessLinks?: AccessLinkRecord[];
   turns?: TranscriptTurn[];
   diagnostics?: DiagnosticRecord[];
 }): ActorContext {
   const accessibleWorlds = worlds.map((world) => filterAssetForActor(world, actor));
   const accessibleScenario = scenario ? filterAssetForActor(scenario, actor) : null;
+  const beliefAccess = resolveBeliefAccess(actor.id, beliefs, accessLinks);
 
   return {
     simulation: {
@@ -43,7 +48,8 @@ export function assembleActorContext({
       formats
     },
     subjective: {
-      beliefs: beliefs.filter((belief) => belief.holder === actor.id),
+      beliefs: beliefAccess.map((access) => access.belief),
+      beliefAccess,
       transcript: turns
     },
     diagnostics,
@@ -52,7 +58,7 @@ export function assembleActorContext({
       worlds: accessibleWorlds,
       scenario: accessibleScenario,
       formats,
-      beliefs,
+      beliefAccess,
       turns
     })
   };
@@ -63,14 +69,14 @@ function buildPromptPreview({
   worlds,
   scenario,
   formats,
-  beliefs,
+  beliefAccess,
   turns
 }: {
   actor: EntityRecord;
   worlds: AssetRecord[];
   scenario: AssetRecord | null;
   formats: AssetRecord[];
-  beliefs: SubjectiveBeliefRecord[];
+  beliefAccess: SubjectiveBeliefAccess[];
   turns: TranscriptTurn[];
 }): string {
   const sections = [
@@ -78,7 +84,7 @@ function buildPromptPreview({
     renderAssets("World", worlds),
     scenario ? renderAsset("Scenario", scenario) : "# Scenario\nNo scenario selected.",
     renderAssets("Format", formats),
-    renderBeliefs(beliefs.filter((belief) => belief.holder === actor.id)),
+    renderBeliefs(beliefAccess),
     renderTranscript(turns)
   ];
 
@@ -109,11 +115,63 @@ function isLineVisibleToActor(line: string, actor: EntityRecord): boolean {
   return line.includes(`@${actor.id}`);
 }
 
-function renderBeliefs(beliefs: SubjectiveBeliefRecord[]): string {
-  if (beliefs.length === 0) return "# Subjective Beliefs\nNone.";
+function resolveBeliefAccess(
+  actorId: string,
+  beliefs: SubjectiveBeliefRecord[],
+  accessLinks: AccessLinkRecord[]
+): SubjectiveBeliefAccess[] {
+  const accessPaths = resolveMembershipPaths(actorId, accessLinks);
+  const directAccess: SubjectiveBeliefAccess[] = beliefs
+    .filter((belief) => belief.holder === actorId)
+    .map((belief) => ({
+      belief,
+      sourceHolder: belief.holder,
+      accessPath: [actorId],
+      mode: "self"
+    }));
 
-  const lines = beliefs.map((belief) => {
-    return `- [${formatStrength(belief.strength)}] ${belief.propositionText}`;
+  const membershipAccess: SubjectiveBeliefAccess[] = beliefs
+    .filter((belief) => belief.holder !== actorId && accessPaths.has(belief.holder))
+    .map((belief) => ({
+      belief,
+      sourceHolder: belief.holder,
+      accessPath: accessPaths.get(belief.holder) || [actorId, belief.holder],
+      mode: "membership"
+    }));
+
+  return [...directAccess, ...membershipAccess];
+}
+
+function resolveMembershipPaths(actorId: string, accessLinks: AccessLinkRecord[]): Map<string, string[]> {
+  const paths = new Map<string, string[]>();
+  const queue = [{ holder: actorId, path: [actorId] }];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) break;
+
+    for (const link of accessLinks) {
+      if (link.mode !== "member" || link.member !== current.holder) continue;
+      if (paths.has(link.container) || link.container === actorId) continue;
+
+      const path = [...current.path, link.container];
+      paths.set(link.container, path);
+      queue.push({ holder: link.container, path });
+    }
+  }
+
+  return paths;
+}
+
+function renderBeliefs(beliefAccess: SubjectiveBeliefAccess[]): string {
+  if (beliefAccess.length === 0) return "# Subjective Beliefs\nNone.";
+
+  const lines = beliefAccess.map((access) => {
+    const source =
+      access.mode === "membership"
+        ? ` (from @${access.sourceHolder} via ${access.accessPath.map((holder) => `@${holder}`).join(" -> ")})`
+        : "";
+    return `- [${formatStrength(access.belief.strength)}]${source} ${access.belief.propositionText}`;
   });
 
   return `# Subjective Beliefs\n${lines.join("\n")}`;

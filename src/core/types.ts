@@ -100,6 +100,13 @@ export type AccessLinkRecord = {
   sourceSpan: SourceSpan;
 };
 
+export type SubjectiveBeliefAccess = {
+  belief: SubjectiveBeliefRecord;
+  sourceHolder: string;
+  accessPath: string[];
+  mode: "self" | "membership";
+};
+
 export type DiagnosticRecord = {
   severity: "warning" | "error";
   code: string;
@@ -190,6 +197,7 @@ export type ActorContext = {
   };
   subjective: {
     beliefs: SubjectiveBeliefRecord[];
+    beliefAccess: SubjectiveBeliefAccess[];
     transcript: TranscriptTurn[];
   };
   diagnostics: DiagnosticRecord[];
