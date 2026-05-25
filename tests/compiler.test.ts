@@ -79,20 +79,20 @@ test("compiled example source is inspectable without running init", async () => 
   assert.equal(compiled.scenarios.at(0)?.id, "executive-interviews");
 });
 
-test("compiler reports direct membership access loops", async (context) => {
+test("compiler reports membership access cycles", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
 
   await writeMembershipWorld(worldPath);
   await writeFile(
-    path.join(worldPath, "connections", "inner-circle-alice.md"),
+    path.join(worldPath, "connections", "mafia-alice.md"),
     `---
-id: inner-circle-alice
+id: mafia-alice
 kind: connection
-entities: [inner-circle, alice]
+entities: [mafia, alice]
 ---
 
-This connection gives @inner-circle access to @alice knowledge. :access:member
+This connection gives @mafia access to @alice knowledge. :access:member
 `
   );
   await writeFile(
@@ -108,8 +108,11 @@ This connection gives @alice access to @alice knowledge. :access:member
   );
 
   const compiled = await compileWorld(worldPath);
-  assert.ok(compiled.diagnostics.some((diagnostic) => diagnostic.code === "membership_direct_loop"));
-  assert.ok(compiled.diagnostics.some((diagnostic) => diagnostic.code === "membership_self_loop"));
+  const cycle = compiled.diagnostics.find((diagnostic) => diagnostic.code === "membership_cycle");
+  const selfLoop = compiled.diagnostics.find((diagnostic) => diagnostic.code === "membership_self_loop");
+  assert.ok(cycle);
+  assert.match(cycle.message, /@alice -> @inner-circle -> @mafia -> @alice/);
+  assert.ok(selfLoop);
 });
 
 test("CLI start rejects compiled worlds with membership access loops", async (context) => {
@@ -119,20 +122,20 @@ test("CLI start rejects compiled worlds with membership access loops", async (co
 
   await writeMembershipWorld(worldPath);
   await writeFile(
-    path.join(worldPath, "connections", "inner-circle-alice.md"),
+    path.join(worldPath, "connections", "mafia-alice.md"),
     `---
-id: inner-circle-alice
+id: mafia-alice
 kind: connection
-entities: [inner-circle, alice]
+entities: [mafia, alice]
 ---
 
-This connection gives @inner-circle access to @alice knowledge. :access:member
+This connection gives @mafia access to @alice knowledge. :access:member
 `
   );
 
   await assert.rejects(
     () => runCli(["start", worldPath, "--scenario", "membership-room", "--db", dbPath, "--json"]),
-    /Membership access loop is invalid/
+    /Membership access cycle is invalid/
   );
 });
 

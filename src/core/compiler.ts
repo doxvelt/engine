@@ -163,11 +163,10 @@ function validateRecords(records: CompiledWorld): void {
 }
 
 function validateMembershipLoops(records: CompiledWorld): void {
-  const linksByPair = new Map<string, AccessLinkRecord[]>();
+  const linksByMember = new Map<string, AccessLinkRecord[]>();
 
   for (const link of records.accessLinks) {
-    const key = accessPairKey(link.member, link.container);
-    linksByPair.set(key, [...(linksByPair.get(key) || []), link]);
+    linksByMember.set(link.member, [...(linksByMember.get(link.member) || []), link]);
 
     if (link.member === link.container) {
       records.diagnostics.push({
@@ -181,24 +180,70 @@ function validateMembershipLoops(records: CompiledWorld): void {
 
   const reported = new Set<string>();
   for (const link of records.accessLinks) {
-    const reverse = linksByPair.get(accessPairKey(link.container, link.member));
-    if (!reverse || reverse.length === 0) continue;
-
-    const reportKey = [link.member, link.container].sort().join(":");
-    if (reported.has(reportKey)) continue;
-    reported.add(reportKey);
-
-    records.diagnostics.push({
-      severity: "error",
-      code: "membership_direct_loop",
-      message: `Membership access loop is invalid: @${link.member} and @${link.container} grant access to each other.`,
-      sourceSpans: [link.sourceSpan, ...reverse.map((reverseLink) => reverseLink.sourceSpan)]
+    walkMembershipAccess({
+      records,
+      linksByMember,
+      reported,
+      path: [link.member],
+      pathLinks: [],
+      link
     });
   }
 }
 
-function accessPairKey(member: string, container: string): string {
-  return `${member}->${container}`;
+function walkMembershipAccess({
+  records,
+  linksByMember,
+  reported,
+  path,
+  pathLinks,
+  link
+}: {
+  records: CompiledWorld;
+  linksByMember: Map<string, AccessLinkRecord[]>;
+  reported: Set<string>;
+  path: string[];
+  pathLinks: AccessLinkRecord[];
+  link: AccessLinkRecord;
+}): void {
+  const nextPath = [...path, link.container];
+  const nextLinks = [...pathLinks, link];
+  const repeatedAt = path.indexOf(link.container);
+
+  if (repeatedAt !== -1) {
+    const cyclePath = nextPath.slice(repeatedAt);
+    const cycleLinks = nextLinks.slice(repeatedAt);
+    const key = canonicalCycleKey(cyclePath);
+    if (reported.has(key)) return;
+    reported.add(key);
+
+    records.diagnostics.push({
+      severity: "error",
+      code: cycleLinks.length === 1 ? "membership_self_loop" : "membership_cycle",
+      message: `Membership access cycle is invalid: ${cyclePath.map((entity) => `@${entity}`).join(" -> ")}.`,
+      sourceSpans: cycleLinks.map((cycleLink) => cycleLink.sourceSpan)
+    });
+    return;
+  }
+
+  for (const nextLink of linksByMember.get(link.container) || []) {
+    walkMembershipAccess({
+      records,
+      linksByMember,
+      reported,
+      path: nextPath,
+      pathLinks: nextLinks,
+      link: nextLink
+    });
+  }
+}
+
+function canonicalCycleKey(cyclePath: string[]): string {
+  const cycle = cyclePath.at(0) === cyclePath.at(-1) ? cyclePath.slice(0, -1) : cyclePath;
+  if (cycle.length === 0) return "";
+
+  const rotations = cycle.map((_, index) => [...cycle.slice(index), ...cycle.slice(0, index)].join("->"));
+  return rotations.sort()[0] || cycle.join("->");
 }
 
 function stripTags(text: string): string {

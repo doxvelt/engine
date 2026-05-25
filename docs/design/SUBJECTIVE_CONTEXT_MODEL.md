@@ -71,7 +71,7 @@ Example:
 - If Jade is a member of Inner Circle and Inner Circle is a member of Mafia, Jade can receive Mafia beliefs through the chain.
 - Mafia does not automatically receive all Inner Circle beliefs.
 
-Membership loops are invalid. If Entity A is a member of Entity B, Entity B cannot also be a member of Entity A.
+Membership loops are invalid. No entity may appear twice in one membership access path. If Entity A is a member of Entity B, Entity B cannot also be a member of Entity A. Transitive loops such as `@alice -> @inner-circle -> @mafia -> @alice` are also invalid.
 
 ## Propositions
 
@@ -287,5 +287,4 @@ These invokable entities can be called by the player or engine to spice up play.
 
 - How much source weighting should be handled by engine rules versus the acting agent.
 - Whether artifact access eventually needs first-class mechanics beyond propositions.
-- How strict cycle validation should be for nested memberships beyond preventing direct loops.
 - How the compiler should reconcile multiple prose spans that imply the same proposition.
