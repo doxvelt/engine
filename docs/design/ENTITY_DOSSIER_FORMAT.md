@@ -135,6 +135,8 @@ Belief strength tags:
 - `:-1` doubts or leans false
 - `:-3` treats as false
 
+For MVP, initial dossier compilation is tag-only. The compiler does not infer belief strength from verbs such as "knows," "suspects," or "doubts" because simulations may be authored in any language. A line without an explicit strength tag is preserved as source prose, mentions, or other tagged material, but it does not become an initial belief record.
+
 Example:
 
 ```md
@@ -348,5 +350,4 @@ When a user edits prose:
 - Whether `:canonical` should imply `:+3` for the line's default holder.
 - Whether belief strength tags should be allowed in frontmatter summaries.
 - Whether source modes like `:source:observed` are needed in initial dossiers.
-- How strongly the compiler should infer missing belief strengths from verbs like "knows", "suspects", and "doubts".
 - How to persist generated hidden truths so they survive runtimes while staying hidden from ordinary author UI.

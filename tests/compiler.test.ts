@@ -108,6 +108,28 @@ base_url: not-a-url
   assert.ok(compiled.diagnostics.some((diagnostic) => diagnostic.code === "model_invalid_base_url"));
 });
 
+test("compiler does not infer belief strength from untagged prose", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+
+  await initWorld(worldPath);
+  await writeFile(
+    path.join(worldPath, "entities", "actor", "BELIEFS.md"),
+    [
+      "@actor knows @other is late.",
+      "@actor suspects @other is hiding something.",
+      "@actor doubts @other will help.",
+      "@actor treats tagged material as compiled. :+1"
+    ].join("\n")
+  );
+
+  const compiled = await compileWorld(worldPath);
+  assert.deepEqual(
+    compiled.beliefs.map((belief) => belief.propositionText),
+    ["@actor treats tagged material as compiled."]
+  );
+});
+
 test("compiler reports invalid entity kind metadata", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
