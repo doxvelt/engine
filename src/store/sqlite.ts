@@ -12,6 +12,7 @@ import type {
   EpisodeMemoryRecord,
   EpisodeRecord,
   ExtractedBeliefRecord,
+  FirstImpressionRecord,
   RuntimeAccessEventRecord,
   SimulationRecord,
   StageWhisperRecord,
@@ -122,6 +123,18 @@ export class RuntimeStore {
         turn_id INTEGER,
         episode_id INTEGER,
         created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS first_impressions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        simulation_id TEXT NOT NULL,
+        observer_id TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        strength INTEGER NOT NULL,
+        proposition_text TEXT NOT NULL,
+        surface_source_span_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(simulation_id, observer_id, entity_id)
       );
     `);
     this.ensureColumn("transcript_turns", "episode_id", "INTEGER");
@@ -380,11 +393,117 @@ export class RuntimeStore {
     }));
   }
 
-  listBeliefHistory(simulationId = "default"): Array<BeliefRecord | ExtractedBeliefRecord> {
+  listBeliefHistory(simulationId = "default"): Array<BeliefRecord | ExtractedBeliefRecord | FirstImpressionRecord> {
     return [
       ...this.listBeliefs(simulationId),
+      ...this.listFirstImpressions(simulationId),
       ...this.listExtractedBeliefs(simulationId)
     ];
+  }
+
+  createFirstImpression({
+    simulationId = "default",
+    observerId,
+    entityId,
+    strength,
+    propositionText,
+    surfaceSourceSpan
+  }: {
+    simulationId?: string;
+    observerId: string;
+    entityId: string;
+    strength: number;
+    propositionText: string;
+    surfaceSourceSpan: FirstImpressionRecord["surfaceSourceSpan"];
+  }): FirstImpressionRecord {
+    const createdAt = new Date().toISOString();
+    const result = this.requireDb()
+      .prepare(`
+        INSERT OR IGNORE INTO first_impressions (
+          simulation_id,
+          observer_id,
+          entity_id,
+          strength,
+          proposition_text,
+          surface_source_span_json,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        simulationId,
+        observerId,
+        entityId,
+        strength,
+        propositionText,
+        JSON.stringify(surfaceSourceSpan),
+        createdAt
+      );
+
+    if (result.changes === 0) {
+      const existing = this.getFirstImpression(simulationId, observerId, entityId);
+      if (!existing) throw new Error(`Failed to create or load first impression for ${observerId} -> ${entityId}`);
+      return existing;
+    }
+
+    return {
+      id: result.lastInsertRowid,
+      simulationId,
+      holder: observerId,
+      observerId,
+      entityId,
+      strength,
+      propositionText,
+      surfaceSourceSpan,
+      createdAt
+    };
+  }
+
+  getFirstImpression(
+    simulationId = "default",
+    observerId: string,
+    entityId: string
+  ): FirstImpressionRecord | null {
+    const row = this.requireDb()
+      .prepare(`
+        SELECT
+          id,
+          simulation_id,
+          observer_id,
+          entity_id,
+          strength,
+          proposition_text,
+          surface_source_span_json,
+          created_at
+        FROM first_impressions
+        WHERE simulation_id = ?
+          AND observer_id = ?
+          AND entity_id = ?
+      `)
+      .get(simulationId, observerId, entityId);
+
+    return row ? rowToFirstImpression(row) : null;
+  }
+
+  listFirstImpressions(simulationId = "default"): FirstImpressionRecord[] {
+    const rows = this.requireDb()
+      .prepare(`
+        SELECT
+          id,
+          simulation_id,
+          observer_id,
+          entity_id,
+          strength,
+          proposition_text,
+          surface_source_span_json,
+          created_at
+        FROM first_impressions
+        WHERE simulation_id = ?
+        ORDER BY id
+      `)
+      .all(simulationId);
+
+    return rows.map(rowToFirstImpression);
   }
 
   listAccessibleTurns(simulationId = "default", actorId: string): TranscriptTurn[] {
@@ -889,4 +1008,19 @@ function audienceAction(value: unknown): AudienceEventRecord["action"] {
   }
 
   throw new Error(`Invalid audience action: ${String(value)}`);
+}
+
+function rowToFirstImpression(row: Record<string, unknown>): FirstImpressionRecord {
+  const observerId = row.observer_id as string;
+  return {
+    id: row.id as number | bigint,
+    simulationId: row.simulation_id as string,
+    holder: observerId,
+    observerId,
+    entityId: row.entity_id as string,
+    strength: row.strength as number,
+    propositionText: row.proposition_text as string,
+    surfaceSourceSpan: JSON.parse(row.surface_source_span_json as string),
+    createdAt: row.created_at as string
+  };
 }

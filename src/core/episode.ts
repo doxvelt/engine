@@ -1,4 +1,5 @@
 import { assembleActorContext } from "./context.ts";
+import { ensureFirstImpressions } from "./impressions.ts";
 import type {
   ActorContext,
   AssetRecord,
@@ -132,6 +133,14 @@ function buildClosureContext({
   actor: EntityRecord;
   turns: TranscriptTurn[];
 }): ActorContext {
+  const observedEntityIds = turns.flatMap((turn) => turn.audience);
+  ensureFirstImpressions({
+    store,
+    simulationId: simulation.id,
+    observerId: actor.id,
+    observedEntityIds
+  });
+
   return assembleActorContext({
     simulation,
     actor,
@@ -143,7 +152,7 @@ function buildClosureContext({
     beliefs: store.listBeliefHistory(simulation.id),
     accessLinks: store.listEffectiveAccessLinks(simulation.id),
     surfaces: store.listSurfaces(simulation.id),
-    observedEntityIds: turns.flatMap((turn) => turn.audience),
+    observedEntityIds,
     stageWhispers: store.listPendingStageWhispers(simulation.id, actor.id),
     turns
   });

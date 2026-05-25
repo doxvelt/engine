@@ -5,6 +5,7 @@ import { DoxveltGenerationError, generateDoxveltObject, generateDoxveltText } fr
 import { compileWorld } from "../core/compiler.ts";
 import { assembleActorContext } from "../core/context.ts";
 import { closeEpisode, type EpisodeClosureGenerator } from "../core/episode.ts";
+import { ensureFirstImpressions } from "../core/impressions.ts";
 import { initWorld } from "../core/init.ts";
 import { loadModelRecord } from "../core/models.ts";
 import { exportSimulationPackage, importSimulationPackage } from "../core/portable.ts";
@@ -330,6 +331,13 @@ async function contextCommand(args: string[]): Promise<void> {
 
     const actor = store.getCompiledRecord<EntityRecord>(simulationId, "entity", actorId);
     if (!actor) throw new CliError(`Actor not found: ${actorId}`, 1);
+    const observedEntityIds = store.listActiveAudienceIds(simulationId);
+    ensureFirstImpressions({
+      store,
+      simulationId,
+      observerId: actorId,
+      observedEntityIds
+    });
 
     const context = assembleActorContext({
       simulation,
@@ -339,10 +347,10 @@ async function contextCommand(args: string[]): Promise<void> {
         ? store.getCompiledRecord<AssetRecord>(simulationId, "scenario", simulation.scenarioId)
         : null,
       formats: store.listCompiledRecords<AssetRecord>(simulationId, "format"),
-      beliefs: store.listBeliefs(simulationId),
+      beliefs: store.listBeliefHistory(simulationId),
       accessLinks: store.listEffectiveAccessLinks(simulationId),
       surfaces: store.listSurfaces(simulationId),
-      observedEntityIds: store.listActiveAudienceIds(simulationId),
+      observedEntityIds,
       turns: store.listAccessibleTurns(simulationId, actorId),
       stageWhispers: store.listPendingStageWhispers(simulationId, actorId)
     });
@@ -366,6 +374,12 @@ async function turnCommand(args: string[]): Promise<void> {
       explicitAudience: optionValue(args, "--audience"),
       actorId,
       activeAudience: store.listActiveAudienceIds(simulationId)
+    });
+    ensureFirstImpressions({
+      store,
+      simulationId,
+      observerId: actorId,
+      observedEntityIds: audience
     });
     const whisperText = optionValue(args, "--whisper");
     if (whisperText) {
@@ -500,7 +514,7 @@ async function generateAiTurnText({
       ? store.getCompiledRecord<AssetRecord>(simulationId, "scenario", simulation.scenarioId)
       : null,
     formats: store.listCompiledRecords<AssetRecord>(simulationId, "format"),
-    beliefs: store.listBeliefs(simulationId),
+    beliefs: store.listBeliefHistory(simulationId),
     accessLinks: store.listEffectiveAccessLinks(simulationId),
     surfaces: store.listSurfaces(simulationId),
     observedEntityIds: audience,

@@ -121,6 +121,7 @@ bun run doxvelt -- turn ceo --manual "We should keep this focused." --json
 ```
 
 Projected surface lines from entity dossiers are included in actor context for entities the actor can currently observe.
+The first time an actor observes another entity, Doxvelt automatically stores a deterministic first-impression belief from that entity's projected surface.
 
 Runtime access changes are explicit events. They change effective context access without editing authored source files:
 

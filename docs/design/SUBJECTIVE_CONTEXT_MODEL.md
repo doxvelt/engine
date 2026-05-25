@@ -175,6 +175,8 @@ Observation channels determine what can be noticed:
 
 First impressions are generated once per observer-entity pair, except artifacts may use looser inspection rules. First and recent impressions should carry relatively high weight during context assembly because they are dramatically useful and psychologically plausible.
 
+MVP first impressions are deterministic and automatic. When an actor first observes another entity in context, Doxvelt persists a `+1` observed belief derived from the first projected surface line for that entity. AI-generated or player-reviewed impressions can come later.
+
 ## Artifacts
 
 Artifacts are belief holders in MVP.

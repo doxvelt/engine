@@ -10,6 +10,7 @@ import { compileWorld } from "../src/core/compiler.ts";
 import { assembleActorContext } from "../src/core/context.ts";
 import { closeEpisode } from "../src/core/episode.ts";
 import { parseFrontmatter } from "../src/core/frontmatter.ts";
+import { ensureFirstImpressions } from "../src/core/impressions.ts";
 import { initWorld } from "../src/core/init.ts";
 import { loadModelRecord } from "../src/core/models.ts";
 import type { AssetRecord, EntityRecord, SimulationRecord, TranscriptTurn } from "../src/core/types.ts";
@@ -654,6 +655,103 @@ test("stage whispers are private one-turn context", async (context) => {
   } finally {
     store.close();
   }
+});
+
+test("first impressions are deterministic and created once from observed surfaces", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await writeMembershipWorld(worldPath);
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "membership-room",
+      compiled
+    });
+
+    const created = ensureFirstImpressions({
+      store,
+      simulationId: "default",
+      observerId: "alice",
+      observedEntityIds: ["alice", "inner-circle", "mafia"]
+    });
+    const secondPass = ensureFirstImpressions({
+      store,
+      simulationId: "default",
+      observerId: "alice",
+      observedEntityIds: ["inner-circle", "mafia"]
+    });
+
+    assert.deepEqual(
+      created.map((impression) => [impression.observerId, impression.entityId, impression.strength]),
+      [
+        ["alice", "inner-circle", 1],
+        ["alice", "mafia", 1]
+      ]
+    );
+    assert.equal(secondPass.length, 0);
+    assert.equal(store.listFirstImpressions("default").length, 2);
+
+    const simulation = store.getSimulation("default");
+    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "alice");
+    assert.ok(simulation);
+    assert.ok(actor);
+
+    const actorContext = assembleActorContext({
+      simulation,
+      actor,
+      worlds: [],
+      scenario: store.getCompiledRecord("default", "scenario", "membership-room"),
+      formats: [],
+      beliefs: store.listBeliefHistory("default"),
+      accessLinks: store.listEffectiveAccessLinks("default"),
+      surfaces: store.listSurfaces("default"),
+      observedEntityIds: ["inner-circle", "mafia"],
+      turns: []
+    });
+
+    assert.match(actorContext.promptPreview, /first impression of @inner-circle/);
+    assert.match(actorContext.promptPreview, /@alice forms a first impression that @inner-circle usually appears disciplined/);
+  } finally {
+    store.close();
+  }
+});
+
+test("CLI context automatically persists first impressions", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await writeMembershipWorld(worldPath);
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "membership-room",
+      compiled
+    });
+  } finally {
+    store.close();
+  }
+
+  await runCli(["audience", "add", "inner-circle", "--db", dbPath, "--json"]);
+  const actorContext = await runCli(["context", "alice", "--db", dbPath, "--json"]);
+  assert.match(actorContext.promptPreview, /first impression of @inner-circle/);
+
+  const beliefs = await runCli(["beliefs", "--db", dbPath, "--json"]);
+  assert.ok(
+    beliefs.beliefs.some((belief: { entityId?: string; observerId?: string }) => {
+      return belief.observerId === "alice" && belief.entityId === "inner-circle";
+    })
+  );
 });
 
 test("CLI whisper command stores and turn command consumes stage whispers", async (context) => {

@@ -233,7 +233,19 @@ export type ExtractedBeliefRecord = {
   createdAt: string;
 };
 
-export type SubjectiveBeliefRecord = BeliefRecord | ExtractedBeliefRecord;
+export type FirstImpressionRecord = {
+  id: number | bigint;
+  simulationId: string;
+  holder: string;
+  observerId: string;
+  entityId: string;
+  strength: number;
+  propositionText: string;
+  surfaceSourceSpan: SourceSpan;
+  createdAt: string;
+};
+
+export type SubjectiveBeliefRecord = BeliefRecord | ExtractedBeliefRecord | FirstImpressionRecord;
 
 export type EpisodeClosure = {
   episode: EpisodeRecord;

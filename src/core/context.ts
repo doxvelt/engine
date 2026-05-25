@@ -144,12 +144,7 @@ function resolveBeliefAccess(
     .filter((belief) => belief.holder === actorId)
     .map((belief) => ({
       belief,
-      provenance: {
-        mode: "held",
-        holder: actorId,
-        sourceHolder: belief.holder,
-        accessPath: [actorId]
-      }
+      provenance: provenanceForDirectBelief(actorId, belief)
     }));
 
   const membershipAccess: SubjectiveBeliefAccess[] = beliefs
@@ -165,6 +160,27 @@ function resolveBeliefAccess(
     }));
 
   return [...directAccess, ...membershipAccess];
+}
+
+function provenanceForDirectBelief(
+  actorId: string,
+  belief: SubjectiveBeliefRecord
+): SubjectiveBeliefAccess["provenance"] {
+  if ("observerId" in belief && "entityId" in belief) {
+    return {
+      mode: "observed",
+      holder: actorId,
+      sourceHolder: belief.entityId,
+      accessPath: [actorId, belief.entityId]
+    };
+  }
+
+  return {
+    mode: "held",
+    holder: actorId,
+    sourceHolder: belief.holder,
+    accessPath: [actorId]
+  };
 }
 
 function resolveMembershipPaths(actorId: string, accessLinks: AccessLinkRecord[]): Map<string, string[]> {
@@ -204,6 +220,8 @@ function renderBeliefs(beliefAccess: SubjectiveBeliefAccess[]): string {
     const source =
       access.provenance.mode === "accessed_through_membership"
         ? ` (held by @${access.provenance.sourceHolder}; accessed through ${renderAccessPath(access.provenance.accessPath)})`
+        : access.provenance.mode === "observed"
+          ? ` (first impression of @${access.provenance.sourceHolder})`
         : "";
     return `- [${formatStrength(access.belief.strength)}]${source} ${access.belief.propositionText}`;
   });
