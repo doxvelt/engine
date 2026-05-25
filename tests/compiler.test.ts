@@ -383,6 +383,10 @@ test("local API exposes the core play loop without shelling out to the CLI", asy
   assert.ok(address && typeof address === "object");
   const baseUrl = `http://127.0.0.1:${address.port}`;
 
+  const preflight = await fetch(`${baseUrl}/simulations/default/actors`, { method: "OPTIONS" });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get("access-control-allow-origin"), "*");
+
   const initialized = await apiJson(`${baseUrl}/source/init`, {
     method: "POST",
     body: {

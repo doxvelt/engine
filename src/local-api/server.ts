@@ -31,7 +31,14 @@ export async function handleLocalApiRequest(
   response: ServerResponse,
   options: LocalApiOptions = {}
 ): Promise<void> {
+  setCorsHeaders(response);
   const method = request.method || "GET";
+  if (method === "OPTIONS") {
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+
   const url = new URL(request.url || "/", "http://localhost");
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
 
@@ -442,6 +449,12 @@ function sendJson(response: ServerResponse, status: number, value: unknown): voi
     "content-length": Buffer.byteLength(body)
   });
   response.end(body);
+}
+
+function setCorsHeaders(response: ServerResponse): void {
+  response.setHeader("access-control-allow-origin", "*");
+  response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+  response.setHeader("access-control-allow-headers", "content-type");
 }
 
 function sendError(response: ServerResponse, error: unknown): void {

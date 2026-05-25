@@ -48,6 +48,7 @@ async function collectFiles(dir: string, result: string[]) {
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (entry.name === ".nuxt" || entry.name === ".output") continue;
       await collectFiles(fullPath, result);
     } else if (entry.isFile() && entry.name.endsWith(".ts")) {
       result.push(fullPath);
