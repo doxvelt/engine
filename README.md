@@ -120,6 +120,8 @@ bun run doxvelt -- audience list --json
 bun run doxvelt -- turn ceo --manual "We should keep this focused." --json
 ```
 
+Projected surface lines from entity dossiers are included in actor context for entities the actor can currently observe.
+
 Runtime access changes are explicit events. They change effective context access without editing authored source files:
 
 ```sh

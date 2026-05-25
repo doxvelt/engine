@@ -15,6 +15,7 @@ import type {
   RuntimeAccessEventRecord,
   SimulationRecord,
   StageWhisperRecord,
+  SurfaceRecord,
   TranscriptTurn
 } from "../core/types.ts";
 
@@ -185,6 +186,10 @@ export class RuntimeStore {
       insert.run(id, "belief", `${belief.holder}:${belief.sourceSpan.file}:${belief.sourceSpan.line}`, JSON.stringify(belief));
     }
 
+    for (const surface of compiled.surfaces) {
+      insert.run(id, "surface", `${surface.entity}:${surface.sourceSpan.file}:${surface.sourceSpan.line}`, JSON.stringify(surface));
+    }
+
     for (const accessLink of compiled.accessLinks) {
       insert.run(
         id,
@@ -228,7 +233,7 @@ export class RuntimeStore {
     };
   }
 
-  getCompiledRecord<TRecord extends AssetRecord | EntityRecord | BeliefRecord | AccessLinkRecord>(
+  getCompiledRecord<TRecord extends AssetRecord | EntityRecord | BeliefRecord | AccessLinkRecord | SurfaceRecord>(
     simulationId: string,
     kind: string,
     id: string
@@ -243,7 +248,7 @@ export class RuntimeStore {
     return row ? (JSON.parse(row.json as string) as TRecord) : null;
   }
 
-  listCompiledRecords<TRecord extends AssetRecord | EntityRecord | BeliefRecord | AccessLinkRecord>(
+  listCompiledRecords<TRecord extends AssetRecord | EntityRecord | BeliefRecord | AccessLinkRecord | SurfaceRecord>(
     simulationId: string,
     kind: string
   ): TRecord[] {
@@ -264,6 +269,10 @@ export class RuntimeStore {
 
   listAccessLinks(simulationId = "default"): AccessLinkRecord[] {
     return this.listCompiledRecords<AccessLinkRecord>(simulationId, "access_link");
+  }
+
+  listSurfaces(simulationId = "default"): SurfaceRecord[] {
+    return this.listCompiledRecords<SurfaceRecord>(simulationId, "surface");
   }
 
   listEffectiveAccessLinks(simulationId = "default"): AccessLinkRecord[] {

@@ -343,15 +343,17 @@ test("actor context includes affiliation beliefs through transitive membership a
       formats: [],
       beliefs: store.listBeliefs("default"),
       accessLinks: store.listAccessLinks("default"),
+      surfaces: store.listSurfaces("default"),
+      observedEntityIds: ["inner-circle"],
       turns: []
     });
 
     assert.deepEqual(
-      actorContext.subjective.beliefs.map((belief) => belief.holder),
+      [...new Set(actorContext.subjective.beliefs.map((belief) => belief.holder))],
       ["alice", "inner-circle", "mafia"]
     );
     assert.deepEqual(
-      actorContext.subjective.beliefAccess.map((access) => access.provenance),
+      uniqueProvenance(actorContext.subjective.beliefAccess.map((access) => access.provenance)),
       [
         {
           mode: "held",
@@ -376,6 +378,12 @@ test("actor context includes affiliation beliefs through transitive membership a
     assert.match(actorContext.promptPreview, /held by @inner-circle; accessed through @alice -> @inner-circle/);
     assert.match(actorContext.promptPreview, /held by @mafia; accessed through @alice -> @inner-circle -> @mafia/);
     assert.match(actorContext.promptPreview, /@mafia treats the docks as controlled territory/);
+    assert.match(actorContext.promptPreview, /@alice usually appears watchful/);
+    assert.match(actorContext.promptPreview, /@inner-circle usually appears disciplined/);
+    assert.deepEqual(
+      actorContext.subjective.surfaces.map((surface) => surface.entity),
+      ["alice", "inner-circle"]
+    );
   } finally {
     store.close();
   }
@@ -455,11 +463,13 @@ test("runtime access events override compiled membership links", async (context)
       formats: [],
       beliefs: store.listBeliefs("default"),
       accessLinks: effectiveLinks,
+      surfaces: store.listSurfaces("default"),
+      observedEntityIds: ["inner-circle"],
       turns: []
     });
 
     assert.deepEqual(
-      revokedContext.subjective.beliefs.map((belief) => belief.holder),
+      [...new Set(revokedContext.subjective.beliefs.map((belief) => belief.holder))],
       ["alice", "inner-circle"]
     );
     assert.doesNotMatch(revokedContext.promptPreview, /@mafia treats the docks as controlled territory/);
@@ -489,11 +499,13 @@ test("runtime access events override compiled membership links", async (context)
       formats: [],
       beliefs: store.listBeliefs("default"),
       accessLinks: effectiveLinks,
+      surfaces: store.listSurfaces("default"),
+      observedEntityIds: ["mafia"],
       turns: []
     });
 
     assert.deepEqual(
-      grantedContext.subjective.beliefs.map((belief) => belief.holder),
+      [...new Set(grantedContext.subjective.beliefs.map((belief) => belief.holder))],
       ["alice", "inner-circle", "mafia"]
     );
     assert.match(grantedContext.promptPreview, /accessed through @alice -> @mafia/);
@@ -1126,6 +1138,10 @@ visibility: public
       "@alice treats her own assignment as urgent. :+3\n"
     ],
     [
+      "entities/alice/SURFACE.md",
+      "@alice usually appears watchful. :surface:in_person :+3\n"
+    ],
+    [
       "entities/inner-circle/IDENTITY.md",
       `---
 id: inner-circle
@@ -1142,6 +1158,10 @@ visibility: public
       "@inner-circle treats the password as changed. :+3\n"
     ],
     [
+      "entities/inner-circle/SURFACE.md",
+      "@inner-circle usually appears disciplined. :surface:in_person :+3\n"
+    ],
+    [
       "entities/mafia/IDENTITY.md",
       `---
 id: mafia
@@ -1156,6 +1176,10 @@ visibility: public
     [
       "entities/mafia/BELIEFS.md",
       "@mafia treats the docks as controlled territory. :+3\n"
+    ],
+    [
+      "entities/mafia/SURFACE.md",
+      "@mafia usually appears untouchable. :surface:in_person :+3\n"
     ],
     [
       "connections/alice-inner-circle.md",
@@ -1260,4 +1284,14 @@ function turnRecord(id: number, actorId: string, text: string, audience: string[
     episodeId: null,
     createdAt: "2026-05-22T00:00:00.000Z"
   };
+}
+
+function uniqueProvenance<TValue extends { mode: string; sourceHolder: string }>(values: TValue[]): TValue[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const key = `${value.mode}:${value.sourceHolder}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

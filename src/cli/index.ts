@@ -341,6 +341,8 @@ async function contextCommand(args: string[]): Promise<void> {
       formats: store.listCompiledRecords<AssetRecord>(simulationId, "format"),
       beliefs: store.listBeliefs(simulationId),
       accessLinks: store.listEffectiveAccessLinks(simulationId),
+      surfaces: store.listSurfaces(simulationId),
+      observedEntityIds: store.listActiveAudienceIds(simulationId),
       turns: store.listAccessibleTurns(simulationId, actorId),
       stageWhispers: store.listPendingStageWhispers(simulationId, actorId)
     });
@@ -376,7 +378,7 @@ async function turnCommand(args: string[]): Promise<void> {
 
     const isAiTurn = hasFlag(args, "--ai");
     const text = hasFlag(args, "--ai")
-      ? await generateAiTurnText({ args, actorId, simulationId, store })
+      ? await generateAiTurnText({ args, actorId, simulationId, audience, store })
       : optionValue(args, "--manual");
 
     if (!text) {
@@ -469,11 +471,13 @@ async function generateAiTurnText({
   args,
   actorId,
   simulationId,
+  audience,
   store
 }: {
   args: string[];
   actorId: string;
   simulationId: string;
+  audience: string[];
   store: RuntimeStore;
 }): Promise<string> {
   const modelId = optionValue(args, "--model");
@@ -498,6 +502,8 @@ async function generateAiTurnText({
     formats: store.listCompiledRecords<AssetRecord>(simulationId, "format"),
     beliefs: store.listBeliefs(simulationId),
     accessLinks: store.listEffectiveAccessLinks(simulationId),
+    surfaces: store.listSurfaces(simulationId),
+    observedEntityIds: audience,
     turns: store.listAccessibleTurns(simulationId, actorId),
     stageWhispers: store.listPendingStageWhispers(simulationId, actorId)
   });

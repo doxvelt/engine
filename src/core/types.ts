@@ -256,6 +256,7 @@ export type ActorContext = {
   subjective: {
     beliefs: SubjectiveBeliefRecord[];
     beliefAccess: SubjectiveBeliefAccess[];
+    surfaces: SurfaceRecord[];
     transcript: TranscriptTurn[];
     stageWhispers: StageWhisperRecord[];
   };

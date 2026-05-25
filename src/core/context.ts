@@ -8,6 +8,7 @@ import type {
   StageWhisperRecord,
   SubjectiveBeliefAccess,
   SubjectiveBeliefRecord,
+  SurfaceRecord,
   TranscriptTurn
 } from "./types.ts";
 
@@ -19,6 +20,8 @@ export function assembleActorContext({
   formats = [],
   beliefs = [],
   accessLinks = [],
+  surfaces = [],
+  observedEntityIds = [],
   turns = [],
   stageWhispers = [],
   diagnostics = []
@@ -30,6 +33,8 @@ export function assembleActorContext({
   formats?: AssetRecord[];
   beliefs?: SubjectiveBeliefRecord[];
   accessLinks?: AccessLinkRecord[];
+  surfaces?: SurfaceRecord[];
+  observedEntityIds?: string[];
   turns?: TranscriptTurn[];
   stageWhispers?: StageWhisperRecord[];
   diagnostics?: DiagnosticRecord[];
@@ -37,6 +42,7 @@ export function assembleActorContext({
   const accessibleWorlds = worlds.map((world) => filterAssetForActor(world, actor));
   const accessibleScenario = scenario ? filterAssetForActor(scenario, actor) : null;
   const beliefAccess = resolveBeliefAccess(actor.id, beliefs, accessLinks);
+  const projectedSurfaces = resolveProjectedSurfaces(actor.id, surfaces, observedEntityIds);
 
   return {
     simulation: {
@@ -53,6 +59,7 @@ export function assembleActorContext({
     subjective: {
       beliefs: beliefAccess.map((access) => access.belief),
       beliefAccess,
+      surfaces: projectedSurfaces,
       transcript: turns,
       stageWhispers
     },
@@ -63,6 +70,7 @@ export function assembleActorContext({
       scenario: accessibleScenario,
       formats,
       beliefAccess,
+      surfaces: projectedSurfaces,
       turns,
       stageWhispers
     })
@@ -75,6 +83,7 @@ function buildPromptPreview({
   scenario,
   formats,
   beliefAccess,
+  surfaces,
   turns,
   stageWhispers
 }: {
@@ -83,6 +92,7 @@ function buildPromptPreview({
   scenario: AssetRecord | null;
   formats: AssetRecord[];
   beliefAccess: SubjectiveBeliefAccess[];
+  surfaces: SurfaceRecord[];
   turns: TranscriptTurn[];
   stageWhispers: StageWhisperRecord[];
 }): string {
@@ -92,6 +102,7 @@ function buildPromptPreview({
     scenario ? renderAsset("Scenario", scenario) : "# Scenario\nNo scenario selected.",
     renderAssets("Format", formats),
     renderBeliefs(beliefAccess),
+    renderSurfaces(surfaces),
     renderStageWhispers(stageWhispers),
     renderTranscript(turns)
   ];
@@ -177,6 +188,15 @@ function resolveMembershipPaths(actorId: string, accessLinks: AccessLinkRecord[]
   return paths;
 }
 
+function resolveProjectedSurfaces(
+  actorId: string,
+  surfaces: SurfaceRecord[],
+  observedEntityIds: string[]
+): SurfaceRecord[] {
+  const observed = new Set([actorId, ...observedEntityIds]);
+  return surfaces.filter((surface) => observed.has(surface.entity));
+}
+
 function renderBeliefs(beliefAccess: SubjectiveBeliefAccess[]): string {
   if (beliefAccess.length === 0) return "# Subjective Beliefs\nNone.";
 
@@ -189,6 +209,17 @@ function renderBeliefs(beliefAccess: SubjectiveBeliefAccess[]): string {
   });
 
   return `# Subjective Beliefs\n${lines.join("\n")}`;
+}
+
+function renderSurfaces(surfaces: SurfaceRecord[]): string {
+  if (surfaces.length === 0) return "# Projected Surfaces\nNone.";
+
+  const lines = surfaces.map((surface) => {
+    const channels = surface.channels.length > 0 ? ` [${surface.channels.join(",")}]` : "";
+    return `- @${surface.entity}${channels}: ${surface.text}`;
+  });
+
+  return `# Projected Surfaces\n${lines.join("\n")}`;
 }
 
 function renderAccessPath(accessPath: string[]): string {
