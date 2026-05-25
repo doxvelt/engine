@@ -90,7 +90,7 @@ Canonical truth always exists in the engine. Unknown-to-author mysteries are not
 
 A belief is a holder-specific stance toward a proposition.
 
-Beliefs may be true, false, conflicted, stale, borrowed, or based on poor evidence. Multiple conflicting beliefs about the same proposition may coexist for the same holder when they come from different sources.
+Beliefs may be true, false, conflicted, stale, source-linked, or based on poor evidence. Multiple conflicting beliefs about the same proposition may coexist for the same holder when they come from different sources.
 
 MVP belief strength:
 
@@ -126,12 +126,13 @@ Belief changes should be linked to events when provenance matters.
 
 Possible modes:
 
+- `held`
+- `accessed_through_membership`
 - `observed`
 - `experienced`
 - `inferred`
 - `told`
 - `briefed`
-- `borrowed`
 - `read`
 - `stolen`
 - `generated`
@@ -216,7 +217,7 @@ An actor's turn context may include:
 - Search results from episode memories.
 - Contradictory beliefs, left unresolved for the agent to handle.
 
-Borrowed beliefs should carry source information. For example: "because of your affiliation to Mafia." The source may affect how much the agent trusts or weighs the belief.
+Source-linked beliefs should carry provenance information. For example: "held by Mafia; accessed through your affiliation path." The source may affect how much the agent trusts, uses, questions, or internalizes the belief.
 
 ## Author Visibility
 

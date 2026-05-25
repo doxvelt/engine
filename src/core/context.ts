@@ -125,18 +125,24 @@ function resolveBeliefAccess(
     .filter((belief) => belief.holder === actorId)
     .map((belief) => ({
       belief,
-      sourceHolder: belief.holder,
-      accessPath: [actorId],
-      mode: "self"
+      provenance: {
+        mode: "held",
+        holder: actorId,
+        sourceHolder: belief.holder,
+        accessPath: [actorId]
+      }
     }));
 
   const membershipAccess: SubjectiveBeliefAccess[] = beliefs
     .filter((belief) => belief.holder !== actorId && accessPaths.has(belief.holder))
     .map((belief) => ({
       belief,
-      sourceHolder: belief.holder,
-      accessPath: accessPaths.get(belief.holder) || [actorId, belief.holder],
-      mode: "membership"
+      provenance: {
+        mode: "accessed_through_membership",
+        holder: actorId,
+        sourceHolder: belief.holder,
+        accessPath: accessPaths.get(belief.holder) || [actorId, belief.holder]
+      }
     }));
 
   return [...directAccess, ...membershipAccess];
@@ -168,13 +174,17 @@ function renderBeliefs(beliefAccess: SubjectiveBeliefAccess[]): string {
 
   const lines = beliefAccess.map((access) => {
     const source =
-      access.mode === "membership"
-        ? ` (from @${access.sourceHolder} via ${access.accessPath.map((holder) => `@${holder}`).join(" -> ")})`
+      access.provenance.mode === "accessed_through_membership"
+        ? ` (held by @${access.provenance.sourceHolder}; accessed through ${renderAccessPath(access.provenance.accessPath)})`
         : "";
     return `- [${formatStrength(access.belief.strength)}]${source} ${access.belief.propositionText}`;
   });
 
   return `# Subjective Beliefs\n${lines.join("\n")}`;
+}
+
+function renderAccessPath(accessPath: string[]): string {
+  return accessPath.map((holder) => `@${holder}`).join(" -> ");
 }
 
 function renderTranscript(turns: TranscriptTurn[]): string {

@@ -100,11 +100,29 @@ export type AccessLinkRecord = {
   sourceSpan: SourceSpan;
 };
 
-export type SubjectiveBeliefAccess = {
-  belief: SubjectiveBeliefRecord;
+export type BeliefProvenanceMode =
+  | "held"
+  | "accessed_through_membership"
+  | "observed"
+  | "experienced"
+  | "inferred"
+  | "told"
+  | "briefed"
+  | "read"
+  | "stolen"
+  | "generated"
+  | "joined";
+
+export type BeliefProvenance = {
+  mode: BeliefProvenanceMode;
+  holder: string;
   sourceHolder: string;
   accessPath: string[];
-  mode: "self" | "membership";
+};
+
+export type SubjectiveBeliefAccess = {
+  belief: SubjectiveBeliefRecord;
+  provenance: BeliefProvenance;
 };
 
 export type DiagnosticRecord = {

@@ -345,8 +345,31 @@ test("actor context includes affiliation beliefs through transitive membership a
       actorContext.subjective.beliefs.map((belief) => belief.holder),
       ["alice", "inner-circle", "mafia"]
     );
-    assert.match(actorContext.promptPreview, /from @inner-circle via @alice -> @inner-circle/);
-    assert.match(actorContext.promptPreview, /from @mafia via @alice -> @inner-circle -> @mafia/);
+    assert.deepEqual(
+      actorContext.subjective.beliefAccess.map((access) => access.provenance),
+      [
+        {
+          mode: "held",
+          holder: "alice",
+          sourceHolder: "alice",
+          accessPath: ["alice"]
+        },
+        {
+          mode: "accessed_through_membership",
+          holder: "alice",
+          sourceHolder: "inner-circle",
+          accessPath: ["alice", "inner-circle"]
+        },
+        {
+          mode: "accessed_through_membership",
+          holder: "alice",
+          sourceHolder: "mafia",
+          accessPath: ["alice", "inner-circle", "mafia"]
+        }
+      ]
+    );
+    assert.match(actorContext.promptPreview, /held by @inner-circle; accessed through @alice -> @inner-circle/);
+    assert.match(actorContext.promptPreview, /held by @mafia; accessed through @alice -> @inner-circle -> @mafia/);
     assert.match(actorContext.promptPreview, /@mafia treats the docks as controlled territory/);
   } finally {
     store.close();

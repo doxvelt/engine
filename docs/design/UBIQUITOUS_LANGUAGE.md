@@ -22,7 +22,7 @@ Example: Luke's phone, a diary, a ledger, a case file.
 
 ## Belief
 
-A holder-specific stance toward a proposition. Beliefs may be true, false, conflicted, stale, borrowed, or based on poor evidence.
+A holder-specific stance toward a proposition. Beliefs may be true, false, conflicted, stale, source-linked, or based on poor evidence.
 
 MVP strength scale:
 
@@ -36,7 +36,13 @@ MVP strength scale:
 
 A provenance record describing how a belief entered or changed in a holder's context.
 
-Examples: observed, told, inferred, briefed, borrowed, read, stolen, generated, joined.
+Examples: held, accessed through membership, observed, told, inferred, briefed, read, stolen, generated, joined.
+
+## Belief Provenance
+
+The source path that explains why a belief is present in an actor's current context.
+
+Provenance does not mean the actor personally owns or trusts the belief. A belief held by an affiliation can be accessible to a member while still remaining the affiliation's belief.
 
 ## Belief Holder
 
