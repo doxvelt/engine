@@ -1,4 +1,5 @@
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import path from "node:path";
 import { openRuntimeStore } from "../store/sqlite.ts";
 
@@ -53,11 +54,7 @@ export async function exportSimulationPackage({
   };
 
   await mkdir(resolvedTarget, { recursive: false });
-  await cp(simulation.sourceRoot, path.join(resolvedTarget, manifest.files.source), {
-    recursive: true,
-    errorOnExist: true,
-    force: false
-  });
+  await copySanitizedSource(simulation.sourceRoot, path.join(resolvedTarget, manifest.files.source));
   await cp(path.resolve(dbPath), path.join(resolvedTarget, manifest.files.runtime), {
     errorOnExist: true,
     force: false
@@ -65,6 +62,53 @@ export async function exportSimulationPackage({
   await writeFile(path.join(resolvedTarget, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 
   return { manifest, targetDir: resolvedTarget };
+}
+
+async function copySanitizedSource(sourceRoot: string, targetRoot: string): Promise<void> {
+  await mkdir(targetRoot, { recursive: false });
+  await copySanitizedDirectory(sourceRoot, targetRoot);
+}
+
+async function copySanitizedDirectory(sourceDir: string, targetDir: string): Promise<void> {
+  const entries = await readdir(sourceDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (shouldSkipExportEntry(entry)) continue;
+
+    const sourcePath = path.join(sourceDir, entry.name);
+    const targetPath = path.join(targetDir, entry.name);
+
+    if (entry.isDirectory()) {
+      await mkdir(targetPath, { recursive: false });
+      await copySanitizedDirectory(sourcePath, targetPath);
+      continue;
+    }
+
+    if (!entry.isFile()) continue;
+
+    if (isTextSourceFile(entry.name)) {
+      const text = await readFile(sourcePath, "utf8");
+      await writeFile(targetPath, redactExportedSourceText(text));
+    } else {
+      await cp(sourcePath, targetPath, {
+        errorOnExist: true,
+        force: false
+      });
+    }
+  }
+}
+
+function shouldSkipExportEntry(entry: Dirent): boolean {
+  const name = entry.name.toLowerCase();
+  return name === ".env" || name.startsWith(".env.") || name.endsWith(".key") || name.endsWith(".pem");
+}
+
+function isTextSourceFile(filename: string): boolean {
+  return /\.(md|markdown|ya?ml|json|txt)$/i.test(filename);
+}
+
+function redactExportedSourceText(text: string): string {
+  return text.replace(/^(\s*api[_-]?key\s*:\s*).+$/gim, "$1[redacted]");
 }
 
 export async function importSimulationPackage({

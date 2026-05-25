@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
@@ -1257,6 +1257,60 @@ test("CLI export and import round trip source and runtime state", async (context
 
   const importedCompiled = await compileWorld(importedWorldPath);
   assert.equal(importedCompiled.entities.length, 3);
+});
+
+test("CLI export sanitizes source secrets", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+  const packageDir = path.join(root, "package");
+
+  await initWorld(worldPath);
+  await writeFile(
+    path.join(worldPath, "models", "secret-hosted.yaml"),
+    `---
+id: secret-hosted
+provider: gateway
+model: hosted-model
+api_key: sk-test-secret
+api_key_env: HOSTED_API_KEY
+---
+`
+  );
+  await writeFile(path.join(worldPath, ".env"), "HOSTED_API_KEY=sk-env-secret\n");
+  await writeFile(path.join(worldPath, "private.pem"), "-----BEGIN PRIVATE KEY-----\nsecret\n");
+
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "scenario",
+      compiled
+    });
+  } finally {
+    store.close();
+  }
+
+  await runCli(["export", packageDir, "--db", dbPath, "--json"]);
+
+  const exportedModel = await readFile(
+    path.join(packageDir, "source", "models", "secret-hosted.yaml"),
+    "utf8"
+  );
+  assert.doesNotMatch(exportedModel, /sk-test-secret/);
+  assert.match(exportedModel, /api_key: \[redacted\]/);
+  assert.match(exportedModel, /api_key_env: HOSTED_API_KEY/);
+
+  await assert.rejects(
+    () => readFile(path.join(packageDir, "source", ".env"), "utf8"),
+    /ENOENT/
+  );
+  await assert.rejects(
+    () => readFile(path.join(packageDir, "source", "private.pem"), "utf8"),
+    /ENOENT/
+  );
 });
 
 test("CLI inspection commands list transcript memories and beliefs", async (context) => {
