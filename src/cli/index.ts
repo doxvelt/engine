@@ -23,6 +23,7 @@ async function main() {
     if (command === "compile") return await compileCommand(args);
     if (command === "start") return await startCommand(args);
     if (command === "actors") return await actorsCommand(args);
+    if (command === "access") return await accessCommand(args);
     if (command === "context") return await contextCommand(args);
     if (command === "turn") return await turnCommand(args);
     if (command === "close-episode") return await closeEpisodeCommand(args);
@@ -108,6 +109,59 @@ async function actorsCommand(args: string[]): Promise<void> {
   try {
     const actors = store.listActors(simulationId);
     print({ simulationId, actors }, hasFlag(args, "--json"));
+  } finally {
+    store.close();
+  }
+}
+
+async function accessCommand(args: string[]): Promise<void> {
+  const [action, member, container] = args.filter((arg) => !arg.startsWith("--"));
+  if (action !== "grant" && action !== "revoke" && action !== "list") {
+    throw new CliError("Usage: doxvelt access (grant|revoke|list) [member-id] [container-id] [--reason <text>] [--json]", 1);
+  }
+
+  const simulationId = optionValue(args, "--simulation") || "default";
+  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    const simulation = store.getSimulation(simulationId);
+    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
+
+    if (action === "list") {
+      print(
+        {
+          simulationId,
+          accessEvents: store.listRuntimeAccessEvents(simulationId),
+          effectiveAccessLinks: store.listEffectiveAccessLinks(simulationId)
+        },
+        hasFlag(args, "--json")
+      );
+      return;
+    }
+
+    if (!member || !container) {
+      throw new CliError(`Usage: doxvelt access ${action} <member-id> <container-id> [--reason <text>] [--json]`, 1);
+    }
+
+    const event = store.appendRuntimeAccessEvent({
+      simulationId,
+      action,
+      member,
+      container,
+      reason: optionValue(args, "--reason") || null,
+      turnId: numericOptionValue(args, "--turn"),
+      episodeId: numericOptionValue(args, "--episode")
+    });
+
+    print(
+      {
+        message: `${action === "grant" ? "Granted" : "Revoked"} @${member} member access ${action === "grant" ? "to" : "from"} @${container}.`,
+        event,
+        effectiveAccessLinks: store.listEffectiveAccessLinks(simulationId)
+      },
+      hasFlag(args, "--json")
+    );
   } finally {
     store.close();
   }
@@ -318,6 +372,9 @@ Usage:
   doxvelt compile [world-path] [--json]
   doxvelt start [world-path] --scenario <id> [--simulation <id>] [--db <path>] [--json]
   doxvelt actors [--simulation <id>] [--db <path>] [--json]
+  doxvelt access list [--simulation <id>] [--db <path>] [--json]
+  doxvelt access grant <member-id> <container-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
+  doxvelt access revoke <member-id> <container-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
   doxvelt context <actor-id> [--simulation <id>] [--db <path>] [--json]
   doxvelt turn <actor-id> --manual <text> [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
   doxvelt turn <actor-id> --ai --model <id> [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
@@ -356,6 +413,18 @@ function optionValue(args: string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
   if (index === -1) return undefined;
   return args[index + 1];
+}
+
+function numericOptionValue(args: string[], flag: string): number | null {
+  const value = optionValue(args, flag);
+  if (!value) return null;
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new CliError(`${flag} must be a non-negative integer.`, 1);
+  }
+
+  return parsed;
 }
 
 class CliError extends Error {

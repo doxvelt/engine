@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 import { DoxveltGenerationError, describeModelForDiagnostics, generateDoxveltText } from "../src/ai/generate.ts";
 import { createRetainedBeliefDraft, weakenRetainedStrength } from "../src/core/beliefs.ts";
 import { compileWorld } from "../src/core/compiler.ts";
@@ -12,6 +14,8 @@ import { initWorld } from "../src/core/init.ts";
 import { loadModelRecord } from "../src/core/models.ts";
 import type { AssetRecord, EntityRecord, SimulationRecord, TranscriptTurn } from "../src/core/types.ts";
 import { openRuntimeStore } from "../src/store/sqlite.ts";
+
+const execFileAsync = promisify(execFile);
 
 test("initWorld creates a sparse compilable scaffold", async (context) => {
   const root = await createRepoLocalRunRoot(context);
@@ -498,6 +502,79 @@ test("runtime access events override compiled membership links", async (context)
   }
 });
 
+test("CLI access command records and lists runtime access events", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await writeMembershipWorld(worldPath);
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "membership-room",
+      compiled
+    });
+  } finally {
+    store.close();
+  }
+
+  const revoke = await runCli([
+    "access",
+    "revoke",
+    "inner-circle",
+    "mafia",
+    "--reason",
+    "Inner Circle is cut off from Mafia logistics.",
+    "--db",
+    dbPath,
+    "--json"
+  ]);
+
+  assert.equal(revoke.event.action, "revoke");
+  assert.deepEqual(
+    revoke.effectiveAccessLinks.map((link: { member: string; container: string }) => [link.member, link.container]),
+    [["alice", "inner-circle"]]
+  );
+
+  const grant = await runCli([
+    "access",
+    "grant",
+    "alice",
+    "mafia",
+    "--reason",
+    "Alice receives direct emergency access.",
+    "--db",
+    dbPath,
+    "--json"
+  ]);
+
+  assert.equal(grant.event.action, "grant");
+
+  const list = await runCli(["access", "list", "--db", dbPath, "--json"]);
+  assert.deepEqual(
+    list.accessEvents.map((event: { action: string; member: string; container: string }) => [
+      event.action,
+      event.member,
+      event.container
+    ]),
+    [
+      ["revoke", "inner-circle", "mafia"],
+      ["grant", "alice", "mafia"]
+    ]
+  );
+  assert.deepEqual(
+    list.effectiveAccessLinks.map((link: { member: string; container: string }) => [link.member, link.container]),
+    [
+      ["alice", "inner-circle"],
+      ["alice", "mafia"]
+    ]
+  );
+});
+
 test("episode closure writes deterministic memories from accessible turns", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
@@ -765,6 +842,14 @@ This connection gives @inner-circle access to @mafia knowledge. :access:member
   for (const [relativePath, content] of files.entries()) {
     await writeFile(path.join(root, relativePath), content);
   }
+}
+
+async function runCli(args: string[]): Promise<any> {
+  const result = await execFileAsync(process.execPath, ["src/cli/index.ts", ...args], {
+    cwd: process.cwd()
+  });
+
+  return JSON.parse(result.stdout);
 }
 
 function modelRecord(metadata: AssetRecord["metadata"]): AssetRecord {

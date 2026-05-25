@@ -103,6 +103,14 @@ bun run doxvelt -- context ceo --json
 bun run doxvelt -- close-episode --label "Opening interviews" --json
 ```
 
+Runtime access changes are explicit events. They change effective context access without editing authored source files:
+
+```sh
+bun run doxvelt -- access grant ceo student-team --reason "The CEO gives the students briefing access." --json
+bun run doxvelt -- access revoke ceo student-team --reason "The briefing window closes." --json
+bun run doxvelt -- access list --json
+```
+
 If a local OpenAI-compatible endpoint is running, try an AI-backed turn:
 
 ```sh
