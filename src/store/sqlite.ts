@@ -13,6 +13,7 @@ import type {
   EpisodeRecord,
   ExtractedBeliefRecord,
   FirstImpressionRecord,
+  LongTermMemoryRecord,
   RetainedBeliefRecord,
   RuntimeAccessEventRecord,
   SimulationRecord,
@@ -78,6 +79,16 @@ export class RuntimeStore {
         actor_id TEXT NOT NULL,
         text TEXT NOT NULL,
         source_turn_ids_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS long_term_memories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        episode_id INTEGER NOT NULL,
+        episode_memory_id INTEGER NOT NULL,
+        simulation_id TEXT NOT NULL,
+        actor_id TEXT NOT NULL,
+        text TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
 
@@ -916,6 +927,67 @@ export class RuntimeStore {
       actorId: row.actor_id as string,
       text: row.text as string,
       sourceTurnIds: JSON.parse(row.source_turn_ids_json as string) as Array<number | bigint>,
+      createdAt: row.created_at as string
+    }));
+  }
+
+  createLongTermMemory({
+    episodeId,
+    episodeMemoryId,
+    simulationId = "default",
+    actorId,
+    text
+  }: {
+    episodeId: number | bigint;
+    episodeMemoryId: number | bigint;
+    simulationId?: string;
+    actorId: string;
+    text: string;
+  }): LongTermMemoryRecord {
+    const createdAt = new Date().toISOString();
+    const result = this.requireDb()
+      .prepare(`
+        INSERT INTO long_term_memories (
+          episode_id,
+          episode_memory_id,
+          simulation_id,
+          actor_id,
+          text,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+      .run(episodeId, episodeMemoryId, simulationId, actorId, text, createdAt);
+
+    return {
+      id: result.lastInsertRowid,
+      episodeId,
+      episodeMemoryId,
+      simulationId,
+      actorId,
+      text,
+      createdAt
+    };
+  }
+
+  listLongTermMemories(simulationId = "default", actorId?: string): LongTermMemoryRecord[] {
+    const rows = this.requireDb()
+      .prepare(`
+        SELECT id, episode_id, episode_memory_id, simulation_id, actor_id, text, created_at
+        FROM long_term_memories
+        WHERE simulation_id = ?
+          AND (? IS NULL OR actor_id = ?)
+        ORDER BY id
+      `)
+      .all(simulationId, actorId || null, actorId || null);
+
+    return rows.map((row) => ({
+      id: row.id as number | bigint,
+      episodeId: row.episode_id as number | bigint,
+      episodeMemoryId: row.episode_memory_id as number | bigint,
+      simulationId: row.simulation_id as string,
+      actorId: row.actor_id as string,
+      text: row.text as string,
       createdAt: row.created_at as string
     }));
   }

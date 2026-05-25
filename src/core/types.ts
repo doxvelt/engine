@@ -238,6 +238,16 @@ export type EpisodeMemoryRecord = {
   createdAt: string;
 };
 
+export type LongTermMemoryRecord = {
+  id: number | bigint;
+  episodeId: number | bigint;
+  episodeMemoryId: number | bigint;
+  simulationId: string;
+  actorId: string;
+  text: string;
+  createdAt: string;
+};
+
 export type ExtractedBeliefRecord = {
   id: number | bigint;
   episodeId: number | bigint;
@@ -284,6 +294,7 @@ export type SubjectiveBeliefRecord =
 export type EpisodeClosure = {
   episode: EpisodeRecord;
   memories: EpisodeMemoryRecord[];
+  longTermMemories: LongTermMemoryRecord[];
   extractedBeliefs: ExtractedBeliefRecord[];
   retainedBeliefs: RetainedBeliefRecord[];
 };
@@ -305,6 +316,7 @@ export type ActorContext = {
     beliefAccess: SubjectiveBeliefAccess[];
     beliefHistoryAccess: SubjectiveBeliefAccess[];
     beliefResolution: CurrentBeliefResolution;
+    longTermMemories: LongTermMemoryRecord[];
     surfaces: SurfaceRecord[];
     transcript: TranscriptTurn[];
     stageWhispers: StageWhisperRecord[];

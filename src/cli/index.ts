@@ -349,10 +349,11 @@ async function contextCommand(args: string[]): Promise<void> {
         ? store.getCompiledRecord<AssetRecord>(simulationId, "scenario", simulation.scenarioId)
         : null,
       formats: store.listCompiledRecords<AssetRecord>(simulationId, "format"),
-      beliefs: store.listBeliefHistory(simulationId),
-      accessLinks: store.listEffectiveAccessLinks(simulationId),
-      surfaces: store.listSurfaces(simulationId),
-      observedEntityIds,
+    beliefs: store.listBeliefHistory(simulationId),
+    accessLinks: store.listEffectiveAccessLinks(simulationId),
+    surfaces: store.listSurfaces(simulationId),
+    longTermMemories: store.listLongTermMemories(simulationId, actorId),
+    observedEntityIds,
       turns: store.listAccessibleTurns(simulationId, actorId),
       stageWhispers: store.listPendingStageWhispers(simulationId, actorId)
     });
@@ -441,7 +442,14 @@ async function memoriesCommand(args: string[]): Promise<void> {
   try {
     const simulation = store.getSimulation(simulationId);
     if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
-    print({ simulationId, memories: store.listEpisodeMemories(simulationId) }, hasFlag(args, "--json"));
+    print(
+      {
+        simulationId,
+        memories: store.listEpisodeMemories(simulationId),
+        longTermMemories: store.listLongTermMemories(simulationId)
+      },
+      hasFlag(args, "--json")
+    );
   } finally {
     store.close();
   }
@@ -545,6 +553,7 @@ async function generateAiTurnText({
     beliefs: store.listBeliefHistory(simulationId),
     accessLinks: store.listEffectiveAccessLinks(simulationId),
     surfaces: store.listSurfaces(simulationId),
+    longTermMemories: store.listLongTermMemories(simulationId, actorId),
     observedEntityIds: audience,
     turns: store.listAccessibleTurns(simulationId, actorId),
     stageWhispers: store.listPendingStageWhispers(simulationId, actorId)
@@ -598,6 +607,26 @@ async function createAiEpisodeClosureGenerator({
       });
 
       return result.text.trim();
+    },
+    async writeLongTermMemory({ actor, context, memory }) {
+      const result = await generateDoxveltText({
+        actorId: actor.id,
+        purpose: "memory",
+        model,
+        prompt: [
+          "Decide whether this Doxvelt episode memory should create one long-term memory for the actor.",
+          "If it should, write one concise first-person long-term memory that can guide future behavior.",
+          "If nothing is durable enough to preserve, return an empty response.",
+          "Do not reveal objective truth the actor could not access.",
+          "",
+          context.promptPreview,
+          "",
+          "# Episode Memory",
+          memory.text
+        ].join("\n")
+      });
+
+      return result.text.trim() || null;
     },
     async extractBeliefs({ actor, memory }) {
       const result = await generateDoxveltObject<BeliefExtractionOutput>({

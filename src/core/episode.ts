@@ -8,6 +8,7 @@ import type {
   EpisodeClosure,
   EpisodeMemoryRecord,
   ExtractedBeliefRecord,
+  LongTermMemoryRecord,
   RetainedBeliefRecord,
   SimulationRecord,
   SubjectiveBeliefAccess,
@@ -22,6 +23,7 @@ export type ExtractedBeliefCandidate = {
 
 export type EpisodeClosureGenerator = {
   writeMemory(input: EpisodeMemoryGenerationInput): Promise<string> | string;
+  writeLongTermMemory?(input: LongTermMemoryGenerationInput): Promise<string | null> | string | null;
   extractBeliefs(input: EpisodeBeliefExtractionInput): Promise<ExtractedBeliefCandidate[]> | ExtractedBeliefCandidate[];
 };
 
@@ -37,6 +39,8 @@ export type EpisodeBeliefExtractionInput = {
   context: ActorContext;
   memory: EpisodeMemoryRecord;
 };
+
+export type LongTermMemoryGenerationInput = EpisodeBeliefExtractionInput;
 
 export async function closeEpisode({
   store,
@@ -60,6 +64,7 @@ export async function closeEpisode({
   const actors = store.listActors(simulationId).filter((actor) => actor.kind === "agent");
   const episode = store.createEpisode({ simulationId, label: label || null });
   const memories: EpisodeMemoryRecord[] = [];
+  const longTermMemories: LongTermMemoryRecord[] = [];
   const extractedBeliefs: ExtractedBeliefRecord[] = [];
   const retainedBeliefs: RetainedBeliefRecord[] = [];
 
@@ -84,6 +89,19 @@ export async function closeEpisode({
     });
 
     memories.push(memory);
+
+    const longTermMemoryText = (await generator.writeLongTermMemory?.({ actor, context, memory }))?.trim();
+    if (longTermMemoryText) {
+      longTermMemories.push(
+        store.createLongTermMemory({
+          episodeId: episode.id,
+          episodeMemoryId: memory.id,
+          simulationId: memory.simulationId,
+          actorId: memory.actorId,
+          text: longTermMemoryText
+        })
+      );
+    }
 
     const beliefCandidates = await generator.extractBeliefs({ actor, context, memory });
     for (const candidate of beliefCandidates) {
@@ -123,7 +141,7 @@ export async function closeEpisode({
     turnIds: unclosedTurns.map((turn) => turn.id)
   });
 
-  return { episode, memories, extractedBeliefs, retainedBeliefs };
+  return { episode, memories, longTermMemories, extractedBeliefs, retainedBeliefs };
 }
 
 export const deterministicEpisodeClosureGenerator: EpisodeClosureGenerator = {
@@ -170,6 +188,7 @@ function buildClosureContext({
     beliefs: store.listBeliefHistory(simulation.id),
     accessLinks: store.listEffectiveAccessLinks(simulation.id),
     surfaces: store.listSurfaces(simulation.id),
+    longTermMemories: store.listLongTermMemories(simulation.id, actor.id),
     observedEntityIds,
     stageWhispers: store.listPendingStageWhispers(simulation.id, actor.id),
     turns

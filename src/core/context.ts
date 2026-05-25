@@ -5,6 +5,7 @@ import type {
   AssetRecord,
   DiagnosticRecord,
   EntityRecord,
+  LongTermMemoryRecord,
   SimulationRecord,
   StageWhisperRecord,
   SubjectiveBeliefAccess,
@@ -22,6 +23,7 @@ export function assembleActorContext({
   beliefs = [],
   accessLinks = [],
   surfaces = [],
+  longTermMemories = [],
   observedEntityIds = [],
   turns = [],
   stageWhispers = [],
@@ -35,6 +37,7 @@ export function assembleActorContext({
   beliefs?: SubjectiveBeliefRecord[];
   accessLinks?: AccessLinkRecord[];
   surfaces?: SurfaceRecord[];
+  longTermMemories?: LongTermMemoryRecord[];
   observedEntityIds?: string[];
   turns?: TranscriptTurn[];
   stageWhispers?: StageWhisperRecord[];
@@ -63,6 +66,7 @@ export function assembleActorContext({
       beliefAccess: beliefResolution.current,
       beliefHistoryAccess,
       beliefResolution,
+      longTermMemories,
       surfaces: projectedSurfaces,
       transcript: turns,
       stageWhispers
@@ -74,6 +78,7 @@ export function assembleActorContext({
       scenario: accessibleScenario,
       formats,
       beliefResolution,
+      longTermMemories,
       surfaces: projectedSurfaces,
       turns,
       stageWhispers
@@ -87,6 +92,7 @@ function buildPromptPreview({
   scenario,
   formats,
   beliefResolution,
+  longTermMemories,
   surfaces,
   turns,
   stageWhispers
@@ -96,6 +102,7 @@ function buildPromptPreview({
   scenario: AssetRecord | null;
   formats: AssetRecord[];
   beliefResolution: ActorContext["subjective"]["beliefResolution"];
+  longTermMemories: LongTermMemoryRecord[];
   surfaces: SurfaceRecord[];
   turns: TranscriptTurn[];
   stageWhispers: StageWhisperRecord[];
@@ -106,6 +113,7 @@ function buildPromptPreview({
     scenario ? renderAsset("Scenario", scenario) : "# Scenario\nNo scenario selected.",
     renderAssets("Format", formats),
     renderBeliefs(beliefResolution),
+    renderLongTermMemories(longTermMemories),
     renderSurfaces(surfaces),
     renderStageWhispers(stageWhispers),
     renderTranscript(turns)
@@ -250,6 +258,13 @@ function renderBeliefAccess(access: SubjectiveBeliefAccess): string {
           ? ` (retained after losing access to @${access.provenance.sourceHolder}; old path ${renderAccessPath(access.provenance.accessPath)})`
       : "";
   return `- [${formatStrength(access.belief.strength)}]${source} ${access.belief.propositionText}`;
+}
+
+function renderLongTermMemories(memories: LongTermMemoryRecord[]): string {
+  if (memories.length === 0) return "# Long-Term Memories\nNone.";
+
+  const lines = memories.map((memory) => `- ${memory.text}`);
+  return `# Long-Term Memories\n${lines.join("\n")}`;
 }
 
 function renderSurfaces(surfaces: SurfaceRecord[]): string {

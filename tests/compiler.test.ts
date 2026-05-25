@@ -1300,6 +1300,7 @@ test("CLI inspection commands list transcript memories and beliefs", async (cont
   const memories = await runCli(["memories", "--db", dbPath, "--json"]);
   assert.ok(memories.memories.length >= 1);
   assert.match(memories.memories.at(0)?.text, /board needs a clearer operating picture/);
+  assert.ok(Array.isArray(memories.longTermMemories));
 
   const beliefs = await runCli(["beliefs", "--db", dbPath, "--json"]);
   assert.ok(beliefs.beliefs.length > compiled.beliefs.length);
@@ -1451,6 +1452,11 @@ test("episode closure can use injected AI-style generation", async (context) => 
           assert.match(context.promptPreview, /The board is worried/);
           return `I am ${actor.id}, and I now think the board pressure matters.`;
         },
+        writeLongTermMemory({ actor, context, memory }) {
+          assert.equal(context.actor.id, actor.id);
+          assert.match(memory.text, /board pressure matters/);
+          return `I should remember that board pressure now shapes how I answer.`;
+        },
         extractBeliefs({ actor, memory }) {
           return [
             {
@@ -1467,10 +1473,31 @@ test("episode closure can use injected AI-style generation", async (context) => 
     });
 
     assert.equal(closure.memories.length, 1);
+    assert.equal(closure.longTermMemories.length, 1);
     assert.equal(closure.extractedBeliefs.length, 2);
     assert.ok(closure.memories.every((memory) => memory.text.includes("board pressure matters")));
+    assert.equal(store.listLongTermMemories("default", "ceo").length, 1);
     assert.ok(closure.extractedBeliefs.every((belief) => belief.strength === 3));
     assert.equal(store.listBeliefHistory("default").length, compiled.beliefs.length + 2);
+
+    const simulation = store.getSimulation("default");
+    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "ceo");
+    assert.ok(simulation);
+    assert.ok(actor);
+
+    const actorContext = assembleActorContext({
+      simulation,
+      actor,
+      worlds: [],
+      scenario: store.getCompiledRecord("default", "scenario", "executive-interviews"),
+      formats: [],
+      beliefs: store.listBeliefHistory("default"),
+      longTermMemories: store.listLongTermMemories("default", "ceo"),
+      turns: []
+    });
+
+    assert.match(actorContext.promptPreview, /Long-Term Memories/);
+    assert.match(actorContext.promptPreview, /board pressure now shapes/);
   } finally {
     store.close();
   }

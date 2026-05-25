@@ -149,6 +149,8 @@ bun run doxvelt -- beliefs --json
 bun run doxvelt -- beliefs ceo --json
 ```
 
+The `memories` command reports both episode memories and long-term memories. Long-term memories are actor-owned runtime state and are included in that actor's future context.
+
 If a local OpenAI-compatible endpoint is running, try an AI-backed turn:
 
 ```sh
