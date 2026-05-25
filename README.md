@@ -78,7 +78,7 @@ Model files are resolved from source by ID when an AI turn or AI-backed episode 
 
 ## Status
 
-This repository currently contains design documents, an inspectable example, and the first local CLI slice.
+This repository currently contains design documents, an inspectable example, and a local CLI/runtime slice.
 
 Create a blank source scaffold for your own simulation:
 
@@ -126,8 +126,8 @@ The first time an actor observes another entity, Doxvelt automatically stores a 
 Runtime access changes are explicit events. They change effective context access without editing authored source files:
 
 ```sh
-bun run doxvelt -- access grant ceo student-team --reason "The CEO gives the students briefing access." --json
-bun run doxvelt -- access revoke ceo student-team --reason "The briefing window closes." --json
+bun run doxvelt -- access grant student-team ceo --reason "The CEO gives the students briefing access." --json
+bun run doxvelt -- access revoke student-team ceo --reason "The briefing window closes." --json
 bun run doxvelt -- access list --json
 ```
 

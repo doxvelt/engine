@@ -14,6 +14,8 @@ Doxvelt can support entertainment play, education, strategy work, and training s
 
 The first product target is a local single-user app with import/export for simulations and games. Do not assume hosted accounts, real-time collaboration, or a marketplace in MVP. Packaging and distribution are undecided.
 
+The current implementation is a local CLI/runtime slice over the core engine. Keep new behavior in the core library first, then expose it through the CLI as a wrapper.
+
 ## Core Product Shape
 
 The engine is a turn-based RPG in the form of a chat.
@@ -46,6 +48,8 @@ workspaces/demo/
 ```
 
 Worlds and scenarios are objective canonical truth only. Subjective context comes from entities, connections, beliefs, memories, surfaces, and access.
+
+Compiled source is the starting fabric. Runtime changes such as turns, audience changes, stage whispers, access grants/revokes, memories, first impressions, and extracted beliefs are append-only runtime state.
 
 ## Entity Kinds
 
@@ -98,11 +102,23 @@ Characters can confidently believe false things. Do not collapse belief into can
 
 Secrets are not a separate content type. Secrets emerge from lack of access.
 
+Belief provenance matters. Current code distinguishes held beliefs, beliefs accessed through membership-like paths, observed/first-impression beliefs, and beliefs retained after access loss.
+
+Losing access to a source removes live access to that source's current beliefs. It does not erase what an actor already encountered. Persistent retained knowledge should be created through episode closure and weakened in confidence, preserving the belief direction.
+
 ## Context And Episodes
 
 Context assembly should include everything accessible until the context becomes too large. Retrieval and ranking can come later.
 
-Access is tracked by active audience membership and restricted-audience metadata. Actors can observe without acting if they remain active but are not selected for a turn.
+Access is tracked through authored membership-like access links, runtime access events, active audience events, and restricted-audience turn metadata. Actors can observe without acting if they remain active but are not selected for a turn.
+
+Runtime access changes are explicit grant/revoke events. They affect effective context access without editing authored source files.
+
+Active audience is runtime state. By default, a turn's audience is the selected actor plus the current active audience. A per-turn audience override can create private or restricted turns, but the selected actor is always included.
+
+Private conversations are normal turns with restricted audience metadata. Stage whispers are private player-supplied context for one target actor's next turn. They are consumed when that actor's turn is appended and do not automatically become memories or beliefs.
+
+Projected surfaces are included for entities the actor can currently observe. The first time an actor observes another entity, Doxvelt deterministically stores a `+1` first-impression belief derived from that entity's first projected surface line. AI-generated or player-reviewed impressions are future work.
 
 Episode closure is player-triggered, blocking, and memory-first:
 
@@ -111,6 +127,21 @@ subjective transcript/context -> memories -> extracted beliefs -> belief history
 ```
 
 Extraction happens at episode closure for MVP, not after every turn.
+
+Closed episodes are immutable. If an actor was absent, inactive, or excluded from the turn audience, they should not write memories from that turn unless they later learn about it through a new accessible event.
+
+## Current Local Interface
+
+The current CLI surface includes:
+
+- `init`, `compile`, `start`, `actors`, `context`, `turn`, and `close-episode`
+- `audience add/remove/deactivate/reactivate/list`
+- `access grant/revoke/list`
+- `whisper`, `whisper list`, and `turn --whisper`
+- `transcript`, `memories`, and `beliefs`
+- `export` and `import`
+
+Exported local packages are plain directories containing source material, runtime SQLite state, and a manifest. Do not include secrets such as API keys in exports.
 
 ## Implementation Guidance
 
