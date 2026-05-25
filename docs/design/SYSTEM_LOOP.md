@@ -88,6 +88,8 @@ MVP access tracking is explicit:
 - Temporarily deactivate an actor to pause their access.
 - Keep an actor active if they should observe but not act.
 
+Audience changes are runtime events. By default, a turn's audience is the selected actor plus the current active audience. A per-turn audience override can still create private or restricted turns.
+
 Affiliation and artifact access changes are also explicit runtime events. They grant or revoke effective access for context assembly without mutating authored source links.
 
 The player controls who receives turns by selecting the next actor. Active observers do not act unless selected.

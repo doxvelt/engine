@@ -710,6 +710,113 @@ test("CLI whisper command stores and turn command consumes stage whispers", asyn
   assert.equal(inlineTurn.consumedStageWhispers.at(0)?.text, "Deflect supplier questions.");
 });
 
+test("audience events define default turn audience", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await initWorld(worldPath, { template: "executive-interviews" });
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "executive-interviews",
+      compiled
+    });
+
+    store.appendAudienceEvent({
+      simulationId: "default",
+      action: "add",
+      actorId: "student-team",
+      reason: "Students enter the room."
+    });
+    store.appendAudienceEvent({
+      simulationId: "default",
+      action: "add",
+      actorId: "coo",
+      reason: "COO observes."
+    });
+    store.appendAudienceEvent({
+      simulationId: "default",
+      action: "deactivate",
+      actorId: "coo",
+      reason: "COO takes a private call."
+    });
+
+    assert.deepEqual(store.listActiveAudienceIds("default"), ["student-team"]);
+
+    const turn = store.appendTurn({
+      simulationId: "default",
+      actorId: "ceo",
+      text: "We should keep this simple.",
+      audience: ["ceo", ...store.listActiveAudienceIds("default")]
+    });
+
+    assert.deepEqual(turn.audience, ["ceo", "student-team"]);
+    assert.equal(store.listAccessibleTurns("default", "coo").length, 0);
+    assert.equal(store.listAccessibleTurns("default", "student-team").length, 1);
+  } finally {
+    store.close();
+  }
+});
+
+test("CLI audience command controls default turn audience", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await initWorld(worldPath, { template: "executive-interviews" });
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "executive-interviews",
+      compiled
+    });
+  } finally {
+    store.close();
+  }
+
+  await runCli(["audience", "add", "student-team", "--db", dbPath, "--json"]);
+  await runCli(["audience", "add", "coo", "--db", dbPath, "--json"]);
+  await runCli(["audience", "deactivate", "coo", "--db", dbPath, "--json"]);
+
+  const list = await runCli(["audience", "list", "--db", dbPath, "--json"]);
+  assert.deepEqual(list.activeAudience, ["student-team"]);
+
+  const turn = await runCli([
+    "turn",
+    "ceo",
+    "--manual",
+    "We should keep this focused.",
+    "--db",
+    dbPath,
+    "--json"
+  ]);
+
+  assert.deepEqual(turn.turn.audience, ["ceo", "student-team"]);
+
+  const override = await runCli([
+    "turn",
+    "coo",
+    "--manual",
+    "I am speaking only to the CEO.",
+    "--audience",
+    "ceo",
+    "--db",
+    dbPath,
+    "--json"
+  ]);
+
+  assert.deepEqual(override.turn.audience, ["coo", "ceo"]);
+});
+
 test("episode closure writes deterministic memories from accessible turns", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");

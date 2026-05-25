@@ -111,6 +111,15 @@ bun run doxvelt -- turn ceo --manual "We should stay focused on the facts." --js
 bun run doxvelt -- turn coo --ai --model local-openai-compatible --whisper "Deflect supplier questions." --json
 ```
 
+Active audience controls who observes turns by default. The selected actor is always included:
+
+```sh
+bun run doxvelt -- audience add student-team --reason "The students enter the room." --json
+bun run doxvelt -- audience deactivate coo --reason "The COO takes a private call." --json
+bun run doxvelt -- audience list --json
+bun run doxvelt -- turn ceo --manual "We should keep this focused." --json
+```
+
 Runtime access changes are explicit events. They change effective context access without editing authored source files:
 
 ```sh

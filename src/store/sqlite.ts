@@ -4,6 +4,8 @@ import { DatabaseSync } from "node:sqlite";
 import type {
   AccessLinkRecord,
   AssetRecord,
+  AudienceEventRecord,
+  AudienceMemberRecord,
   BeliefRecord,
   CompiledWorld,
   EntityRecord,
@@ -108,6 +110,17 @@ export class RuntimeStore {
         consumed_turn_id INTEGER,
         created_at TEXT NOT NULL,
         consumed_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS audience_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        simulation_id TEXT NOT NULL,
+        actor_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        reason TEXT,
+        turn_id INTEGER,
+        episode_id INTEGER,
+        created_at TEXT NOT NULL
       );
     `);
     this.ensureColumn("transcript_turns", "episode_id", "INTEGER");
@@ -367,6 +380,93 @@ export class RuntimeStore {
 
   listAccessibleTurns(simulationId = "default", actorId: string): TranscriptTurn[] {
     return this.listTurns({ simulationId, actorId, unclosedOnly: false });
+  }
+
+  appendAudienceEvent({
+    simulationId = "default",
+    actorId,
+    action,
+    reason = null,
+    turnId = null,
+    episodeId = null
+  }: {
+    simulationId?: string;
+    actorId: string;
+    action: AudienceEventRecord["action"];
+    reason?: string | null;
+    turnId?: number | bigint | null;
+    episodeId?: number | bigint | null;
+  }): AudienceEventRecord {
+    const createdAt = new Date().toISOString();
+    const result = this.requireDb()
+      .prepare(`
+        INSERT INTO audience_events (
+          simulation_id,
+          actor_id,
+          action,
+          reason,
+          turn_id,
+          episode_id,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(simulationId, actorId, action, reason, turnId, episodeId, createdAt);
+
+    return {
+      id: result.lastInsertRowid,
+      simulationId,
+      actorId,
+      action,
+      reason,
+      turnId,
+      episodeId,
+      createdAt
+    };
+  }
+
+  listAudienceEvents(simulationId = "default"): AudienceEventRecord[] {
+    const rows = this.requireDb()
+      .prepare(`
+        SELECT id, simulation_id, actor_id, action, reason, turn_id, episode_id, created_at
+        FROM audience_events
+        WHERE simulation_id = ?
+        ORDER BY id
+      `)
+      .all(simulationId);
+
+    return rows.map((row) => ({
+      id: row.id as number | bigint,
+      simulationId: row.simulation_id as string,
+      actorId: row.actor_id as string,
+      action: audienceAction(row.action),
+      reason: row.reason as string | null,
+      turnId: row.turn_id as number | bigint | null,
+      episodeId: row.episode_id as number | bigint | null,
+      createdAt: row.created_at as string
+    }));
+  }
+
+  listAudienceMembers(simulationId = "default"): AudienceMemberRecord[] {
+    const members = new Map<string, AudienceMemberRecord>();
+
+    for (const event of this.listAudienceEvents(simulationId)) {
+      if (event.action === "remove") {
+        members.delete(event.actorId);
+      } else if (event.action === "deactivate") {
+        members.set(event.actorId, { actorId: event.actorId, status: "inactive" });
+      } else {
+        members.set(event.actorId, { actorId: event.actorId, status: "active" });
+      }
+    }
+
+    return [...members.values()];
+  }
+
+  listActiveAudienceIds(simulationId = "default"): string[] {
+    return this.listAudienceMembers(simulationId)
+      .filter((member) => member.status === "active")
+      .map((member) => member.actorId);
   }
 
   listUnclosedAccessibleTurns(simulationId = "default", actorId: string): TranscriptTurn[] {
@@ -768,4 +868,12 @@ function rowToStageWhisper(row: Record<string, unknown>): StageWhisperRecord {
     createdAt: row.created_at as string,
     consumedAt: row.consumed_at as string | null
   };
+}
+
+function audienceAction(value: unknown): AudienceEventRecord["action"] {
+  if (value === "add" || value === "remove" || value === "deactivate" || value === "reactivate") {
+    return value;
+  }
+
+  throw new Error(`Invalid audience action: ${String(value)}`);
 }

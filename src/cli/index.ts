@@ -24,6 +24,7 @@ async function main() {
     if (command === "start") return await startCommand(args);
     if (command === "actors") return await actorsCommand(args);
     if (command === "access") return await accessCommand(args);
+    if (command === "audience") return await audienceCommand(args);
     if (command === "whisper") return await whisperCommand(args);
     if (command === "context") return await contextCommand(args);
     if (command === "turn") return await turnCommand(args);
@@ -168,6 +169,60 @@ async function accessCommand(args: string[]): Promise<void> {
   }
 }
 
+async function audienceCommand(args: string[]): Promise<void> {
+  const [action, actorId] = args.filter((arg) => !arg.startsWith("--"));
+  if (action !== "add" && action !== "remove" && action !== "deactivate" && action !== "reactivate" && action !== "list") {
+    throw new CliError("Usage: doxvelt audience (add|remove|deactivate|reactivate|list) [actor-id] [--reason <text>] [--json]", 1);
+  }
+
+  const simulationId = optionValue(args, "--simulation") || "default";
+  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    const simulation = store.getSimulation(simulationId);
+    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
+
+    if (action === "list") {
+      print(
+        {
+          simulationId,
+          audienceEvents: store.listAudienceEvents(simulationId),
+          audienceMembers: store.listAudienceMembers(simulationId),
+          activeAudience: store.listActiveAudienceIds(simulationId)
+        },
+        hasFlag(args, "--json")
+      );
+      return;
+    }
+
+    if (!actorId) {
+      throw new CliError(`Usage: doxvelt audience ${action} <actor-id> [--reason <text>] [--json]`, 1);
+    }
+
+    const event = store.appendAudienceEvent({
+      simulationId,
+      actorId,
+      action,
+      reason: optionValue(args, "--reason") || null,
+      turnId: numericOptionValue(args, "--turn"),
+      episodeId: numericOptionValue(args, "--episode")
+    });
+
+    print(
+      {
+        message: `Recorded audience ${action} for @${actorId}.`,
+        event,
+        audienceMembers: store.listAudienceMembers(simulationId),
+        activeAudience: store.listActiveAudienceIds(simulationId)
+      },
+      hasFlag(args, "--json")
+    );
+  } finally {
+    store.close();
+  }
+}
+
 async function whisperCommand(args: string[]): Promise<void> {
   const actionOrActor = args.find((arg) => !arg.startsWith("--"));
   const simulationId = optionValue(args, "--simulation") || "default";
@@ -254,10 +309,14 @@ async function turnCommand(args: string[]): Promise<void> {
 
   const simulationId = optionValue(args, "--simulation") || "default";
   const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const audience = optionValue(args, "--audience")?.split(",").filter(Boolean) || [actorId];
   const store = await openRuntimeStore(dbPath).open();
 
   try {
+    const audience = resolveTurnAudience({
+      explicitAudience: optionValue(args, "--audience"),
+      actorId,
+      activeAudience: store.listActiveAudienceIds(simulationId)
+    });
     const whisperText = optionValue(args, "--whisper");
     if (whisperText) {
       store.createStageWhisper({
@@ -443,6 +502,11 @@ Usage:
   doxvelt access list [--simulation <id>] [--db <path>] [--json]
   doxvelt access grant <member-id> <container-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
   doxvelt access revoke <member-id> <container-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
+  doxvelt audience list [--simulation <id>] [--db <path>] [--json]
+  doxvelt audience add <actor-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
+  doxvelt audience remove <actor-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
+  doxvelt audience deactivate <actor-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
+  doxvelt audience reactivate <actor-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
   doxvelt whisper <actor-id> --text <text> [--simulation <id>] [--db <path>] [--json]
   doxvelt whisper list [--simulation <id>] [--db <path>] [--json]
   doxvelt context <actor-id> [--simulation <id>] [--db <path>] [--json]
@@ -495,6 +559,19 @@ function numericOptionValue(args: string[], flag: string): number | null {
   }
 
   return parsed;
+}
+
+function resolveTurnAudience({
+  explicitAudience,
+  actorId,
+  activeAudience
+}: {
+  explicitAudience: string | undefined;
+  actorId: string;
+  activeAudience: string[];
+}): string[] {
+  const audience = explicitAudience?.split(",").filter(Boolean) || activeAudience;
+  return [...new Set([actorId, ...audience])];
 }
 
 class CliError extends Error {

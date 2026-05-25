@@ -113,6 +113,22 @@ export type RuntimeAccessEventRecord = {
   createdAt: string;
 };
 
+export type AudienceEventRecord = {
+  id: number | bigint;
+  simulationId: string;
+  actorId: string;
+  action: "add" | "remove" | "deactivate" | "reactivate";
+  reason: string | null;
+  turnId: number | bigint | null;
+  episodeId: number | bigint | null;
+  createdAt: string;
+};
+
+export type AudienceMemberRecord = {
+  actorId: string;
+  status: "active" | "inactive";
+};
+
 export type BeliefProvenanceMode =
   | "held"
   | "accessed_through_membership"
