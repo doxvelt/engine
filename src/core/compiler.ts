@@ -30,6 +30,7 @@ export async function compileWorld(worldPath: string): Promise<CompiledWorld> {
     entities: source.entities.map((entity) => ({
       id: entity.id,
       kind: entity.kind,
+      ...(entity.rawKind === undefined ? {} : { rawKind: entity.rawKind }),
       name: entity.name,
       visibility: entity.visibility,
       folder: entity.folder,
@@ -135,6 +136,7 @@ function collectLineRecords(records: CompiledWorld, file: SourceFile, context: L
 
 function validateRecords(records: CompiledWorld): void {
   validateModelRecords(records);
+  validateEntityRecords(records);
 
   const entityIds = new Set(records.entities.map((entity) => entity.id));
   const knownIds = new Set([
@@ -162,6 +164,28 @@ function validateRecords(records: CompiledWorld): void {
   }
 
   validateMembershipLoops(records);
+}
+
+function validateEntityRecords(records: CompiledWorld): void {
+  for (const entity of records.entities) {
+    const rawKind = entity.rawKind;
+    if (rawKind === undefined) continue;
+
+    if (rawKind !== "agent" && rawKind !== "affiliation" && rawKind !== "artifact" && rawKind !== "stateless") {
+      records.diagnostics.push({
+        severity: "error",
+        code: "entity_invalid_kind",
+        message: `Entity ${entity.id} has invalid kind metadata: ${String(rawKind)}.`,
+        sourceSpans: [
+          {
+            file: entity.files.find((file) => file.endsWith("/IDENTITY.md")) || entity.folder,
+            line: 1,
+            quote: `kind: ${String(rawKind)}`
+          }
+        ]
+      });
+    }
+  }
 }
 
 function validateModelRecords(records: CompiledWorld): void {

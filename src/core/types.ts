@@ -20,6 +20,7 @@ export type EntitySourceFile = SourceFile & {
 export type EntitySource = {
   id: string;
   kind: EntityKind;
+  rawKind: YamlValue | undefined;
   name: string;
   visibility: string;
   folder: string;
@@ -56,6 +57,7 @@ export type AssetRecord = {
 export type EntityRecord = {
   id: string;
   kind: EntityKind;
+  rawKind?: YamlValue;
   name: string;
   visibility: string;
   folder: string;

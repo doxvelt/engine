@@ -86,6 +86,7 @@ async function readEntityFolders(root: string): Promise<EntitySource[]> {
     entities.push({
       id: stringValue(identity?.data.id) || entry.name,
       kind: entityKindValue(identity?.data.kind) || "agent",
+      rawKind: identity?.data.kind,
       name: stringValue(identity?.data.name) || titleFromId(entry.name),
       visibility: stringValue(identity?.data.visibility) || "public",
       folder: `entities/${entry.name}`,

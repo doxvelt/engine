@@ -108,6 +108,30 @@ base_url: not-a-url
   assert.ok(compiled.diagnostics.some((diagnostic) => diagnostic.code === "model_invalid_base_url"));
 });
 
+test("compiler reports invalid entity kind metadata", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+
+  await initWorld(worldPath);
+  await writeFile(
+    path.join(worldPath, "entities", "actor", "IDENTITY.md"),
+    `---
+id: actor
+kind: organization
+name: Actor
+visibility: public
+---
+
+@actor is a participant in the simulation.
+`
+  );
+
+  const compiled = await compileWorld(worldPath);
+  const diagnostic = compiled.diagnostics.find((candidate) => candidate.code === "entity_invalid_kind");
+  assert.ok(diagnostic);
+  assert.match(diagnostic.message, /organization/);
+});
+
 test("compiler reports membership access cycles", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
