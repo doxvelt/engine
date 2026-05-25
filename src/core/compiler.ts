@@ -134,6 +134,8 @@ function collectLineRecords(records: CompiledWorld, file: SourceFile, context: L
 }
 
 function validateRecords(records: CompiledWorld): void {
+  validateModelRecords(records);
+
   const entityIds = new Set(records.entities.map((entity) => entity.id));
   const knownIds = new Set([
     ...entityIds,
@@ -160,6 +162,68 @@ function validateRecords(records: CompiledWorld): void {
   }
 
   validateMembershipLoops(records);
+}
+
+function validateModelRecords(records: CompiledWorld): void {
+  for (const model of records.models) {
+    const provider = stringValue(model.metadata.provider);
+    const modelName = stringValue(model.metadata.model);
+    const sourceSpan = assetSourceSpan(model);
+
+    if (!provider) {
+      records.diagnostics.push({
+        severity: "error",
+        code: "model_missing_provider",
+        message: `Model ${model.id} is missing string provider metadata.`,
+        sourceSpans: [sourceSpan]
+      });
+    }
+
+    if (!modelName) {
+      records.diagnostics.push({
+        severity: "error",
+        code: "model_missing_model",
+        message: `Model ${model.id} is missing string model metadata.`,
+        sourceSpans: [sourceSpan]
+      });
+    }
+
+    if (provider === "openai-compatible") {
+      const baseUrl = stringValue(model.metadata.base_url);
+      if (!baseUrl) {
+        records.diagnostics.push({
+          severity: "error",
+          code: "model_missing_base_url",
+          message: `OpenAI-compatible model ${model.id} is missing string base_url metadata.`,
+          sourceSpans: [sourceSpan]
+        });
+      } else if (!isHttpUrl(baseUrl)) {
+        records.diagnostics.push({
+          severity: "error",
+          code: "model_invalid_base_url",
+          message: `OpenAI-compatible model ${model.id} has invalid base_url metadata: ${baseUrl}.`,
+          sourceSpans: [sourceSpan]
+        });
+      }
+    }
+  }
+}
+
+function assetSourceSpan(asset: AssetRecord): AccessLinkRecord["sourceSpan"] {
+  return {
+    file: asset.path,
+    line: 1,
+    quote: asset.body || asset.path
+  };
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function validateMembershipLoops(records: CompiledWorld): void {

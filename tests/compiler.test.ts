@@ -79,6 +79,35 @@ test("compiled example source is inspectable without running init", async () => 
   assert.equal(compiled.scenarios.at(0)?.id, "executive-interviews");
 });
 
+test("compiler validates model record metadata shape", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+
+  await initWorld(worldPath);
+  await writeFile(
+    path.join(worldPath, "models", "missing-provider.yaml"),
+    `---
+id: missing-provider
+model: llama3.1
+---
+`
+  );
+  await writeFile(
+    path.join(worldPath, "models", "bad-base-url.yaml"),
+    `---
+id: bad-base-url
+provider: openai-compatible
+model: llama3.1
+base_url: not-a-url
+---
+`
+  );
+
+  const compiled = await compileWorld(worldPath);
+  assert.ok(compiled.diagnostics.some((diagnostic) => diagnostic.code === "model_missing_provider"));
+  assert.ok(compiled.diagnostics.some((diagnostic) => diagnostic.code === "model_invalid_base_url"));
+});
+
 test("compiler reports membership access cycles", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
