@@ -134,7 +134,7 @@ function isLineVisibleToActor(line: string, actor: EntityRecord): boolean {
   return line.includes(`@${actor.id}`);
 }
 
-function resolveBeliefAccess(
+export function resolveBeliefAccess(
   actorId: string,
   beliefs: SubjectiveBeliefRecord[],
   accessLinks: AccessLinkRecord[]
@@ -166,6 +166,15 @@ function provenanceForDirectBelief(
   actorId: string,
   belief: SubjectiveBeliefRecord
 ): SubjectiveBeliefAccess["provenance"] {
+  if ("sourceHolder" in belief && "accessPath" in belief) {
+    return {
+      mode: "retained_after_access_loss",
+      holder: actorId,
+      sourceHolder: belief.sourceHolder,
+      accessPath: belief.accessPath
+    };
+  }
+
   if ("observerId" in belief && "entityId" in belief) {
     return {
       mode: "observed",
@@ -222,6 +231,8 @@ function renderBeliefs(beliefAccess: SubjectiveBeliefAccess[]): string {
         ? ` (held by @${access.provenance.sourceHolder}; accessed through ${renderAccessPath(access.provenance.accessPath)})`
         : access.provenance.mode === "observed"
           ? ` (first impression of @${access.provenance.sourceHolder})`
+          : access.provenance.mode === "retained_after_access_loss"
+            ? ` (retained after losing access to @${access.provenance.sourceHolder}; old path ${renderAccessPath(access.provenance.accessPath)})`
         : "";
     return `- [${formatStrength(access.belief.strength)}]${source} ${access.belief.propositionText}`;
   });

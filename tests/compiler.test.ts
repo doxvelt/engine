@@ -515,6 +515,73 @@ test("runtime access events override compiled membership links", async (context)
   }
 });
 
+test("episode closure persists retained beliefs after membership access loss", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await writeMembershipWorld(worldPath);
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "membership-room",
+      compiled
+    });
+
+    store.appendTurn({
+      simulationId: "default",
+      actorId: "alice",
+      text: "I am checking what the larger faction still knows.",
+      audience: ["alice"]
+    });
+
+    store.appendRuntimeAccessEvent({
+      simulationId: "default",
+      action: "revoke",
+      member: "inner-circle",
+      container: "mafia",
+      reason: "Inner Circle is cut off from Mafia logistics."
+    });
+
+    const closure = await closeEpisode({ store, simulationId: "default", label: "Access loss" });
+    const retainedDocksBelief = closure.retainedBeliefs.find((belief) => {
+      return belief.propositionText.includes("@mafia treats the docks as controlled territory");
+    });
+    assert.ok(retainedDocksBelief);
+    assert.equal(retainedDocksBelief.holder, "alice");
+    assert.equal(retainedDocksBelief.sourceHolder, "mafia");
+    assert.equal(retainedDocksBelief.strength, 1);
+    assert.deepEqual(retainedDocksBelief.accessPath, ["alice", "inner-circle", "mafia"]);
+
+    const simulation = store.getSimulation("default");
+    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "alice");
+    assert.ok(simulation);
+    assert.ok(actor);
+
+    const actorContext = assembleActorContext({
+      simulation,
+      actor,
+      worlds: [],
+      scenario: store.getCompiledRecord("default", "scenario", "membership-room"),
+      formats: [],
+      beliefs: store.listBeliefHistory("default"),
+      accessLinks: store.listEffectiveAccessLinks("default"),
+      surfaces: store.listSurfaces("default"),
+      turns: store.listAccessibleTurns("default", "alice")
+    });
+
+    assert.match(actorContext.promptPreview, /retained after losing access to @mafia/);
+    assert.match(actorContext.promptPreview, /@mafia treats the docks as controlled territory/);
+    assert.doesNotMatch(actorContext.promptPreview, /held by @mafia; accessed through/);
+  } finally {
+    store.close();
+  }
+});
+
 test("CLI access command records and lists runtime access events", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");

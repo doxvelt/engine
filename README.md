@@ -131,6 +131,8 @@ bun run doxvelt -- access revoke student-team ceo --reason "The briefing window 
 bun run doxvelt -- access list --json
 ```
 
+When an actor loses membership-like access, live source beliefs disappear from context immediately. At episode closure, Doxvelt persists weakened retained beliefs for source beliefs the actor previously reached through that lost path, preserving the difference between stale remembered knowledge and current access.
+
 Export a portable local package, then import it elsewhere:
 
 ```sh

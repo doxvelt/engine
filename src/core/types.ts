@@ -233,6 +233,20 @@ export type ExtractedBeliefRecord = {
   createdAt: string;
 };
 
+export type RetainedBeliefRecord = {
+  id: number | bigint;
+  episodeId: number | bigint;
+  simulationId: string;
+  holder: string;
+  strength: number;
+  propositionText: string;
+  sourceHolder: string;
+  accessPath: string[];
+  sourceBelief: BeliefRecord | ExtractedBeliefRecord | FirstImpressionRecord;
+  runtimeAccessEventId: number | bigint | null;
+  createdAt: string;
+};
+
 export type FirstImpressionRecord = {
   id: number | bigint;
   simulationId: string;
@@ -245,12 +259,17 @@ export type FirstImpressionRecord = {
   createdAt: string;
 };
 
-export type SubjectiveBeliefRecord = BeliefRecord | ExtractedBeliefRecord | FirstImpressionRecord;
+export type SubjectiveBeliefRecord =
+  | BeliefRecord
+  | ExtractedBeliefRecord
+  | FirstImpressionRecord
+  | RetainedBeliefRecord;
 
 export type EpisodeClosure = {
   episode: EpisodeRecord;
   memories: EpisodeMemoryRecord[];
   extractedBeliefs: ExtractedBeliefRecord[];
+  retainedBeliefs: RetainedBeliefRecord[];
 };
 
 export type ActorContext = {

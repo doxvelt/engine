@@ -1,4 +1,5 @@
-import { assembleActorContext } from "./context.ts";
+import { createRetainedBeliefDraft } from "./beliefs.ts";
+import { assembleActorContext, resolveBeliefAccess } from "./context.ts";
 import { ensureFirstImpressions } from "./impressions.ts";
 import type {
   ActorContext,
@@ -7,7 +8,9 @@ import type {
   EpisodeClosure,
   EpisodeMemoryRecord,
   ExtractedBeliefRecord,
+  RetainedBeliefRecord,
   SimulationRecord,
+  SubjectiveBeliefAccess,
   TranscriptTurn
 } from "./types.ts";
 import type { RuntimeStore } from "../store/sqlite.ts";
@@ -58,6 +61,7 @@ export async function closeEpisode({
   const episode = store.createEpisode({ simulationId, label: label || null });
   const memories: EpisodeMemoryRecord[] = [];
   const extractedBeliefs: ExtractedBeliefRecord[] = [];
+  const retainedBeliefs: RetainedBeliefRecord[] = [];
 
   for (const actor of actors) {
     const turns = store.listUnclosedAccessibleTurns(simulationId, actor.id);
@@ -99,13 +103,27 @@ export async function closeEpisode({
     }
   }
 
+  for (const actor of actors) {
+    const turns = store.listUnclosedAccessibleTurns(simulationId, actor.id);
+    if (turns.length === 0) continue;
+
+    retainedBeliefs.push(
+      ...createRetainedBeliefsForActor({
+        store,
+        simulationId,
+        episodeId: episode.id,
+        actorId: actor.id
+      })
+    );
+  }
+
   store.markTurnsClosed({
     simulationId,
     episodeId: episode.id,
     turnIds: unclosedTurns.map((turn) => turn.id)
   });
 
-  return { episode, memories, extractedBeliefs };
+  return { episode, memories, extractedBeliefs, retainedBeliefs };
 }
 
 export const deterministicEpisodeClosureGenerator: EpisodeClosureGenerator = {
@@ -174,4 +192,74 @@ function normalizeStrength(strength: number): number {
   if (strength <= -3) return -3;
   if (strength < 0) return -1;
   return 0;
+}
+
+function createRetainedBeliefsForActor({
+  store,
+  simulationId,
+  episodeId,
+  actorId
+}: {
+  store: RuntimeStore;
+  simulationId: string;
+  episodeId: number | bigint;
+  actorId: string;
+}): RetainedBeliefRecord[] {
+  const currentAccessLinks = store.listEffectiveAccessLinks(simulationId);
+  const currentBeliefAccess = resolveBeliefAccess(
+    actorId,
+    store.listNonRetainedBeliefHistory(simulationId),
+    currentAccessLinks
+  );
+  const currentKeys = new Set(currentBeliefAccess.map(beliefAccessKey));
+  const retained: RetainedBeliefRecord[] = [];
+
+  for (const event of store.listRuntimeAccessEvents(simulationId)) {
+    if (event.action !== "revoke") continue;
+
+    const previousBeliefAccess = resolveBeliefAccess(
+      actorId,
+      store.listNonRetainedBeliefHistory(simulationId),
+      store.listEffectiveAccessLinksBeforeEvent(simulationId, event.id)
+    );
+
+    for (const access of previousBeliefAccess) {
+      if (access.provenance.mode !== "accessed_through_membership") continue;
+      if (currentKeys.has(beliefAccessKey(access))) continue;
+
+      const draft = createRetainedBeliefDraft({
+        holder: actorId,
+        sourceBelief: access.belief,
+        previousProvenance: access.provenance
+      });
+      const existing = store.getRetainedBelief({
+        simulationId,
+        holder: draft.holder,
+        sourceHolder: draft.provenance.sourceHolder,
+        propositionText: draft.propositionText,
+        runtimeAccessEventId: event.id
+      });
+      if (existing) continue;
+
+      retained.push(
+        store.createRetainedBelief({
+          episodeId,
+          simulationId,
+          holder: draft.holder,
+          strength: draft.strength,
+          propositionText: draft.propositionText,
+          sourceHolder: draft.provenance.sourceHolder,
+          accessPath: draft.provenance.accessPath,
+          sourceBelief: access.belief as RetainedBeliefRecord["sourceBelief"],
+          runtimeAccessEventId: event.id
+        })
+      );
+    }
+  }
+
+  return retained;
+}
+
+function beliefAccessKey(access: SubjectiveBeliefAccess): string {
+  return `${access.provenance.sourceHolder}:${access.belief.propositionText}`;
 }

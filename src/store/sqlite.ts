@@ -13,6 +13,7 @@ import type {
   EpisodeRecord,
   ExtractedBeliefRecord,
   FirstImpressionRecord,
+  RetainedBeliefRecord,
   RuntimeAccessEventRecord,
   SimulationRecord,
   StageWhisperRecord,
@@ -135,6 +136,21 @@ export class RuntimeStore {
         surface_source_span_json TEXT NOT NULL,
         created_at TEXT NOT NULL,
         UNIQUE(simulation_id, observer_id, entity_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS retained_beliefs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        episode_id INTEGER NOT NULL,
+        simulation_id TEXT NOT NULL,
+        holder TEXT NOT NULL,
+        strength INTEGER NOT NULL,
+        proposition_text TEXT NOT NULL,
+        source_holder TEXT NOT NULL,
+        access_path_json TEXT NOT NULL,
+        source_belief_json TEXT NOT NULL,
+        runtime_access_event_id INTEGER,
+        created_at TEXT NOT NULL,
+        UNIQUE(simulation_id, holder, source_holder, proposition_text, runtime_access_event_id)
       );
     `);
     this.ensureColumn("transcript_turns", "episode_id", "INTEGER");
@@ -289,13 +305,30 @@ export class RuntimeStore {
   }
 
   listEffectiveAccessLinks(simulationId = "default"): AccessLinkRecord[] {
+    return this.resolveEffectiveAccessLinks(simulationId, this.listRuntimeAccessEvents(simulationId));
+  }
+
+  listEffectiveAccessLinksBeforeEvent(
+    simulationId = "default",
+    runtimeAccessEventId: number | bigint
+  ): AccessLinkRecord[] {
+    return this.resolveEffectiveAccessLinks(
+      simulationId,
+      this.listRuntimeAccessEvents(simulationId).filter((event) => BigInt(event.id) < BigInt(runtimeAccessEventId))
+    );
+  }
+
+  private resolveEffectiveAccessLinks(
+    simulationId: string,
+    events: RuntimeAccessEventRecord[]
+  ): AccessLinkRecord[] {
     const effective = new Map<string, AccessLinkRecord>();
 
     for (const link of this.listAccessLinks(simulationId)) {
       effective.set(accessLinkKey(link.member, link.container, link.mode), link);
     }
 
-    for (const event of this.listRuntimeAccessEvents(simulationId)) {
+    for (const event of events) {
       const key = accessLinkKey(event.member, event.container, event.mode);
       if (event.action === "revoke") {
         effective.delete(key);
@@ -393,7 +426,20 @@ export class RuntimeStore {
     }));
   }
 
-  listBeliefHistory(simulationId = "default"): Array<BeliefRecord | ExtractedBeliefRecord | FirstImpressionRecord> {
+  listBeliefHistory(
+    simulationId = "default"
+  ): Array<BeliefRecord | ExtractedBeliefRecord | FirstImpressionRecord | RetainedBeliefRecord> {
+    return [
+      ...this.listBeliefs(simulationId),
+      ...this.listFirstImpressions(simulationId),
+      ...this.listExtractedBeliefs(simulationId),
+      ...this.listRetainedBeliefs(simulationId)
+    ];
+  }
+
+  listNonRetainedBeliefHistory(
+    simulationId = "default"
+  ): Array<BeliefRecord | ExtractedBeliefRecord | FirstImpressionRecord> {
     return [
       ...this.listBeliefs(simulationId),
       ...this.listFirstImpressions(simulationId),
@@ -947,6 +993,150 @@ export class RuntimeStore {
     }));
   }
 
+  createRetainedBelief({
+    episodeId,
+    simulationId = "default",
+    holder,
+    strength,
+    propositionText,
+    sourceHolder,
+    accessPath,
+    sourceBelief,
+    runtimeAccessEventId = null
+  }: {
+    episodeId: number | bigint;
+    simulationId?: string;
+    holder: string;
+    strength: number;
+    propositionText: string;
+    sourceHolder: string;
+    accessPath: string[];
+    sourceBelief: RetainedBeliefRecord["sourceBelief"];
+    runtimeAccessEventId?: number | bigint | null;
+  }): RetainedBeliefRecord {
+    const createdAt = new Date().toISOString();
+    const result = this.requireDb()
+      .prepare(`
+        INSERT OR IGNORE INTO retained_beliefs (
+          episode_id,
+          simulation_id,
+          holder,
+          strength,
+          proposition_text,
+          source_holder,
+          access_path_json,
+          source_belief_json,
+          runtime_access_event_id,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        episodeId,
+        simulationId,
+        holder,
+        strength,
+        propositionText,
+        sourceHolder,
+        JSON.stringify(accessPath),
+        JSON.stringify(sourceBelief),
+        runtimeAccessEventId,
+        createdAt
+      );
+
+    if (result.changes === 0) {
+      const existing = this.getRetainedBelief({
+        simulationId,
+        holder,
+        sourceHolder,
+        propositionText,
+        runtimeAccessEventId
+      });
+      if (!existing) throw new Error(`Failed to create or load retained belief for ${holder}`);
+      return existing;
+    }
+
+    return {
+      id: result.lastInsertRowid,
+      episodeId,
+      simulationId,
+      holder,
+      strength,
+      propositionText,
+      sourceHolder,
+      accessPath,
+      sourceBelief,
+      runtimeAccessEventId,
+      createdAt
+    };
+  }
+
+  getRetainedBelief({
+    simulationId = "default",
+    holder,
+    sourceHolder,
+    propositionText,
+    runtimeAccessEventId
+  }: {
+    simulationId?: string;
+    holder: string;
+    sourceHolder: string;
+    propositionText: string;
+    runtimeAccessEventId: number | bigint | null;
+  }): RetainedBeliefRecord | null {
+    const row = this.requireDb()
+      .prepare(`
+        SELECT
+          id,
+          episode_id,
+          simulation_id,
+          holder,
+          strength,
+          proposition_text,
+          source_holder,
+          access_path_json,
+          source_belief_json,
+          runtime_access_event_id,
+          created_at
+        FROM retained_beliefs
+        WHERE simulation_id = ?
+          AND holder = ?
+          AND source_holder = ?
+          AND proposition_text = ?
+          AND (
+            (runtime_access_event_id IS NULL AND ? IS NULL)
+            OR runtime_access_event_id = ?
+          )
+      `)
+      .get(simulationId, holder, sourceHolder, propositionText, runtimeAccessEventId, runtimeAccessEventId);
+
+    return row ? rowToRetainedBelief(row) : null;
+  }
+
+  listRetainedBeliefs(simulationId = "default"): RetainedBeliefRecord[] {
+    const rows = this.requireDb()
+      .prepare(`
+        SELECT
+          id,
+          episode_id,
+          simulation_id,
+          holder,
+          strength,
+          proposition_text,
+          source_holder,
+          access_path_json,
+          source_belief_json,
+          runtime_access_event_id,
+          created_at
+        FROM retained_beliefs
+        WHERE simulation_id = ?
+        ORDER BY id
+      `)
+      .all(simulationId);
+
+    return rows.map(rowToRetainedBelief);
+  }
+
   private requireDb(): DatabaseSync {
     if (!this.db) {
       throw new Error("Runtime store is not open.");
@@ -1021,6 +1211,22 @@ function rowToFirstImpression(row: Record<string, unknown>): FirstImpressionReco
     strength: row.strength as number,
     propositionText: row.proposition_text as string,
     surfaceSourceSpan: JSON.parse(row.surface_source_span_json as string),
+    createdAt: row.created_at as string
+  };
+}
+
+function rowToRetainedBelief(row: Record<string, unknown>): RetainedBeliefRecord {
+  return {
+    id: row.id as number | bigint,
+    episodeId: row.episode_id as number | bigint,
+    simulationId: row.simulation_id as string,
+    holder: row.holder as string,
+    strength: row.strength as number,
+    propositionText: row.proposition_text as string,
+    sourceHolder: row.source_holder as string,
+    accessPath: JSON.parse(row.access_path_json as string) as string[],
+    sourceBelief: JSON.parse(row.source_belief_json as string) as RetainedBeliefRecord["sourceBelief"],
+    runtimeAccessEventId: row.runtime_access_event_id as number | bigint | null,
     createdAt: row.created_at as string
   };
 }
