@@ -371,6 +371,22 @@ export class RuntimeStore {
     turnId?: number | bigint | null;
     episodeId?: number | bigint | null;
   }): RuntimeAccessEventRecord {
+    if (action === "grant") {
+      assertNoAccessCycle([
+        ...this.listEffectiveAccessLinks(simulationId),
+        {
+          member,
+          container,
+          mode,
+          sourceSpan: {
+            file: "runtime",
+            line: 0,
+            quote: reason || `grant ${member} ${mode} access to ${container}`
+          }
+        }
+      ]);
+    }
+
     const createdAt = new Date().toISOString();
     const result = this.requireDb()
       .prepare(`
@@ -1227,6 +1243,50 @@ export class RuntimeStore {
 
 function accessLinkKey(member: string, container: string, mode: "member"): string {
   return `${mode}:${member}:${container}`;
+}
+
+function assertNoAccessCycle(links: AccessLinkRecord[]): void {
+  const linksByMember = new Map<string, AccessLinkRecord[]>();
+
+  for (const link of links) {
+    linksByMember.set(link.member, [...(linksByMember.get(link.member) || []), link]);
+  }
+
+  for (const link of links) {
+    const cycle = findAccessCycle({
+      linksByMember,
+      path: [link.member],
+      link
+    });
+    if (cycle) {
+      throw new Error(`Runtime membership access cycle is invalid: ${cycle.map((entity) => `@${entity}`).join(" -> ")}.`);
+    }
+  }
+}
+
+function findAccessCycle({
+  linksByMember,
+  path,
+  link
+}: {
+  linksByMember: Map<string, AccessLinkRecord[]>;
+  path: string[];
+  link: AccessLinkRecord;
+}): string[] | null {
+  const nextPath = [...path, link.container];
+  const repeatedAt = path.indexOf(link.container);
+  if (repeatedAt !== -1) return nextPath.slice(repeatedAt);
+
+  for (const nextLink of linksByMember.get(link.container) || []) {
+    const cycle = findAccessCycle({
+      linksByMember,
+      path: nextPath,
+      link: nextLink
+    });
+    if (cycle) return cycle;
+  }
+
+  return null;
 }
 
 function runtimeAccessEventToLink(event: RuntimeAccessEventRecord): AccessLinkRecord {

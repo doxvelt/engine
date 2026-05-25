@@ -722,6 +722,55 @@ test("runtime access events override compiled membership links", async (context)
   }
 });
 
+test("runtime access grants cannot create membership cycles", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await writeMembershipWorld(worldPath);
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "membership-room",
+      compiled
+    });
+
+    assert.throws(
+      () =>
+        store.appendRuntimeAccessEvent({
+          simulationId: "default",
+          action: "grant",
+          member: "mafia",
+          container: "alice",
+          reason: "This would close an access cycle."
+        }),
+      /Runtime membership access cycle is invalid/
+    );
+  } finally {
+    store.close();
+  }
+
+  await assert.rejects(
+    () =>
+      runCli([
+        "access",
+        "grant",
+        "mafia",
+        "alice",
+        "--reason",
+        "This would close an access cycle.",
+        "--db",
+        dbPath,
+        "--json"
+      ]),
+    /Runtime membership access cycle is invalid/
+  );
+});
+
 test("episode closure persists retained beliefs after membership access loss", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
