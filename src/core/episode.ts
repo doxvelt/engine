@@ -141,7 +141,7 @@ function buildClosureContext({
       : null,
     formats: store.listCompiledRecords<AssetRecord>(simulation.id, "format"),
     beliefs: store.listBeliefHistory(simulation.id),
-    accessLinks: store.listAccessLinks(simulation.id),
+    accessLinks: store.listEffectiveAccessLinks(simulation.id),
     turns
   });
 }

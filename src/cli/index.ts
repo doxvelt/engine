@@ -137,7 +137,7 @@ async function contextCommand(args: string[]): Promise<void> {
         : null,
       formats: store.listCompiledRecords<AssetRecord>(simulationId, "format"),
       beliefs: store.listBeliefs(simulationId),
-      accessLinks: store.listAccessLinks(simulationId),
+      accessLinks: store.listEffectiveAccessLinks(simulationId),
       turns: store.listAccessibleTurns(simulationId, actorId)
     });
 
@@ -227,7 +227,7 @@ async function generateAiTurnText({
       : null,
     formats: store.listCompiledRecords<AssetRecord>(simulationId, "format"),
     beliefs: store.listBeliefs(simulationId),
-    accessLinks: store.listAccessLinks(simulationId),
+    accessLinks: store.listEffectiveAccessLinks(simulationId),
     turns: store.listAccessibleTurns(simulationId, actorId)
   });
 

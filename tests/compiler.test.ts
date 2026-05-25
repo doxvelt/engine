@@ -407,6 +407,97 @@ test("retained beliefs weaken when membership access is lost", () => {
   });
 });
 
+test("runtime access events override compiled membership links", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await writeMembershipWorld(worldPath);
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "membership-room",
+      compiled
+    });
+
+    store.appendRuntimeAccessEvent({
+      simulationId: "default",
+      action: "revoke",
+      member: "inner-circle",
+      container: "mafia",
+      reason: "Inner Circle is cut off from Mafia logistics."
+    });
+
+    let effectiveLinks = store.listEffectiveAccessLinks("default");
+    assert.deepEqual(
+      effectiveLinks.map((link) => [link.member, link.container]),
+      [["alice", "inner-circle"]]
+    );
+
+    const simulation = store.getSimulation("default");
+    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "alice");
+    assert.ok(simulation);
+    assert.ok(actor);
+
+    const revokedContext = assembleActorContext({
+      simulation,
+      actor,
+      worlds: [],
+      scenario: store.getCompiledRecord("default", "scenario", "membership-room"),
+      formats: [],
+      beliefs: store.listBeliefs("default"),
+      accessLinks: effectiveLinks,
+      turns: []
+    });
+
+    assert.deepEqual(
+      revokedContext.subjective.beliefs.map((belief) => belief.holder),
+      ["alice", "inner-circle"]
+    );
+    assert.doesNotMatch(revokedContext.promptPreview, /@mafia treats the docks as controlled territory/);
+
+    store.appendRuntimeAccessEvent({
+      simulationId: "default",
+      action: "grant",
+      member: "alice",
+      container: "mafia",
+      reason: "Alice receives direct emergency access."
+    });
+
+    effectiveLinks = store.listEffectiveAccessLinks("default");
+    assert.deepEqual(
+      effectiveLinks.map((link) => [link.member, link.container]),
+      [
+        ["alice", "inner-circle"],
+        ["alice", "mafia"]
+      ]
+    );
+
+    const grantedContext = assembleActorContext({
+      simulation,
+      actor,
+      worlds: [],
+      scenario: store.getCompiledRecord("default", "scenario", "membership-room"),
+      formats: [],
+      beliefs: store.listBeliefs("default"),
+      accessLinks: effectiveLinks,
+      turns: []
+    });
+
+    assert.deepEqual(
+      grantedContext.subjective.beliefs.map((belief) => belief.holder),
+      ["alice", "inner-circle", "mafia"]
+    );
+    assert.match(grantedContext.promptPreview, /accessed through @alice -> @mafia/);
+  } finally {
+    store.close();
+  }
+});
+
 test("episode closure writes deterministic memories from accessible turns", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");

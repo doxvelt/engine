@@ -10,6 +10,7 @@ import type {
   EpisodeMemoryRecord,
   EpisodeRecord,
   ExtractedBeliefRecord,
+  RuntimeAccessEventRecord,
   SimulationRecord,
   TranscriptTurn
 } from "../core/types.ts";
@@ -82,6 +83,19 @@ export class RuntimeStore {
         holder TEXT NOT NULL,
         strength INTEGER NOT NULL,
         proposition_text TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS runtime_access_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        simulation_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        member TEXT NOT NULL,
+        container TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        reason TEXT,
+        turn_id INTEGER,
+        episode_id INTEGER,
         created_at TEXT NOT NULL
       );
     `);
@@ -226,6 +240,111 @@ export class RuntimeStore {
 
   listAccessLinks(simulationId = "default"): AccessLinkRecord[] {
     return this.listCompiledRecords<AccessLinkRecord>(simulationId, "access_link");
+  }
+
+  listEffectiveAccessLinks(simulationId = "default"): AccessLinkRecord[] {
+    const effective = new Map<string, AccessLinkRecord>();
+
+    for (const link of this.listAccessLinks(simulationId)) {
+      effective.set(accessLinkKey(link.member, link.container, link.mode), link);
+    }
+
+    for (const event of this.listRuntimeAccessEvents(simulationId)) {
+      const key = accessLinkKey(event.member, event.container, event.mode);
+      if (event.action === "revoke") {
+        effective.delete(key);
+        continue;
+      }
+
+      effective.set(key, runtimeAccessEventToLink(event));
+    }
+
+    return [...effective.values()];
+  }
+
+  appendRuntimeAccessEvent({
+    simulationId = "default",
+    action,
+    member,
+    container,
+    mode = "member",
+    reason = null,
+    turnId = null,
+    episodeId = null
+  }: {
+    simulationId?: string;
+    action: "grant" | "revoke";
+    member: string;
+    container: string;
+    mode?: "member";
+    reason?: string | null;
+    turnId?: number | bigint | null;
+    episodeId?: number | bigint | null;
+  }): RuntimeAccessEventRecord {
+    const createdAt = new Date().toISOString();
+    const result = this.requireDb()
+      .prepare(`
+        INSERT INTO runtime_access_events (
+          simulation_id,
+          action,
+          member,
+          container,
+          mode,
+          reason,
+          turn_id,
+          episode_id,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(simulationId, action, member, container, mode, reason, turnId, episodeId, createdAt);
+
+    return {
+      id: result.lastInsertRowid,
+      simulationId,
+      action,
+      member,
+      container,
+      mode,
+      reason,
+      turnId,
+      episodeId,
+      createdAt
+    };
+  }
+
+  listRuntimeAccessEvents(simulationId = "default"): RuntimeAccessEventRecord[] {
+    const rows = this.requireDb()
+      .prepare(`
+        SELECT
+          id,
+          simulation_id,
+          action,
+          member,
+          container,
+          mode,
+          reason,
+          turn_id,
+          episode_id,
+          created_at
+        FROM runtime_access_events
+        WHERE simulation_id = ?
+        ORDER BY id
+      `)
+      .all(simulationId);
+
+    return rows.map((row) => ({
+      id: row.id as number | bigint,
+      simulationId: row.simulation_id as string,
+      action: runtimeAccessAction(row.action),
+      member: row.member as string,
+      container: row.container as string,
+      mode: runtimeAccessMode(row.mode),
+      reason: row.reason as string | null,
+      turnId: row.turn_id as number | bigint | null,
+      episodeId: row.episode_id as number | bigint | null,
+      createdAt: row.created_at as string
+    }));
   }
 
   listBeliefHistory(simulationId = "default"): Array<BeliefRecord | ExtractedBeliefRecord> {
@@ -501,4 +620,31 @@ export class RuntimeStore {
 
     this.requireDb().exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
+}
+
+function accessLinkKey(member: string, container: string, mode: "member"): string {
+  return `${mode}:${member}:${container}`;
+}
+
+function runtimeAccessEventToLink(event: RuntimeAccessEventRecord): AccessLinkRecord {
+  return {
+    member: event.member,
+    container: event.container,
+    mode: event.mode,
+    sourceSpan: {
+      file: "runtime",
+      line: Number(event.id),
+      quote: event.reason || `${event.action} ${event.member} ${event.mode} access to ${event.container}`
+    }
+  };
+}
+
+function runtimeAccessAction(value: unknown): RuntimeAccessEventRecord["action"] {
+  if (value === "grant" || value === "revoke") return value;
+  throw new Error(`Invalid runtime access action: ${String(value)}`);
+}
+
+function runtimeAccessMode(value: unknown): RuntimeAccessEventRecord["mode"] {
+  if (value === "member") return value;
+  throw new Error(`Invalid runtime access mode: ${String(value)}`);
 }

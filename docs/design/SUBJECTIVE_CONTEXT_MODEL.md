@@ -62,6 +62,8 @@ Membership is a connection capability:
 - It is transitive downward for context access.
 - It does not automatically push child knowledge upward to parent entities.
 
+Authored membership links define starting access. Runtime play can add or revoke access through append-only access events without editing the compiled source fabric.
+
 Example:
 
 - Jade is connected to Mafia with membership-like access.
@@ -225,6 +227,8 @@ Source-linked beliefs should carry provenance information. For example: "held by
 Losing access to a belief source removes current access to that holder's live beliefs. It does not erase what the actor already encountered.
 
 For MVP, retained knowledge should be created only through episode closure, consistent with the rest of belief persistence. If an actor had access to a source-linked belief during the episode and then loses that access, closure may produce a retained belief for the actor with provenance `retained_after_access_loss`.
+
+Runtime access changes are events, not source edits. A source dossier may say an actor starts with membership access, while the runtime can later record that the access was revoked or restored during play.
 
 Retained beliefs automatically weaken the original stance while preserving direction:
 

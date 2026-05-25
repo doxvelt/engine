@@ -100,6 +100,19 @@ export type AccessLinkRecord = {
   sourceSpan: SourceSpan;
 };
 
+export type RuntimeAccessEventRecord = {
+  id: number | bigint;
+  simulationId: string;
+  action: "grant" | "revoke";
+  member: string;
+  container: string;
+  mode: "member";
+  reason: string | null;
+  turnId: number | bigint | null;
+  episodeId: number | bigint | null;
+  createdAt: string;
+};
+
 export type BeliefProvenanceMode =
   | "held"
   | "accessed_through_membership"
