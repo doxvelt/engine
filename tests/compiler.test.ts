@@ -817,6 +817,64 @@ test("CLI audience command controls default turn audience", async (context) => {
   assert.deepEqual(override.turn.audience, ["coo", "ceo"]);
 });
 
+test("CLI export and import round trip source and runtime state", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+  const packageDir = path.join(root, "package");
+  const importedWorldPath = path.join(root, "imported-world");
+  const importedDbPath = path.join(root, "imported-runtime.sqlite");
+
+  await initWorld(worldPath, { template: "executive-interviews" });
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "executive-interviews",
+      compiled
+    });
+    store.appendTurn({
+      simulationId: "default",
+      actorId: "ceo",
+      text: "The board needs a clearer operating picture.",
+      audience: ["ceo", "student-team"]
+    });
+  } finally {
+    store.close();
+  }
+
+  const exported = await runCli(["export", packageDir, "--db", dbPath, "--json"]);
+  assert.equal(exported.manifest.simulationId, "default");
+  assert.equal(exported.manifest.schemaVersion, 1);
+
+  const imported = await runCli([
+    "import",
+    packageDir,
+    "--world",
+    importedWorldPath,
+    "--db",
+    importedDbPath,
+    "--json"
+  ]);
+  assert.equal(imported.manifest.scenarioId, "executive-interviews");
+
+  const importedStore = await openRuntimeStore(importedDbPath).open();
+  try {
+    const simulation = importedStore.getSimulation("default");
+    assert.ok(simulation);
+    assert.equal(simulation.scenarioId, "executive-interviews");
+    assert.equal(importedStore.listAccessibleTurns("default", "ceo").length, 1);
+  } finally {
+    importedStore.close();
+  }
+
+  const importedCompiled = await compileWorld(importedWorldPath);
+  assert.equal(importedCompiled.entities.length, 3);
+});
+
 test("episode closure writes deterministic memories from accessible turns", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");

@@ -128,6 +128,13 @@ bun run doxvelt -- access revoke ceo student-team --reason "The briefing window 
 bun run doxvelt -- access list --json
 ```
 
+Export a portable local package, then import it elsewhere:
+
+```sh
+bun run doxvelt -- export workspaces/package-export --json
+bun run doxvelt -- import workspaces/package-export --world workspaces/imported-demo --db .doxvelt/imported-runtime.sqlite --json
+```
+
 If a local OpenAI-compatible endpoint is running, try an AI-backed turn:
 
 ```sh

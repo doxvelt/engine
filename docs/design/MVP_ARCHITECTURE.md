@@ -209,6 +209,14 @@ Import/export should preserve enough material to move a simulation or game betwe
 
 Secrets such as API keys should not be included in exports.
 
+The first CLI package format is a plain directory with:
+
+- `manifest.json`
+- `source/`
+- `runtime.sqlite`
+
+This keeps the local MVP inspectable and avoids choosing an archive format before packaging is settled.
+
 ## Hosted Path
 
 The hosted version should reuse the same core semantics, but it is not the MVP target.

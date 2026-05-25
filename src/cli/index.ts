@@ -7,6 +7,7 @@ import { assembleActorContext } from "../core/context.ts";
 import { closeEpisode, type EpisodeClosureGenerator } from "../core/episode.ts";
 import { initWorld } from "../core/init.ts";
 import { loadModelRecord } from "../core/models.ts";
+import { exportSimulationPackage, importSimulationPackage } from "../core/portable.ts";
 import type { AssetRecord, EntityRecord } from "../core/types.ts";
 import { openRuntimeStore, type RuntimeStore } from "../store/sqlite.ts";
 
@@ -22,6 +23,8 @@ async function main() {
     if (command === "init") return await initCommand(args);
     if (command === "compile") return await compileCommand(args);
     if (command === "start") return await startCommand(args);
+    if (command === "export") return await exportCommand(args);
+    if (command === "import") return await importCommand(args);
     if (command === "actors") return await actorsCommand(args);
     if (command === "access") return await accessCommand(args);
     if (command === "audience") return await audienceCommand(args);
@@ -98,6 +101,48 @@ async function startCommand(args: string[]): Promise<void> {
       scenarioId,
       dbPath: path.resolve(dbPath),
       actors: compiled.entities.filter((entity) => entity.kind !== "artifact").map((entity) => entity.id)
+    },
+    hasFlag(args, "--json")
+  );
+}
+
+async function exportCommand(args: string[]): Promise<void> {
+  const targetDir = args.find((arg) => !arg.startsWith("--"));
+  if (!targetDir) throw new CliError("Usage: doxvelt export <target-dir> [--simulation <id>] [--db <path>] [--json]", 1);
+
+  const simulationId = optionValue(args, "--simulation") || "default";
+  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
+  const result = await exportSimulationPackage({ dbPath, simulationId, targetDir });
+  print(
+    {
+      message: "Exported Doxvelt simulation package.",
+      ...result
+    },
+    hasFlag(args, "--json")
+  );
+}
+
+async function importCommand(args: string[]): Promise<void> {
+  const packageDir = args.find((arg) => !arg.startsWith("--"));
+  if (!packageDir) {
+    throw new CliError("Usage: doxvelt import <package-dir> --world <target-source-dir> --db <target-db-path> [--json]", 1);
+  }
+
+  const targetSourceDir = optionValue(args, "--world");
+  const targetDbPath = optionValue(args, "--db");
+  if (!targetSourceDir || !targetDbPath) {
+    throw new CliError("Use doxvelt import with --world <target-source-dir> and --db <target-db-path>.", 1);
+  }
+
+  const result = await importSimulationPackage({
+    packageDir,
+    targetSourceDir,
+    targetDbPath
+  });
+  print(
+    {
+      message: "Imported Doxvelt simulation package.",
+      ...result
     },
     hasFlag(args, "--json")
   );
@@ -498,6 +543,8 @@ Usage:
   doxvelt init [world-path] [--template executive-interviews] [--json]
   doxvelt compile [world-path] [--json]
   doxvelt start [world-path] --scenario <id> [--simulation <id>] [--db <path>] [--json]
+  doxvelt export <target-dir> [--simulation <id>] [--db <path>] [--json]
+  doxvelt import <package-dir> --world <target-source-dir> --db <target-db-path> [--json]
   doxvelt actors [--simulation <id>] [--db <path>] [--json]
   doxvelt access list [--simulation <id>] [--db <path>] [--json]
   doxvelt access grant <member-id> <container-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
