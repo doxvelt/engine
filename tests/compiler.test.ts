@@ -8,6 +8,7 @@ import { DoxveltGenerationError, describeModelForDiagnostics, generateDoxveltTex
 import { createRetainedBeliefDraft, resolveCurrentBeliefs, weakenRetainedStrength } from "../src/core/beliefs.ts";
 import { compileWorld } from "../src/core/compiler.ts";
 import { assembleActorContext } from "../src/core/context.ts";
+import { advanceTurn, buildActorContext, startSimulation } from "../src/core/engine.ts";
 import { closeEpisode } from "../src/core/episode.ts";
 import { parseFrontmatter } from "../src/core/frontmatter.ts";
 import { ensureFirstImpressions } from "../src/core/impressions.ts";
@@ -311,6 +312,50 @@ test("runtime store saves compiled actors and manual turns", async (context) => 
 
     assert.equal(turn.actorId, "ceo");
     assert.equal(turn.audience.length, 2);
+  } finally {
+    store.close();
+  }
+});
+
+test("core engine starts simulations and advances turns without CLI parsing", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await initWorld(worldPath, { template: "executive-interviews" });
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    const started = await startSimulation({
+      store,
+      worldPath,
+      scenarioId: "executive-interviews"
+    });
+
+    assert.deepEqual(
+      started.actors.map((actor) => actor.id),
+      ["ceo", "coo", "student-team"]
+    );
+
+    const advanced = await advanceTurn({
+      store,
+      actorId: "ceo",
+      manualText: "The board needs a clearer operating picture.",
+      whisperText: "Keep the board panic private.",
+      audience: ["student-team"]
+    });
+
+    assert.deepEqual(advanced.turn.audience, ["ceo", "student-team"]);
+    assert.equal(advanced.consumedStageWhispers.length, 1);
+    assert.match(advanced.context.promptPreview, /Keep the board panic private/);
+
+    const afterTurnContext = buildActorContext({
+      store,
+      actorId: "ceo"
+    });
+
+    assert.match(afterTurnContext.promptPreview, /The board needs a clearer operating picture/);
+    assert.doesNotMatch(afterTurnContext.promptPreview, /Keep the board panic private/);
   } finally {
     store.close();
   }

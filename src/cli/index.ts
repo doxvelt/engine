@@ -4,13 +4,13 @@ import path from "node:path";
 import { DoxveltGenerationError, generateDoxveltObject, generateDoxveltText } from "../ai/generate.ts";
 import { resolveCurrentBeliefs } from "../core/beliefs.ts";
 import { compileWorld } from "../core/compiler.ts";
-import { assembleActorContext, resolveBeliefAccess } from "../core/context.ts";
+import { resolveBeliefAccess } from "../core/context.ts";
+import { advanceTurn, buildActorContext, startSimulation, type StartSimulationResult } from "../core/engine.ts";
 import { closeEpisode, type EpisodeClosureGenerator } from "../core/episode.ts";
-import { ensureFirstImpressions } from "../core/impressions.ts";
 import { initWorld } from "../core/init.ts";
 import { loadModelRecord } from "../core/models.ts";
 import { exportSimulationPackage, importSimulationPackage } from "../core/portable.ts";
-import type { AssetRecord, EntityRecord } from "../core/types.ts";
+import type { ActorContext, EntityRecord } from "../core/types.ts";
 import { openRuntimeStore, type RuntimeStore } from "../store/sqlite.ts";
 
 async function main() {
@@ -85,16 +85,15 @@ async function startCommand(args: string[]): Promise<void> {
   const scenarioId = optionValue(args, "--scenario") || "default";
   const simulationId = optionValue(args, "--simulation") || "default";
   const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const compiled = await compileWorld(worldPath);
-  assertNoCompilerErrors(compiled);
   const store = await openRuntimeStore(dbPath).open();
+  let result: StartSimulationResult;
 
   try {
-    store.saveSimulation({
-      id: simulationId,
-      sourceRoot: compiled.sourceRoot,
-      scenarioId,
-      compiled
+    result = await startSimulation({
+      store,
+      worldPath,
+      simulationId,
+      scenarioId
     });
   } finally {
     store.close();
@@ -106,7 +105,7 @@ async function startCommand(args: string[]): Promise<void> {
       simulationId,
       scenarioId,
       dbPath: path.resolve(dbPath),
-      actors: compiled.entities.filter((entity) => entity.kind !== "artifact").map((entity) => entity.id)
+      actors: result.actors.map((entity) => entity.id)
     },
     hasFlag(args, "--json")
   );
@@ -331,31 +330,10 @@ async function contextCommand(args: string[]): Promise<void> {
     const simulation = store.getSimulation(simulationId);
     if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
 
-    const actor = store.getCompiledRecord<EntityRecord>(simulationId, "entity", actorId);
-    if (!actor) throw new CliError(`Actor not found: ${actorId}`, 1);
-    const observedEntityIds = store.listActiveAudienceIds(simulationId);
-    ensureFirstImpressions({
+    const context = buildActorContext({
       store,
       simulationId,
-      observerId: actorId,
-      observedEntityIds
-    });
-
-    const context = assembleActorContext({
-      simulation,
-      actor,
-      worlds: store.listCompiledRecords<AssetRecord>(simulationId, "world"),
-      scenario: simulation.scenarioId
-        ? store.getCompiledRecord<AssetRecord>(simulationId, "scenario", simulation.scenarioId)
-        : null,
-      formats: store.listCompiledRecords<AssetRecord>(simulationId, "format"),
-    beliefs: store.listBeliefHistory(simulationId),
-    accessLinks: store.listEffectiveAccessLinks(simulationId),
-    surfaces: store.listSurfaces(simulationId),
-    longTermMemories: store.listLongTermMemories(simulationId, actorId),
-    observedEntityIds,
-      turns: store.listAccessibleTurns(simulationId, actorId),
-      stageWhispers: store.listPendingStageWhispers(simulationId, actorId)
+      actorId
     });
 
     print(context, hasFlag(args, "--json"));
@@ -373,45 +351,27 @@ async function turnCommand(args: string[]): Promise<void> {
   const store = await openRuntimeStore(dbPath).open();
 
   try {
-    const audience = resolveTurnAudience({
-      explicitAudience: optionValue(args, "--audience"),
-      actorId,
-      activeAudience: store.listActiveAudienceIds(simulationId)
-    });
-    ensureFirstImpressions({
-      store,
-      simulationId,
-      observerId: actorId,
-      observedEntityIds: audience
-    });
-    const whisperText = optionValue(args, "--whisper");
-    if (whisperText) {
-      store.createStageWhisper({
-        simulationId,
-        targetActorId: actorId,
-        text: whisperText
-      });
-    }
-
     const isAiTurn = hasFlag(args, "--ai");
-    const text = hasFlag(args, "--ai")
-      ? await generateAiTurnText({ args, actorId, simulationId, audience, store })
-      : optionValue(args, "--manual");
-
-    if (!text) {
+    const manualText = optionValue(args, "--manual");
+    if (!manualText && !isAiTurn) {
       throw new CliError("Use --manual <text> or --ai --model <id>.", 1);
     }
 
-    const turn = store.appendTurn({ simulationId, actorId, text, audience });
-    const consumedStageWhispers = store.listStageWhispers(simulationId).filter((whisper) => {
-      return whisper.consumedTurnId === turn.id;
+    const result = await advanceTurn({
+      store,
+      simulationId,
+      actorId,
+      whisperText: optionValue(args, "--whisper") || null,
+      audience: parseAudienceOption(optionValue(args, "--audience")),
+      ...(manualText === undefined ? {} : { manualText }),
+      ...(isAiTurn ? { generateText: async ({ context }: { context: ActorContext }) => generateAiTurnText({ args, actorId, context }) } : {})
     });
 
     print(
       {
         message: `Appended ${isAiTurn ? "AI" : "manual"} turn.`,
-        turn,
-        consumedStageWhispers
+        turn: result.turn,
+        consumedStageWhispers: result.consumedStageWhispers
       },
       hasFlag(args, "--json")
     );
@@ -520,44 +480,17 @@ async function closeEpisodeCommand(args: string[]): Promise<void> {
 async function generateAiTurnText({
   args,
   actorId,
-  simulationId,
-  audience,
-  store
+  context
 }: {
   args: string[];
   actorId: string;
-  simulationId: string;
-  audience: string[];
-  store: RuntimeStore;
+  context: ActorContext;
 }): Promise<string> {
   const modelId = optionValue(args, "--model");
   if (!modelId) throw new CliError("Use --ai with --model <id>.", 1);
 
-  const simulation = store.getSimulation(simulationId);
-  if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
-
-  const actor = store.getCompiledRecord<EntityRecord>(simulationId, "entity", actorId);
-  if (!actor) throw new CliError(`Actor not found: ${actorId}`, 1);
-
-  const model = await loadModelRecord(simulation.sourceRoot, modelId);
+  const model = await loadModelRecord(context.simulation.sourceRoot, modelId);
   if (!model) throw new CliError(`Model not found: ${modelId}`, 1);
-
-  const context = assembleActorContext({
-    simulation,
-    actor,
-    worlds: store.listCompiledRecords<AssetRecord>(simulationId, "world"),
-    scenario: simulation.scenarioId
-      ? store.getCompiledRecord<AssetRecord>(simulationId, "scenario", simulation.scenarioId)
-      : null,
-    formats: store.listCompiledRecords<AssetRecord>(simulationId, "format"),
-    beliefs: store.listBeliefHistory(simulationId),
-    accessLinks: store.listEffectiveAccessLinks(simulationId),
-    surfaces: store.listSurfaces(simulationId),
-    longTermMemories: store.listLongTermMemories(simulationId, actorId),
-    observedEntityIds: audience,
-    turns: store.listAccessibleTurns(simulationId, actorId),
-    stageWhispers: store.listPendingStageWhispers(simulationId, actorId)
-  });
 
   const result = await generateDoxveltText({
     actorId,
@@ -711,19 +644,6 @@ function print(value: unknown, asJson: boolean): void {
   }
 }
 
-function assertNoCompilerErrors(compiled: { diagnostics: Array<{ severity: string; message: string }> }): void {
-  const errors = compiled.diagnostics.filter((diagnostic) => diagnostic.severity === "error");
-  if (errors.length === 0) return;
-
-  throw new CliError(
-    [
-      "Cannot start Doxvelt simulation because compilation produced errors.",
-      ...errors.map((error) => `- ${error.message}`)
-    ].join("\n"),
-    1
-  );
-}
-
 function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
 }
@@ -785,17 +705,8 @@ const VALUE_OPTIONS = new Set([
   "--label"
 ]);
 
-function resolveTurnAudience({
-  explicitAudience,
-  actorId,
-  activeAudience
-}: {
-  explicitAudience: string | undefined;
-  actorId: string;
-  activeAudience: string[];
-}): string[] {
-  const audience = explicitAudience?.split(",").filter(Boolean) || activeAudience;
-  return [...new Set([actorId, ...audience])];
+function parseAudienceOption(value: string | undefined): string[] | null {
+  return value ? value.split(",").filter(Boolean) : null;
 }
 
 class CliError extends Error {
