@@ -59,6 +59,8 @@ MVP behavior:
 - It is visible only for that actor's next turn.
 - It is hidden from other actors.
 - It is not automatically remembered in future turns.
+- It is consumed when the target actor's turn is appended.
+- It may be stored briefly for audit/debugging, including which turn consumed it.
 
 Future behavior may support ephemeral versus permanent whispers, but that is out of scope for MVP.
 

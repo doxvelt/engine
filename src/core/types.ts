@@ -179,6 +179,16 @@ export type TranscriptTurn = {
   createdAt: string;
 };
 
+export type StageWhisperRecord = {
+  id: number | bigint;
+  simulationId: string;
+  targetActorId: string;
+  text: string;
+  consumedTurnId: number | bigint | null;
+  createdAt: string;
+  consumedAt: string | null;
+};
+
 export type EpisodeRecord = {
   id: number | bigint;
   simulationId: string;
@@ -231,6 +241,7 @@ export type ActorContext = {
     beliefs: SubjectiveBeliefRecord[];
     beliefAccess: SubjectiveBeliefAccess[];
     transcript: TranscriptTurn[];
+    stageWhispers: StageWhisperRecord[];
   };
   diagnostics: DiagnosticRecord[];
   promptPreview: string;

@@ -12,6 +12,7 @@ import type {
   ExtractedBeliefRecord,
   RuntimeAccessEventRecord,
   SimulationRecord,
+  StageWhisperRecord,
   TranscriptTurn
 } from "../core/types.ts";
 
@@ -97,6 +98,16 @@ export class RuntimeStore {
         turn_id INTEGER,
         episode_id INTEGER,
         created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS stage_whispers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        simulation_id TEXT NOT NULL,
+        target_actor_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        consumed_turn_id INTEGER,
+        created_at TEXT NOT NULL,
+        consumed_at TEXT
       );
     `);
     this.ensureColumn("transcript_turns", "episode_id", "INTEGER");
@@ -366,6 +377,92 @@ export class RuntimeStore {
     return this.listTurns({ simulationId, unclosedOnly: true });
   }
 
+  createStageWhisper({
+    simulationId = "default",
+    targetActorId,
+    text
+  }: {
+    simulationId?: string;
+    targetActorId: string;
+    text: string;
+  }): StageWhisperRecord {
+    const createdAt = new Date().toISOString();
+    const result = this.requireDb()
+      .prepare(`
+        INSERT INTO stage_whispers (simulation_id, target_actor_id, text, created_at)
+        VALUES (?, ?, ?, ?)
+      `)
+      .run(simulationId, targetActorId, text, createdAt);
+
+    return {
+      id: result.lastInsertRowid,
+      simulationId,
+      targetActorId,
+      text,
+      consumedTurnId: null,
+      createdAt,
+      consumedAt: null
+    };
+  }
+
+  listPendingStageWhispers(simulationId = "default", targetActorId: string): StageWhisperRecord[] {
+    const rows = this.requireDb()
+      .prepare(`
+        SELECT id, simulation_id, target_actor_id, text, consumed_turn_id, created_at, consumed_at
+        FROM stage_whispers
+        WHERE simulation_id = ?
+          AND target_actor_id = ?
+          AND consumed_turn_id IS NULL
+        ORDER BY id
+      `)
+      .all(simulationId, targetActorId);
+
+    return rows.map(rowToStageWhisper);
+  }
+
+  listStageWhispers(simulationId = "default"): StageWhisperRecord[] {
+    const rows = this.requireDb()
+      .prepare(`
+        SELECT id, simulation_id, target_actor_id, text, consumed_turn_id, created_at, consumed_at
+        FROM stage_whispers
+        WHERE simulation_id = ?
+        ORDER BY id
+      `)
+      .all(simulationId);
+
+    return rows.map(rowToStageWhisper);
+  }
+
+  consumePendingStageWhispers({
+    simulationId = "default",
+    targetActorId,
+    turnId
+  }: {
+    simulationId?: string;
+    targetActorId: string;
+    turnId: number | bigint;
+  }): StageWhisperRecord[] {
+    const pending = this.listPendingStageWhispers(simulationId, targetActorId);
+    if (pending.length === 0) return [];
+
+    const consumedAt = new Date().toISOString();
+    const update = this.requireDb().prepare(`
+      UPDATE stage_whispers
+      SET consumed_turn_id = ?, consumed_at = ?
+      WHERE simulation_id = ? AND id = ? AND consumed_turn_id IS NULL
+    `);
+
+    for (const whisper of pending) {
+      update.run(turnId, consumedAt, simulationId, whisper.id);
+    }
+
+    return pending.map((whisper) => ({
+      ...whisper,
+      consumedTurnId: turnId,
+      consumedAt
+    }));
+  }
+
   markTurnsClosed({
     simulationId = "default",
     episodeId,
@@ -424,12 +521,14 @@ export class RuntimeStore {
     simulationId = "default",
     actorId,
     text,
-    audience = []
+    audience = [],
+    consumeStageWhispers = true
   }: {
     simulationId?: string;
     actorId: string;
     text: string;
     audience?: string[];
+    consumeStageWhispers?: boolean;
   }): TranscriptTurn {
     const createdAt = new Date().toISOString();
     const result = this.requireDb()
@@ -439,7 +538,7 @@ export class RuntimeStore {
       `)
       .run(simulationId, actorId, text, JSON.stringify(audience), createdAt);
 
-    return {
+    const turn = {
       id: result.lastInsertRowid,
       simulationId,
       actorId,
@@ -448,6 +547,16 @@ export class RuntimeStore {
       episodeId: null,
       createdAt
     };
+
+    if (consumeStageWhispers) {
+      this.consumePendingStageWhispers({
+        simulationId,
+        targetActorId: actorId,
+        turnId: turn.id
+      });
+    }
+
+    return turn;
   }
 
   createEpisode({
@@ -647,4 +756,16 @@ function runtimeAccessAction(value: unknown): RuntimeAccessEventRecord["action"]
 function runtimeAccessMode(value: unknown): RuntimeAccessEventRecord["mode"] {
   if (value === "member") return value;
   throw new Error(`Invalid runtime access mode: ${String(value)}`);
+}
+
+function rowToStageWhisper(row: Record<string, unknown>): StageWhisperRecord {
+  return {
+    id: row.id as number | bigint,
+    simulationId: row.simulation_id as string,
+    targetActorId: row.target_actor_id as string,
+    text: row.text as string,
+    consumedTurnId: row.consumed_turn_id as number | bigint | null,
+    createdAt: row.created_at as string,
+    consumedAt: row.consumed_at as string | null
+  };
 }

@@ -142,6 +142,7 @@ function buildClosureContext({
     formats: store.listCompiledRecords<AssetRecord>(simulation.id, "format"),
     beliefs: store.listBeliefHistory(simulation.id),
     accessLinks: store.listEffectiveAccessLinks(simulation.id),
+    stageWhispers: store.listPendingStageWhispers(simulation.id, actor.id),
     turns
   });
 }

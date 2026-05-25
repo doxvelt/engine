@@ -24,6 +24,7 @@ async function main() {
     if (command === "start") return await startCommand(args);
     if (command === "actors") return await actorsCommand(args);
     if (command === "access") return await accessCommand(args);
+    if (command === "whisper") return await whisperCommand(args);
     if (command === "context") return await contextCommand(args);
     if (command === "turn") return await turnCommand(args);
     if (command === "close-episode") return await closeEpisodeCommand(args);
@@ -167,6 +168,51 @@ async function accessCommand(args: string[]): Promise<void> {
   }
 }
 
+async function whisperCommand(args: string[]): Promise<void> {
+  const actionOrActor = args.find((arg) => !arg.startsWith("--"));
+  const simulationId = optionValue(args, "--simulation") || "default";
+  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    const simulation = store.getSimulation(simulationId);
+    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
+
+    if (actionOrActor === "list") {
+      print(
+        {
+          simulationId,
+          stageWhispers: store.listStageWhispers(simulationId)
+        },
+        hasFlag(args, "--json")
+      );
+      return;
+    }
+
+    const targetActorId = actionOrActor;
+    const text = optionValue(args, "--text");
+    if (!targetActorId || !text) {
+      throw new CliError("Usage: doxvelt whisper <actor-id> --text <text> [--simulation <id>] [--db <path>] [--json]", 1);
+    }
+
+    const whisper = store.createStageWhisper({
+      simulationId,
+      targetActorId,
+      text
+    });
+
+    print(
+      {
+        message: `Stored private stage whisper for @${targetActorId}.`,
+        whisper
+      },
+      hasFlag(args, "--json")
+    );
+  } finally {
+    store.close();
+  }
+}
+
 async function contextCommand(args: string[]): Promise<void> {
   const actorId = args.find((arg) => !arg.startsWith("--"));
   if (!actorId) throw new CliError("Usage: doxvelt context <actor-id> [--json]", 1);
@@ -192,7 +238,8 @@ async function contextCommand(args: string[]): Promise<void> {
       formats: store.listCompiledRecords<AssetRecord>(simulationId, "format"),
       beliefs: store.listBeliefs(simulationId),
       accessLinks: store.listEffectiveAccessLinks(simulationId),
-      turns: store.listAccessibleTurns(simulationId, actorId)
+      turns: store.listAccessibleTurns(simulationId, actorId),
+      stageWhispers: store.listPendingStageWhispers(simulationId, actorId)
     });
 
     print(context, hasFlag(args, "--json"));
@@ -211,6 +258,15 @@ async function turnCommand(args: string[]): Promise<void> {
   const store = await openRuntimeStore(dbPath).open();
 
   try {
+    const whisperText = optionValue(args, "--whisper");
+    if (whisperText) {
+      store.createStageWhisper({
+        simulationId,
+        targetActorId: actorId,
+        text: whisperText
+      });
+    }
+
     const isAiTurn = hasFlag(args, "--ai");
     const text = hasFlag(args, "--ai")
       ? await generateAiTurnText({ args, actorId, simulationId, store })
@@ -221,7 +277,18 @@ async function turnCommand(args: string[]): Promise<void> {
     }
 
     const turn = store.appendTurn({ simulationId, actorId, text, audience });
-    print({ message: `Appended ${isAiTurn ? "AI" : "manual"} turn.`, turn }, hasFlag(args, "--json"));
+    const consumedStageWhispers = store.listStageWhispers(simulationId).filter((whisper) => {
+      return whisper.consumedTurnId === turn.id;
+    });
+
+    print(
+      {
+        message: `Appended ${isAiTurn ? "AI" : "manual"} turn.`,
+        turn,
+        consumedStageWhispers
+      },
+      hasFlag(args, "--json")
+    );
   } finally {
     store.close();
   }
@@ -282,7 +349,8 @@ async function generateAiTurnText({
     formats: store.listCompiledRecords<AssetRecord>(simulationId, "format"),
     beliefs: store.listBeliefs(simulationId),
     accessLinks: store.listEffectiveAccessLinks(simulationId),
-    turns: store.listAccessibleTurns(simulationId, actorId)
+    turns: store.listAccessibleTurns(simulationId, actorId),
+    stageWhispers: store.listPendingStageWhispers(simulationId, actorId)
   });
 
   const result = await generateDoxveltText({
@@ -375,9 +443,11 @@ Usage:
   doxvelt access list [--simulation <id>] [--db <path>] [--json]
   doxvelt access grant <member-id> <container-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
   doxvelt access revoke <member-id> <container-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
+  doxvelt whisper <actor-id> --text <text> [--simulation <id>] [--db <path>] [--json]
+  doxvelt whisper list [--simulation <id>] [--db <path>] [--json]
   doxvelt context <actor-id> [--simulation <id>] [--db <path>] [--json]
-  doxvelt turn <actor-id> --manual <text> [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
-  doxvelt turn <actor-id> --ai --model <id> [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
+  doxvelt turn <actor-id> --manual <text> [--whisper <text>] [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
+  doxvelt turn <actor-id> --ai --model <id> [--whisper <text>] [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
   doxvelt close-episode [--label <text>] [--simulation <id>] [--db <path>] [--json]
   doxvelt close-episode --ai --model <id> [--label <text>] [--simulation <id>] [--db <path>] [--json]
 `);

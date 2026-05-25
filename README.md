@@ -103,6 +103,14 @@ bun run doxvelt -- context ceo --json
 bun run doxvelt -- close-episode --label "Opening interviews" --json
 ```
 
+Stage whispers are private context for one actor's next turn only:
+
+```sh
+bun run doxvelt -- whisper ceo --text "Do not reveal the board panic yet." --json
+bun run doxvelt -- turn ceo --manual "We should stay focused on the facts." --json
+bun run doxvelt -- turn coo --ai --model local-openai-compatible --whisper "Deflect supplier questions." --json
+```
+
 Runtime access changes are explicit events. They change effective context access without editing authored source files:
 
 ```sh

@@ -575,6 +575,141 @@ test("CLI access command records and lists runtime access events", async (contex
   );
 });
 
+test("stage whispers are private one-turn context", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await initWorld(worldPath, { template: "executive-interviews" });
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "executive-interviews",
+      compiled
+    });
+
+    store.createStageWhisper({
+      simulationId: "default",
+      targetActorId: "ceo",
+      text: "Do not reveal the board panic yet."
+    });
+
+    const simulation = store.getSimulation("default");
+    const ceo = store.getCompiledRecord<EntityRecord>("default", "entity", "ceo");
+    const coo = store.getCompiledRecord<EntityRecord>("default", "entity", "coo");
+    assert.ok(simulation);
+    assert.ok(ceo);
+    assert.ok(coo);
+
+    const ceoContext = assembleActorContext({
+      simulation,
+      actor: ceo,
+      worlds: [],
+      scenario: store.getCompiledRecord("default", "scenario", "executive-interviews"),
+      formats: [],
+      beliefs: store.listBeliefs("default"),
+      stageWhispers: store.listPendingStageWhispers("default", "ceo"),
+      turns: []
+    });
+
+    const cooContext = assembleActorContext({
+      simulation,
+      actor: coo,
+      worlds: [],
+      scenario: store.getCompiledRecord("default", "scenario", "executive-interviews"),
+      formats: [],
+      beliefs: store.listBeliefs("default"),
+      stageWhispers: store.listPendingStageWhispers("default", "coo"),
+      turns: []
+    });
+
+    assert.match(ceoContext.promptPreview, /Do not reveal the board panic yet/);
+    assert.doesNotMatch(cooContext.promptPreview, /Do not reveal the board panic yet/);
+
+    const turn = store.appendTurn({
+      simulationId: "default",
+      actorId: "ceo",
+      text: "I will be measured about what I say.",
+      audience: ["ceo", "student-team"]
+    });
+
+    assert.equal(store.listPendingStageWhispers("default", "ceo").length, 0);
+    assert.equal(store.listStageWhispers("default").at(0)?.consumedTurnId, turn.id);
+  } finally {
+    store.close();
+  }
+});
+
+test("CLI whisper command stores and turn command consumes stage whispers", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await initWorld(worldPath, { template: "executive-interviews" });
+  const compiled = await compileWorld(worldPath);
+  const store = await openRuntimeStore(dbPath).open();
+
+  try {
+    store.saveSimulation({
+      id: "default",
+      sourceRoot: compiled.sourceRoot,
+      scenarioId: "executive-interviews",
+      compiled
+    });
+  } finally {
+    store.close();
+  }
+
+  const stored = await runCli([
+    "whisper",
+    "ceo",
+    "--text",
+    "Keep the board panic private.",
+    "--db",
+    dbPath,
+    "--json"
+  ]);
+
+  assert.equal(stored.whisper.targetActorId, "ceo");
+
+  const contextBeforeTurn = await runCli(["context", "ceo", "--db", dbPath, "--json"]);
+  assert.match(contextBeforeTurn.promptPreview, /Keep the board panic private/);
+
+  const turn = await runCli([
+    "turn",
+    "ceo",
+    "--manual",
+    "I will keep the room calm.",
+    "--db",
+    dbPath,
+    "--json"
+  ]);
+
+  assert.equal(turn.consumedStageWhispers.length, 1);
+
+  const contextAfterTurn = await runCli(["context", "ceo", "--db", dbPath, "--json"]);
+  assert.doesNotMatch(contextAfterTurn.promptPreview, /Keep the board panic private/);
+
+  const inlineTurn = await runCli([
+    "turn",
+    "coo",
+    "--manual",
+    "I will not mention supplier risk yet.",
+    "--whisper",
+    "Deflect supplier questions.",
+    "--db",
+    dbPath,
+    "--json"
+  ]);
+
+  assert.equal(inlineTurn.consumedStageWhispers.length, 1);
+  assert.equal(inlineTurn.consumedStageWhispers.at(0)?.text, "Deflect supplier questions.");
+});
+
 test("episode closure writes deterministic memories from accessible turns", async (context) => {
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");

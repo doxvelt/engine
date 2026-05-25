@@ -5,6 +5,7 @@ import type {
   DiagnosticRecord,
   EntityRecord,
   SimulationRecord,
+  StageWhisperRecord,
   SubjectiveBeliefAccess,
   SubjectiveBeliefRecord,
   TranscriptTurn
@@ -19,6 +20,7 @@ export function assembleActorContext({
   beliefs = [],
   accessLinks = [],
   turns = [],
+  stageWhispers = [],
   diagnostics = []
 }: {
   simulation: SimulationRecord;
@@ -29,6 +31,7 @@ export function assembleActorContext({
   beliefs?: SubjectiveBeliefRecord[];
   accessLinks?: AccessLinkRecord[];
   turns?: TranscriptTurn[];
+  stageWhispers?: StageWhisperRecord[];
   diagnostics?: DiagnosticRecord[];
 }): ActorContext {
   const accessibleWorlds = worlds.map((world) => filterAssetForActor(world, actor));
@@ -50,7 +53,8 @@ export function assembleActorContext({
     subjective: {
       beliefs: beliefAccess.map((access) => access.belief),
       beliefAccess,
-      transcript: turns
+      transcript: turns,
+      stageWhispers
     },
     diagnostics,
     promptPreview: buildPromptPreview({
@@ -59,7 +63,8 @@ export function assembleActorContext({
       scenario: accessibleScenario,
       formats,
       beliefAccess,
-      turns
+      turns,
+      stageWhispers
     })
   };
 }
@@ -70,7 +75,8 @@ function buildPromptPreview({
   scenario,
   formats,
   beliefAccess,
-  turns
+  turns,
+  stageWhispers
 }: {
   actor: EntityRecord;
   worlds: AssetRecord[];
@@ -78,6 +84,7 @@ function buildPromptPreview({
   formats: AssetRecord[];
   beliefAccess: SubjectiveBeliefAccess[];
   turns: TranscriptTurn[];
+  stageWhispers: StageWhisperRecord[];
 }): string {
   const sections = [
     `# Actor\n${actor.name} (${actor.id}, ${actor.kind})`,
@@ -85,6 +92,7 @@ function buildPromptPreview({
     scenario ? renderAsset("Scenario", scenario) : "# Scenario\nNo scenario selected.",
     renderAssets("Format", formats),
     renderBeliefs(beliefAccess),
+    renderStageWhispers(stageWhispers),
     renderTranscript(turns)
   ];
 
@@ -185,6 +193,13 @@ function renderBeliefs(beliefAccess: SubjectiveBeliefAccess[]): string {
 
 function renderAccessPath(accessPath: string[]): string {
   return accessPath.map((holder) => `@${holder}`).join(" -> ");
+}
+
+function renderStageWhispers(stageWhispers: StageWhisperRecord[]): string {
+  if (stageWhispers.length === 0) return "# Private Stage Whispers\nNone.";
+
+  const lines = stageWhispers.map((whisper) => `- ${whisper.text}`);
+  return `# Private Stage Whispers\n${lines.join("\n")}`;
 }
 
 function renderTranscript(turns: TranscriptTurn[]): string {
