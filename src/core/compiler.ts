@@ -158,6 +158,47 @@ function validateRecords(records: CompiledWorld): void {
       sourceSpans: spans
     });
   }
+
+  validateMembershipLoops(records);
+}
+
+function validateMembershipLoops(records: CompiledWorld): void {
+  const linksByPair = new Map<string, AccessLinkRecord[]>();
+
+  for (const link of records.accessLinks) {
+    const key = accessPairKey(link.member, link.container);
+    linksByPair.set(key, [...(linksByPair.get(key) || []), link]);
+
+    if (link.member === link.container) {
+      records.diagnostics.push({
+        severity: "error",
+        code: "membership_self_loop",
+        message: `Membership access link cannot make @${link.member} a member of itself.`,
+        sourceSpans: [link.sourceSpan]
+      });
+    }
+  }
+
+  const reported = new Set<string>();
+  for (const link of records.accessLinks) {
+    const reverse = linksByPair.get(accessPairKey(link.container, link.member));
+    if (!reverse || reverse.length === 0) continue;
+
+    const reportKey = [link.member, link.container].sort().join(":");
+    if (reported.has(reportKey)) continue;
+    reported.add(reportKey);
+
+    records.diagnostics.push({
+      severity: "error",
+      code: "membership_direct_loop",
+      message: `Membership access loop is invalid: @${link.member} and @${link.container} grant access to each other.`,
+      sourceSpans: [link.sourceSpan, ...reverse.map((reverseLink) => reverseLink.sourceSpan)]
+    });
+  }
+}
+
+function accessPairKey(member: string, container: string): string {
+  return `${member}->${container}`;
 }
 
 function stripTags(text: string): string {

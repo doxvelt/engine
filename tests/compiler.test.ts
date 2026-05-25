@@ -79,6 +79,63 @@ test("compiled example source is inspectable without running init", async () => 
   assert.equal(compiled.scenarios.at(0)?.id, "executive-interviews");
 });
 
+test("compiler reports direct membership access loops", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+
+  await writeMembershipWorld(worldPath);
+  await writeFile(
+    path.join(worldPath, "connections", "inner-circle-alice.md"),
+    `---
+id: inner-circle-alice
+kind: connection
+entities: [inner-circle, alice]
+---
+
+This connection gives @inner-circle access to @alice knowledge. :access:member
+`
+  );
+  await writeFile(
+    path.join(worldPath, "connections", "alice-self.md"),
+    `---
+id: alice-self
+kind: connection
+entities: [alice]
+---
+
+This connection gives @alice access to @alice knowledge. :access:member
+`
+  );
+
+  const compiled = await compileWorld(worldPath);
+  assert.ok(compiled.diagnostics.some((diagnostic) => diagnostic.code === "membership_direct_loop"));
+  assert.ok(compiled.diagnostics.some((diagnostic) => diagnostic.code === "membership_self_loop"));
+});
+
+test("CLI start rejects compiled worlds with membership access loops", async (context) => {
+  const root = await createRepoLocalRunRoot(context);
+  const worldPath = path.join(root, "world");
+  const dbPath = path.join(root, "runtime.sqlite");
+
+  await writeMembershipWorld(worldPath);
+  await writeFile(
+    path.join(worldPath, "connections", "inner-circle-alice.md"),
+    `---
+id: inner-circle-alice
+kind: connection
+entities: [inner-circle, alice]
+---
+
+This connection gives @inner-circle access to @alice knowledge. :access:member
+`
+  );
+
+  await assert.rejects(
+    () => runCli(["start", worldPath, "--scenario", "membership-room", "--db", dbPath, "--json"]),
+    /Membership access loop is invalid/
+  );
+});
+
 test("frontmatter parser accepts yaml-only files with closing fence at EOF", () => {
   const parsed = parseFrontmatter("---\nid: local\nprovider: openai-compatible\n---");
 

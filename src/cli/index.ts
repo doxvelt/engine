@@ -86,6 +86,7 @@ async function startCommand(args: string[]): Promise<void> {
   const simulationId = optionValue(args, "--simulation") || "default";
   const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
   const compiled = await compileWorld(worldPath);
+  assertNoCompilerErrors(compiled);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -679,6 +680,19 @@ function print(value: unknown, asJson: boolean): void {
   if (!value.message && !value.root && !value.dbPath && !value.actors) {
     console.log(JSON.stringify(value, null, 2));
   }
+}
+
+function assertNoCompilerErrors(compiled: { diagnostics: Array<{ severity: string; message: string }> }): void {
+  const errors = compiled.diagnostics.filter((diagnostic) => diagnostic.severity === "error");
+  if (errors.length === 0) return;
+
+  throw new CliError(
+    [
+      "Cannot start Doxvelt simulation because compilation produced errors.",
+      ...errors.map((error) => `- ${error.message}`)
+    ].join("\n"),
+    1
+  );
 }
 
 function hasFlag(args: string[], flag: string): boolean {
