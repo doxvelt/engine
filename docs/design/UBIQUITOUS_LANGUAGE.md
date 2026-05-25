@@ -36,13 +36,19 @@ MVP strength scale:
 
 A provenance record describing how a belief entered or changed in a holder's context.
 
-Examples: held, accessed through membership, observed, told, inferred, briefed, read, stolen, generated, joined.
+Examples: held, accessed through membership, retained after access loss, observed, told, inferred, briefed, read, stolen, generated, joined.
 
 ## Belief Provenance
 
 The source path that explains why a belief is present in an actor's current context.
 
 Provenance does not mean the actor personally owns or trusts the belief. A belief held by an affiliation can be accessible to a member while still remaining the affiliation's belief.
+
+## Retained Belief
+
+A weakened belief an actor keeps after losing access to a belief source.
+
+Retained beliefs are not live access. They are the actor's stale or memory-shaped stance after the access path is gone.
 
 ## Belief Holder
 

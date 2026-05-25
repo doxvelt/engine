@@ -155,6 +155,8 @@ Episode closure uses this flow:
 
 The engine extracts beliefs from memories rather than directly from the transcript because the goal is subjective, colored, distorted, filtered, or biased belief state.
 
+If an actor loses access to a belief source during an episode, that lost access does not immediately write a permanent belief. At episode closure, the actor's memory and belief extraction may persist a weakened retained belief. Current access and retained knowledge remain separate: current access is live source context, while retained knowledge is the actor's stale or memory-shaped stance after the access path is gone.
+
 For MVP:
 
 - Belief extraction is automatic.

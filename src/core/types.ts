@@ -103,6 +103,7 @@ export type AccessLinkRecord = {
 export type BeliefProvenanceMode =
   | "held"
   | "accessed_through_membership"
+  | "retained_after_access_loss"
   | "observed"
   | "experienced"
   | "inferred"

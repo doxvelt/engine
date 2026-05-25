@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { DoxveltGenerationError, describeModelForDiagnostics, generateDoxveltText } from "../src/ai/generate.ts";
+import { createRetainedBeliefDraft, weakenRetainedStrength } from "../src/core/beliefs.ts";
 import { compileWorld } from "../src/core/compiler.ts";
 import { assembleActorContext } from "../src/core/context.ts";
 import { closeEpisode } from "../src/core/episode.ts";
@@ -374,6 +375,36 @@ test("actor context includes affiliation beliefs through transitive membership a
   } finally {
     store.close();
   }
+});
+
+test("retained beliefs weaken when membership access is lost", () => {
+  assert.equal(weakenRetainedStrength(3), 1);
+  assert.equal(weakenRetainedStrength(1), 1);
+  assert.equal(weakenRetainedStrength(0), 0);
+  assert.equal(weakenRetainedStrength(-1), -1);
+  assert.equal(weakenRetainedStrength(-3), -1);
+
+  const sourceBelief = beliefRecord("mafia", "@mafia treats the docks as controlled territory.");
+  const retained = createRetainedBeliefDraft({
+    holder: "alice",
+    sourceBelief,
+    previousProvenance: {
+      mode: "accessed_through_membership",
+      holder: "alice",
+      sourceHolder: "mafia",
+      accessPath: ["alice", "inner-circle", "mafia"]
+    }
+  });
+
+  assert.equal(retained.holder, "alice");
+  assert.equal(retained.strength, 1);
+  assert.equal(retained.propositionText, sourceBelief.propositionText);
+  assert.deepEqual(retained.provenance, {
+    mode: "retained_after_access_loss",
+    holder: "alice",
+    sourceHolder: "mafia",
+    accessPath: ["alice", "inner-circle", "mafia"]
+  });
 });
 
 test("episode closure writes deterministic memories from accessible turns", async (context) => {

@@ -128,6 +128,7 @@ Possible modes:
 
 - `held`
 - `accessed_through_membership`
+- `retained_after_access_loss`
 - `observed`
 - `experienced`
 - `inferred`
@@ -218,6 +219,22 @@ An actor's turn context may include:
 - Contradictory beliefs, left unresolved for the agent to handle.
 
 Source-linked beliefs should carry provenance information. For example: "held by Mafia; accessed through your affiliation path." The source may affect how much the agent trusts, uses, questions, or internalizes the belief.
+
+## Access Loss And Retention
+
+Losing access to a belief source removes current access to that holder's live beliefs. It does not erase what the actor already encountered.
+
+For MVP, retained knowledge should be created only through episode closure, consistent with the rest of belief persistence. If an actor had access to a source-linked belief during the episode and then loses that access, closure may produce a retained belief for the actor with provenance `retained_after_access_loss`.
+
+Retained beliefs automatically weaken the original stance while preserving direction:
+
+- `+3` becomes `+1`
+- `+1` remains `+1`
+- `0` remains `0`
+- `-1` remains `-1`
+- `-3` becomes `-1`
+
+This keeps prior knowledge present but marks it as stale, indirect, or less certain than live access.
 
 ## Author Visibility
 
