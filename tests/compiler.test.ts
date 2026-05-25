@@ -366,8 +366,8 @@ test("local API exposes the core play loop without shelling out to the CLI", asy
   const root = await createRepoLocalRunRoot(context);
   const worldPath = path.join(root, "world");
   const dbPath = path.join(root, "runtime.sqlite");
+  const packageDir = path.join(root, "package");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
   const server = createLocalApiServer({ dbPath });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   context.after(async () => {
@@ -382,6 +382,21 @@ test("local API exposes the core play loop without shelling out to the CLI", asy
   const address = server.address();
   assert.ok(address && typeof address === "object");
   const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  const initialized = await apiJson(`${baseUrl}/source/init`, {
+    method: "POST",
+    body: {
+      worldPath,
+      template: "executive-interviews"
+    }
+  });
+  assert.equal(initialized.root, path.resolve(worldPath));
+
+  const compiled = await apiJson(`${baseUrl}/source/compile`, {
+    method: "POST",
+    body: { worldPath }
+  });
+  assert.equal(compiled.entities.length, 3);
 
   const started = await apiJson(`${baseUrl}/simulations/start`, {
     method: "POST",
@@ -467,6 +482,12 @@ test("local API exposes the core play loop without shelling out to the CLI", asy
 
   const memories = await apiJson(`${baseUrl}/simulations/default/memories`);
   assert.ok(memories.memories.length > 0);
+
+  const exported = await apiJson(`${baseUrl}/packages/export`, {
+    method: "POST",
+    body: { targetDir: packageDir }
+  });
+  assert.equal(exported.manifest.simulationId, "default");
 });
 
 test("actor context includes subjective beliefs and accessible transcript only", async (context) => {

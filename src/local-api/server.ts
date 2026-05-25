@@ -1,10 +1,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { DoxveltGenerationError, generateDoxveltText } from "../ai/generate.ts";
 import { resolveCurrentBeliefs } from "../core/beliefs.ts";
+import { compileWorld } from "../core/compiler.ts";
 import { resolveBeliefAccess } from "../core/context.ts";
 import { advanceTurn, buildActorContext, startSimulation } from "../core/engine.ts";
 import { closeEpisode } from "../core/episode.ts";
+import { initWorld } from "../core/init.ts";
 import { loadModelRecord } from "../core/models.ts";
+import { exportSimulationPackage, importSimulationPackage } from "../core/portable.ts";
 import type { EntityRecord } from "../core/types.ts";
 import { openRuntimeStore, type RuntimeStore } from "../store/sqlite.ts";
 
@@ -34,6 +37,54 @@ export async function handleLocalApiRequest(
 
   if (method === "GET" && url.pathname === "/health") {
     sendJson(response, 200, { ok: true });
+    return;
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "source" && parts[1] === "init") {
+    const body = await readJsonBody(request);
+    const worldPath = requireString(body, "worldPath");
+    const template = optionalString(body, "template") || null;
+    sendJson(response, 200, await initWorld(worldPath, { template }));
+    return;
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "source" && parts[1] === "compile") {
+    const body = await readJsonBody(request);
+    const worldPath = requireString(body, "worldPath");
+    sendJson(response, 200, await compileWorld(worldPath));
+    return;
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "packages" && parts[1] === "export") {
+    const body = await readJsonBody(request);
+    const targetDir = requireString(body, "targetDir");
+    const simulationId = optionalString(body, "simulationId") || "default";
+    sendJson(
+      response,
+      200,
+      await exportSimulationPackage({
+        dbPath: options.dbPath || DEFAULT_DB_PATH,
+        simulationId,
+        targetDir
+      })
+    );
+    return;
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "packages" && parts[1] === "import") {
+    const body = await readJsonBody(request);
+    const packageDir = requireString(body, "packageDir");
+    const targetSourceDir = requireString(body, "targetSourceDir");
+    const targetDbPath = optionalString(body, "targetDbPath") || options.dbPath || DEFAULT_DB_PATH;
+    sendJson(
+      response,
+      200,
+      await importSimulationPackage({
+        packageDir,
+        targetSourceDir,
+        targetDbPath
+      })
+    );
     return;
   }
 
