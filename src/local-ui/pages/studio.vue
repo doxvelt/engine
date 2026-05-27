@@ -48,7 +48,7 @@
               :key="file.path"
               class="grid w-full grid-cols-[1fr_auto] gap-2 rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-slate-100"
               :class="file.path === selectedSourcePath ? 'bg-slate-100 text-slate-950 ring-1 ring-slate-200 hover:bg-slate-100' : 'text-slate-700'"
-              @click="openSourceFile(file.path)"
+              @click="openSourceFile(file.path, { clearCue: true })"
             >
               <span class="min-w-0 truncate">{{ sourceFileLabel(file) }}</span>
               <span class="text-xs text-slate-500">{{ sourceKindLabel(file) }}</span>
@@ -73,7 +73,14 @@
         </UButton>
       </div>
       <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_320px] gap-0">
-        <div class="min-h-0 bg-slate-50 p-3">
+        <div ref="sourceEditorContainer" class="min-h-0 bg-slate-50 p-3">
+          <div v-if="targetSourceSpan" class="mb-2 rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-950">
+            <div class="mb-1 flex items-center justify-between gap-2">
+              <span class="font-semibold">Line {{ targetSourceSpan.line }}</span>
+              <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="xs" square @click="clearSourceLineCue" />
+            </div>
+            <p class="line-clamp-2 leading-5">{{ targetSourceSpan.quote }}</p>
+          </div>
           <UTextarea
             v-model="sourceText"
             :rows="28"
@@ -84,7 +91,8 @@
           />
         </div>
         <aside class="min-h-0 overflow-y-auto border-l border-slate-200 bg-white p-3">
-          <div class="space-y-3">
+          <UTabs v-model="inspectorTab" :items="inspectorTabs" size="sm" class="mb-3" />
+          <div v-if="inspectorTab === 'guide'" class="space-y-3">
             <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-2 p-3 sm:p-3' }">
               <h3 class="text-xs font-semibold uppercase text-slate-500">{{ selectedSourceHelp.title }}</h3>
               <div class="space-y-2 text-sm text-slate-700">
@@ -97,24 +105,39 @@
                 <UBadge v-for="tag in studioTags" :key="tag" color="neutral" variant="soft" size="sm">{{ tag }}</UBadge>
               </div>
             </UCard>
-            <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-2 p-3 sm:p-3' }">
-              <h3 class="text-xs font-semibold uppercase text-slate-500">Source Health</h3>
-              <div class="grid grid-cols-2 gap-2 text-sm">
-                <div class="rounded-md bg-slate-50 p-2 ring-1 ring-slate-200">
-                  <p class="text-xs uppercase text-slate-500">Status</p>
-                  <p class="font-medium">{{ validationStatus }}</p>
-                </div>
-                <div class="rounded-md bg-slate-50 p-2 ring-1 ring-slate-200">
-                  <p class="text-xs uppercase text-slate-500">Models</p>
-                  <p class="font-medium">{{ models.length }}</p>
+          </div>
+          <div v-else class="space-y-3">
+            <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-3 p-3 sm:p-3' }">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="text-xs font-semibold uppercase text-slate-500">Source Health</h3>
+                <UBadge :color="validationBadgeColor" variant="subtle" size="sm">{{ validationStatus }}</UBadge>
+              </div>
+              <USelect v-model="fabricScope" :items="fabricScopeItems" icon="i-lucide-filter" size="sm" class="w-full" />
+              <USelect
+                v-if="fabricScope === 'entity'"
+                v-model="selectedFabricEntityId"
+                :items="fabricEntityItems"
+                icon="i-lucide-user-round"
+                size="sm"
+                class="w-full"
+                placeholder="Select entity"
+              />
+              <div class="grid grid-cols-3 gap-2 text-sm">
+                <div v-for="metric in fabricMetrics" :key="metric.label" class="rounded-md bg-slate-50 p-2 ring-1 ring-slate-200">
+                  <p class="text-[10px] uppercase text-slate-500">{{ metric.label }}</p>
+                  <p class="font-medium">{{ metric.value }}</p>
                 </div>
               </div>
-              <div class="max-h-64 space-y-2 overflow-auto pr-1">
-                <div
-                  v-for="diagnostic in compileDiagnostics"
+              <p v-if="validationStale" class="rounded-md bg-amber-50 p-2 text-xs leading-5 text-amber-900 ring-1 ring-amber-200">
+                Source changed since the last validation. Validate again to refresh the compiled fabric.
+              </p>
+              <div class="max-h-56 space-y-2 overflow-auto pr-1">
+                <button
+                  v-for="diagnostic in scopedDiagnostics"
                   :key="diagnosticKey(diagnostic)"
-                  class="rounded-md border p-2 text-xs"
+                  class="w-full rounded-md border p-2 text-left text-xs transition hover:bg-white"
                   :class="diagnostic.severity === 'error' ? 'border-red-200 bg-red-50 text-red-900' : 'border-amber-200 bg-amber-50 text-amber-900'"
+                  @click="openFirstSourceSpan(diagnostic.sourceSpans)"
                 >
                   <div class="mb-1 flex items-center justify-between gap-2">
                     <span class="font-semibold">{{ diagnostic.code }}</span>
@@ -123,11 +146,114 @@
                     </UBadge>
                   </div>
                   <p class="leading-5">{{ diagnostic.message }}</p>
+                  <p class="mt-1 leading-5 opacity-80">{{ diagnosticHint(diagnostic) }}</p>
                   <p v-if="diagnostic.sourceSpans?.length" class="mt-1 truncate text-[11px] opacity-75">
                     {{ diagnostic.sourceSpans[0]?.file }}:{{ diagnostic.sourceSpans[0]?.line }}
                   </p>
-                </div>
-                <p v-if="compileDiagnostics.length === 0" class="text-sm text-slate-500">{{ validationEmptyText }}</p>
+                </button>
+                <p v-if="scopedDiagnostics.length === 0" class="text-sm text-slate-500">{{ validationEmptyText }}</p>
+              </div>
+            </UCard>
+
+            <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-3 p-3 sm:p-3' }">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="text-xs font-semibold uppercase text-slate-500">Compiled Fabric</h3>
+                <UButton icon="i-lucide-file-check-2" color="neutral" variant="ghost" size="xs" :loading="loading" @click="validateWorkspace">
+                  Validate
+                </UButton>
+              </div>
+              <p v-if="compiledWorkspace && fabricScopeSummary" class="rounded-md bg-slate-50 p-2 text-xs leading-5 text-slate-600 ring-1 ring-slate-200">
+                {{ fabricScopeSummary }}
+              </p>
+              <p v-if="!compiledWorkspace" class="text-sm leading-6 text-slate-500">
+                Validate the workspace to inspect what Doxvelt compiled from the source prose.
+              </p>
+              <div v-else class="space-y-3">
+                <section class="space-y-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <h4 class="text-xs font-semibold uppercase text-slate-500">Entities</h4>
+                    <UBadge color="neutral" variant="soft" size="sm">{{ scopedEntities.length }}</UBadge>
+                  </div>
+                  <div class="max-h-48 space-y-1 overflow-auto pr-1">
+                    <button
+                      v-for="entity in scopedEntities"
+                      :key="entity.id"
+                      class="grid w-full grid-cols-[1fr_auto] gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-left text-sm ring-1 ring-slate-200 transition hover:bg-slate-100"
+                      @click="openSourceFile(entity.files[0] || '', { clearCue: true })"
+                    >
+                      <span class="truncate font-medium">{{ entity.name || entity.id }}</span>
+                      <UBadge color="neutral" variant="soft" size="sm">{{ entity.kind }}</UBadge>
+                      <span class="col-span-2 truncate text-xs text-slate-500">@{{ entity.id }}</span>
+                    </button>
+                    <p v-if="scopedEntities.length === 0" class="text-sm text-slate-500">No entities in this scope.</p>
+                  </div>
+                </section>
+
+                <section class="space-y-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <h4 class="text-xs font-semibold uppercase text-slate-500">Beliefs</h4>
+                    <UBadge color="neutral" variant="soft" size="sm">{{ scopedBeliefs.length }}</UBadge>
+                  </div>
+                  <div class="max-h-56 space-y-1 overflow-auto pr-1">
+                    <button
+                      v-for="belief in scopedBeliefs"
+                      :key="beliefKey(belief)"
+                      class="w-full rounded-md bg-slate-50 p-2 text-left text-xs ring-1 ring-slate-200 transition hover:bg-slate-100"
+                      @click="openSourceSpan(belief.sourceSpan)"
+                    >
+                      <div class="mb-1 flex items-center justify-between gap-2">
+                        <span class="font-semibold">@{{ belief.holder }}</span>
+                        <UBadge :color="strengthColor(belief.strength)" variant="subtle" size="sm">{{ strengthLabel(belief.strength) }}</UBadge>
+                      </div>
+                      <p class="leading-5 text-slate-700">{{ belief.propositionText }}</p>
+                      <p class="mt-1 truncate text-[11px] text-slate-500">{{ belief.sourceSpan.file }}:{{ belief.sourceSpan.line }}</p>
+                    </button>
+                    <p v-if="scopedBeliefs.length === 0" class="text-sm text-slate-500">No tagged beliefs in this scope.</p>
+                  </div>
+                </section>
+
+                <section class="space-y-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <h4 class="text-xs font-semibold uppercase text-slate-500">Access Links</h4>
+                    <UBadge color="neutral" variant="soft" size="sm">{{ scopedAccessLinks.length }}</UBadge>
+                  </div>
+                  <div class="max-h-40 space-y-1 overflow-auto pr-1">
+                    <button
+                      v-for="link in scopedAccessLinks"
+                      :key="accessLinkKey(link)"
+                      class="w-full rounded-md bg-slate-50 p-2 text-left text-xs ring-1 ring-slate-200 transition hover:bg-slate-100"
+                      @click="openSourceSpan(link.sourceSpan)"
+                    >
+                      <span class="font-medium">@{{ link.member }}</span>
+                      <span class="text-slate-500"> has member access to </span>
+                      <span class="font-medium">@{{ link.container }}</span>
+                      <p class="mt-1 truncate text-[11px] text-slate-500">{{ link.sourceSpan.file }}:{{ link.sourceSpan.line }}</p>
+                    </button>
+                    <p v-if="scopedAccessLinks.length === 0" class="text-sm text-slate-500">No membership access links in this scope.</p>
+                  </div>
+                </section>
+
+                <section class="space-y-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <h4 class="text-xs font-semibold uppercase text-slate-500">Surfaces</h4>
+                    <UBadge color="neutral" variant="soft" size="sm">{{ scopedSurfaces.length }}</UBadge>
+                  </div>
+                  <div class="max-h-40 space-y-1 overflow-auto pr-1">
+                    <button
+                      v-for="surface in scopedSurfaces"
+                      :key="surfaceKey(surface)"
+                      class="w-full rounded-md bg-slate-50 p-2 text-left text-xs ring-1 ring-slate-200 transition hover:bg-slate-100"
+                      @click="openSourceSpan(surface.sourceSpan)"
+                    >
+                      <div class="mb-1 flex flex-wrap items-center gap-1.5">
+                        <span class="font-semibold">@{{ surface.entity }}</span>
+                        <UBadge v-for="channel in surface.channels" :key="channel" color="neutral" variant="soft" size="sm">{{ channel }}</UBadge>
+                      </div>
+                      <p class="leading-5 text-slate-700">{{ surface.text }}</p>
+                    </button>
+                    <p v-if="scopedSurfaces.length === 0" class="text-sm text-slate-500">No projected surfaces in this scope.</p>
+                  </div>
+                </section>
               </div>
             </UCard>
           </div>
@@ -154,6 +280,8 @@ type SourceFileGroup = {
   files: SourceFileSummary[];
 };
 
+type FabricScope = "workspace" | "file" | "entity";
+
 type NewAssetKind = "world" | "scenario" | "agent" | "affiliation" | "artifact" | "stateless" | "connection" | "format" | "model";
 
 type SourceSpan = {
@@ -174,6 +302,66 @@ type ModelRecord = {
   name: string;
 };
 
+type AssetRecord = {
+  id: string;
+  kind: "model" | "world" | "scenario" | "format" | "connection";
+  name: string;
+  path: string;
+};
+
+type EntityRecord = {
+  id: string;
+  kind: "agent" | "affiliation" | "artifact" | "stateless";
+  name: string;
+  visibility: string;
+  folder: string;
+  files: string[];
+};
+
+type BeliefRecord = {
+  holder: string;
+  strength: number;
+  propositionText: string;
+  mentions: string[];
+  sourceSpan: SourceSpan;
+};
+
+type SurfaceRecord = {
+  entity: string;
+  channels: string[];
+  text: string;
+  sourceSpan: SourceSpan;
+};
+
+type AccessLinkRecord = {
+  member: string;
+  container: string;
+  mode: "member";
+  sourceSpan: SourceSpan;
+};
+
+type TaggedLineRecord = {
+  tags: string[];
+  mentions: string[];
+  context?: { holder?: string; section?: string; connectionId?: string };
+  sourceSpan: SourceSpan;
+};
+
+type CompiledWorkspace = {
+  sourceRoot: string;
+  models: AssetRecord[];
+  worlds: AssetRecord[];
+  scenarios: AssetRecord[];
+  formats: AssetRecord[];
+  entities: EntityRecord[];
+  connections: AssetRecord[];
+  taggedLines: TaggedLineRecord[];
+  beliefs: BeliefRecord[];
+  surfaces: SurfaceRecord[];
+  accessLinks: AccessLinkRecord[];
+  diagnostics: DiagnosticRecord[];
+};
+
 const route = useRoute();
 const config = useRuntimeConfig();
 const toast = useToast();
@@ -186,7 +374,9 @@ const sourceText = ref("");
 const savedSourceText = ref("");
 const sourceFilter = ref("");
 const compileDiagnostics = ref<DiagnosticRecord[]>([]);
+const compiledWorkspace = ref<CompiledWorkspace | null>(null);
 const validatedOnce = ref(false);
+const validationStale = ref(false);
 const models = ref<ModelRecord[]>([]);
 const loading = ref(false);
 const loadingSource = ref(false);
@@ -194,6 +384,11 @@ const savingSource = ref(false);
 const newAssetKind = ref<NewAssetKind>("agent");
 const newAssetId = ref("");
 const newAssetName = ref("");
+const inspectorTab = ref("fabric");
+const fabricScope = ref<FabricScope>("workspace");
+const selectedFabricEntityId = ref("");
+const targetSourceSpan = ref<SourceSpan | null>(null);
+const sourceEditorContainer = ref<HTMLElement | null>(null);
 
 const newAssetKindItems = [
   { label: "Agent", value: "agent" },
@@ -208,6 +403,15 @@ const newAssetKindItems = [
 ];
 
 const studioTags = [":canonical", ":hidden", ":+3", ":+1", ":0", ":-1", ":-3", ":surface:in_person", ":access:member"];
+const inspectorTabs = [
+  { label: "Fabric", value: "fabric", icon: "i-lucide-git-fork" },
+  { label: "Guide", value: "guide", icon: "i-lucide-book-open" }
+];
+const fabricScopeItems = [
+  { label: "Whole workspace", value: "workspace" },
+  { label: "Selected file", value: "file" },
+  { label: "Selected entity", value: "entity" }
+];
 
 const newAssetKindLabel = computed(() => {
   return newAssetKindItems.find((item) => item.value === newAssetKind.value)?.label || "Asset";
@@ -217,7 +421,13 @@ const canCreateSourceAsset = computed(() => Boolean(normalizedNewAssetId.value))
 const canSaveSourceFile = computed(() => Boolean(selectedSourcePath.value && sourceText.value !== savedSourceText.value));
 const validationStatus = computed(() => {
   if (!validatedOnce.value) return "Not run";
+  if (validationStale.value) return "Stale";
   return compileDiagnostics.value.some((diagnostic) => diagnostic.severity === "error") ? "Errors" : "Ready";
+});
+const validationBadgeColor = computed<"neutral" | "warning" | "error" | "success">(() => {
+  if (!validatedOnce.value) return "neutral";
+  if (validationStale.value) return "warning";
+  return compileDiagnostics.value.some((diagnostic) => diagnostic.severity === "error") ? "error" : "success";
 });
 const validationEmptyText = computed(() => validatedOnce.value ? "No validation issues found." : "Validation has not run yet.");
 const sourceEditorState = computed(() => {
@@ -257,10 +467,110 @@ const groupedSourceFiles = computed<SourceFileGroup[]>(() => {
 
 const selectedSourceFile = computed(() => sourceFiles.value.find((file) => file.path === selectedSourcePath.value) || null);
 const selectedSourceHelp = computed(() => sourceHelp(selectedSourceFile.value));
+const fabricEntityItems = computed(() => {
+  return (compiledWorkspace.value?.entities || []).map((entity) => ({
+    label: entity.name || entity.id,
+    value: entity.id
+  }));
+});
+const effectiveFabricEntityId = computed(() => {
+  if (fabricScope.value !== "entity") return "";
+  return selectedFabricEntityId.value || selectedSourceFile.value?.entityId || compiledWorkspace.value?.entities.at(0)?.id || "";
+});
+const selectedFabricEntity = computed(() => {
+  return compiledWorkspace.value?.entities.find((entity) => entity.id === effectiveFabricEntityId.value) || null;
+});
+const scopeFilePath = computed(() => fabricScope.value === "file" ? selectedSourcePath.value : "");
+const scopedEntities = computed(() => {
+  const entities = compiledWorkspace.value?.entities || [];
+  if (effectiveFabricEntityId.value) return entities.filter((entity) => entity.id === effectiveFabricEntityId.value);
+  if (!scopeFilePath.value) return entities;
+  return entities.filter((entity) => entity.files.includes(scopeFilePath.value));
+});
+const scopedBeliefs = computed(() => {
+  const beliefs = compiledWorkspace.value?.beliefs || [];
+  if (effectiveFabricEntityId.value) return beliefs.filter((belief) => belief.holder === effectiveFabricEntityId.value || belief.mentions.includes(effectiveFabricEntityId.value));
+  if (!scopeFilePath.value) return beliefs;
+  return beliefs.filter((belief) => belief.sourceSpan.file === scopeFilePath.value);
+});
+const scopedAccessLinks = computed(() => {
+  const links = compiledWorkspace.value?.accessLinks || [];
+  if (effectiveFabricEntityId.value) return links.filter((link) => link.member === effectiveFabricEntityId.value || link.container === effectiveFabricEntityId.value);
+  if (!scopeFilePath.value) return links;
+  return links.filter((link) => link.sourceSpan.file === scopeFilePath.value);
+});
+const scopedSurfaces = computed(() => {
+  const surfaces = compiledWorkspace.value?.surfaces || [];
+  if (effectiveFabricEntityId.value) return surfaces.filter((surface) => surface.entity === effectiveFabricEntityId.value);
+  if (!scopeFilePath.value) return surfaces;
+  return surfaces.filter((surface) => surface.sourceSpan.file === scopeFilePath.value);
+});
+const scopedTaggedLines = computed(() => {
+  const taggedLines = compiledWorkspace.value?.taggedLines || [];
+  if (effectiveFabricEntityId.value) {
+    return taggedLines.filter((line) => {
+      return line.mentions.includes(effectiveFabricEntityId.value) || line.context?.holder === effectiveFabricEntityId.value;
+    });
+  }
+  if (!scopeFilePath.value) return taggedLines;
+  return taggedLines.filter((line) => line.sourceSpan.file === scopeFilePath.value);
+});
+const scopedDiagnostics = computed(() => {
+  if (effectiveFabricEntityId.value && selectedFabricEntity.value) {
+    const entityFiles = new Set(selectedFabricEntity.value.files);
+    return compileDiagnostics.value.filter((diagnostic) => {
+      return diagnostic.sourceSpans?.some((span) => entityFiles.has(span.file)) || diagnostic.message.includes(effectiveFabricEntityId.value);
+    });
+  }
+  if (!scopeFilePath.value) return compileDiagnostics.value;
+  return compileDiagnostics.value.filter((diagnostic) => diagnostic.sourceSpans?.some((span) => span.file === scopeFilePath.value));
+});
+const scopedAssetCount = computed(() => {
+  const compiled = compiledWorkspace.value;
+  if (!compiled) return 0;
+  const assets = [...compiled.models, ...compiled.worlds, ...compiled.scenarios, ...compiled.formats, ...compiled.connections];
+  if (effectiveFabricEntityId.value) return 0;
+  if (!scopeFilePath.value) return assets.length;
+  return assets.filter((asset) => asset.path === scopeFilePath.value).length;
+});
+const fabricScopeSummary = computed(() => {
+  if (!compiledWorkspace.value) return "";
+  if (fabricScope.value === "file") {
+    return `This file compiled into ${countPhrase(scopedBeliefs.value.length, "belief")}, ${countPhrase(scopedSurfaces.value.length, "surface")}, ${countPhrase(scopedAccessLinks.value.length, "access link")}, and ${countPhrase(scopedTaggedLines.value.length, "tagged line")}.`;
+  }
+  if (fabricScope.value === "entity") {
+    const entity = selectedFabricEntity.value;
+    const name = entity?.name || effectiveFabricEntityId.value || "Selected entity";
+    return `${name} is linked to ${countPhrase(scopedBeliefs.value.length, "belief")}, ${countPhrase(scopedSurfaces.value.length, "surface")}, ${countPhrase(scopedAccessLinks.value.length, "access link")}, and ${countPhrase(scopedTaggedLines.value.length, "tagged line")}.`;
+  }
+  return "";
+});
+const fabricMetrics = computed(() => {
+  return [
+    { label: "Entities", value: scopedEntities.value.length },
+    { label: "Beliefs", value: scopedBeliefs.value.length },
+    { label: "Access", value: scopedAccessLinks.value.length },
+    { label: "Surfaces", value: scopedSurfaces.value.length },
+    { label: "Tags", value: scopedTaggedLines.value.length },
+    { label: "Assets", value: scopedAssetCount.value }
+  ];
+});
 
 onMounted(() => {
   rememberWorkspace(workspacePath.value);
   refreshSourceFiles();
+});
+
+watch(sourceText, () => {
+  if (validatedOnce.value && sourceText.value !== savedSourceText.value) validationStale.value = true;
+});
+
+watch(selectedSourceFile, (file) => {
+  if (fabricScope.value === "entity" && file?.entityId) selectedFabricEntityId.value = file.entityId;
+});
+
+watch(compiledWorkspace, (compiled) => {
+  if (!selectedFabricEntityId.value) selectedFabricEntityId.value = compiled?.entities.at(0)?.id || "";
 });
 
 async function api<TValue>(path: string, options: { method?: string; body?: Record<string, unknown> } = {}): Promise<TValue> {
@@ -297,7 +607,7 @@ async function refreshSourceFiles(): Promise<void> {
   }
 }
 
-async function openSourceFile(path: string): Promise<void> {
+async function openSourceFile(path: string, options: { clearCue?: boolean } = {}): Promise<void> {
   if (!path || (path !== selectedSourcePath.value && !confirmDiscardSourceChanges())) return;
   try {
     const result = await api<{ path: string; text: string }>(
@@ -306,6 +616,7 @@ async function openSourceFile(path: string): Promise<void> {
     selectedSourcePath.value = result.path;
     sourceText.value = result.text;
     savedSourceText.value = result.text;
+    if (options.clearCue) targetSourceSpan.value = null;
   } catch (error) {
     showError(error);
   }
@@ -326,6 +637,7 @@ async function saveSourceFile(): Promise<void> {
     selectedSourcePath.value = result.path;
     sourceText.value = result.text;
     savedSourceText.value = result.text;
+    validationStale.value = true;
     await refreshSourceFiles();
     toast.add({ title: "Source file saved", color: "success" });
   } catch (error) {
@@ -362,13 +674,15 @@ async function createSourceAsset(): Promise<void> {
 async function validateWorkspace(): Promise<void> {
   loading.value = true;
   try {
-    const compiled = await api<{ diagnostics: DiagnosticRecord[]; models: ModelRecord[] }>("/source/compile", {
+    const compiled = await api<CompiledWorkspace>("/source/compile", {
       method: "POST",
       body: { workspacePath: workspacePath.value }
     });
+    compiledWorkspace.value = compiled;
     compileDiagnostics.value = compiled.diagnostics;
     models.value = compiled.models || [];
     validatedOnce.value = true;
+    validationStale.value = false;
     await refreshSourceFiles();
     toast.add({
       title: compileDiagnostics.value.some((diagnostic) => diagnostic.severity === "error") ? "Validation found errors" : "Source validated",
@@ -394,6 +708,108 @@ function sourceKindLabel(file: SourceFileSummary): string {
 function diagnosticKey(diagnostic: DiagnosticRecord): string {
   const span = diagnostic.sourceSpans?.at(0);
   return `${diagnostic.severity}:${diagnostic.code}:${span?.file || ""}:${span?.line || ""}:${diagnostic.message}`;
+}
+
+function diagnosticHint(diagnostic: DiagnosticRecord): string {
+  if (diagnostic.code === "unresolved_mention") {
+    return "Create a matching entity or asset id, or correct the @mention in the source line.";
+  }
+  if (diagnostic.code === "entity_invalid_kind") {
+    return "Use one of the supported entity kinds: agent, affiliation, artifact, or stateless.";
+  }
+  if (diagnostic.code === "membership_cycle" || diagnostic.code === "membership_self_loop") {
+    return "Break the membership access path so no entity can reach itself through :access:member links.";
+  }
+  if (diagnostic.code === "model_missing_provider") {
+    return "Add provider metadata such as provider: openai-compatible to the model file.";
+  }
+  if (diagnostic.code === "model_missing_model") {
+    return "Add the concrete model name to the model file.";
+  }
+  if (diagnostic.code === "model_missing_base_url") {
+    return "OpenAI-compatible models need base_url metadata, for example http://localhost:11434/v1.";
+  }
+  if (diagnostic.code === "model_invalid_base_url") {
+    return "Use an http or https URL with a single scheme, host, and optional path.";
+  }
+  return "Open the source span and adjust the authored prose or metadata, then validate again.";
+}
+
+function beliefKey(belief: BeliefRecord): string {
+  return `${belief.holder}:${belief.strength}:${belief.sourceSpan.file}:${belief.sourceSpan.line}:${belief.propositionText}`;
+}
+
+function accessLinkKey(link: AccessLinkRecord): string {
+  return `${link.member}:${link.container}:${link.sourceSpan.file}:${link.sourceSpan.line}`;
+}
+
+function surfaceKey(surface: SurfaceRecord): string {
+  return `${surface.entity}:${surface.sourceSpan.file}:${surface.sourceSpan.line}:${surface.text}`;
+}
+
+function strengthLabel(strength: number): string {
+  if (strength >= 3) return "+3 true";
+  if (strength > 0) return "+1 suspects";
+  if (strength <= -3) return "-3 false";
+  if (strength < 0) return "-1 doubts";
+  return "0 neutral";
+}
+
+function strengthColor(strength: number): "success" | "warning" | "error" | "neutral" {
+  if (strength >= 3) return "success";
+  if (strength > 0) return "warning";
+  if (strength < 0) return "error";
+  return "neutral";
+}
+
+async function openFirstSourceSpan(spans: SourceSpan[] | undefined): Promise<void> {
+  const span = spans?.at(0);
+  if (span) await openSourceSpan(span);
+}
+
+async function openSourceSpan(span: SourceSpan): Promise<void> {
+  await openSourceFile(span.file);
+  targetSourceSpan.value = span;
+  await nextTick();
+  scrollSourceEditorToSpan(span);
+  toast.add({
+    title: "Source span opened",
+    description: `${span.file}:${span.line}`,
+    color: "neutral"
+  });
+}
+
+function clearSourceLineCue(): void {
+  targetSourceSpan.value = null;
+}
+
+function scrollSourceEditorToSpan(span: SourceSpan): void {
+  const textArea = sourceEditorContainer.value?.querySelector("textarea");
+  if (!textArea) return;
+
+  const lineHeight = Number.parseFloat(getComputedStyle(textArea).lineHeight || "20") || 20;
+  const normalizedText = sourceText.value.replace(/\r\n/g, "\n");
+  const quoteIndex = normalizedText.indexOf(span.quote);
+  const selectionStart = quoteIndex === -1 ? offsetForLine(normalizedText, span.line) : quoteIndex;
+  const selectionEnd = quoteIndex === -1 ? endOfLineOffset(normalizedText, selectionStart) : quoteIndex + span.quote.length;
+  const lineIndex = normalizedText.slice(0, selectionStart).split("\n").length - 1;
+
+  textArea.scrollTop = Math.max(0, lineIndex * lineHeight - lineHeight * 4);
+  textArea.focus();
+  textArea.setSelectionRange(selectionStart, selectionEnd);
+}
+
+function offsetForLine(text: string, line: number): number {
+  return text.split("\n").slice(0, Math.max(0, line - 1)).reduce((offset, value) => offset + value.length + 1, 0);
+}
+
+function endOfLineOffset(text: string, start: number): number {
+  const nextNewline = text.indexOf("\n", start);
+  return nextNewline === -1 ? text.length : nextNewline;
+}
+
+function countPhrase(count: number, singular: string): string {
+  return `${count} ${count === 1 ? singular : `${singular}s`}`;
 }
 
 function confirmDiscardSourceChanges(): boolean {

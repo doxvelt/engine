@@ -72,6 +72,7 @@ function toAssetRecord(kind: AssetKind): (asset: SourceFile) => AssetRecord {
 
 function collectLineRecords(records: CompiledWorkspace, file: SourceFile, context: LineRecordContext): void {
   const lines = file.body.replace(/\r\n/g, "\n").split("\n");
+  const bodyLineOffset = firstBodyLineNumber(file) - 1;
 
   lines.forEach((line, index) => {
     const lineNumber = index + 1;
@@ -88,7 +89,7 @@ function collectLineRecords(records: CompiledWorkspace, file: SourceFile, contex
 
     const sourceSpan = {
       file: file.path,
-      line: lineNumber,
+      line: bodyLineOffset + lineNumber,
       quote: text
     };
 
@@ -132,6 +133,17 @@ function collectLineRecords(records: CompiledWorkspace, file: SourceFile, contex
       records.accessLinks.push(resolveAccessLink({ file, context, text, mentions, sourceSpan }));
     }
   });
+}
+
+function firstBodyLineNumber(file: SourceFile): number {
+  const text = file.text.replace(/\r\n/g, "\n");
+  const body = file.body.replace(/\r\n/g, "\n");
+  if (!body) return 1;
+
+  const bodyIndex = text.indexOf(body);
+  if (bodyIndex === -1) return 1;
+
+  return text.slice(0, bodyIndex).split("\n").length;
 }
 
 function validateRecords(records: CompiledWorkspace): void {
