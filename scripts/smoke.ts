@@ -1,9 +1,9 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
-import { compileWorld } from "../src/core/compiler.ts";
+import { compileWorkspace } from "../src/core/compiler.ts";
 import { assembleActorContext } from "../src/core/context.ts";
 import { closeEpisode } from "../src/core/episode.ts";
-import { initWorld } from "../src/core/init.ts";
+import { initWorkspace } from "../src/core/init.ts";
 import type { EntityRecord } from "../src/core/types.ts";
 import { openRuntimeStore } from "../src/store/sqlite.ts";
 
@@ -11,11 +11,11 @@ const root = path.resolve(".doxvelt", "smoke-runs");
 await mkdir(root, { recursive: true });
 
 const runRoot = await mkdtemp(path.join(root, "run-"));
-const worldPath = path.join(runRoot, "world");
+const workspacePath = path.join(runRoot, "workspace");
 const dbPath = path.join(runRoot, "runtime.sqlite");
 
-await initWorld(worldPath, { template: "executive-interviews" });
-const compiled = await compileWorld(worldPath);
+await initWorkspace(workspacePath, { template: "executive-interviews" });
+const compiled = await compileWorkspace(workspacePath);
 
 const store = await openRuntimeStore(dbPath).open();
 

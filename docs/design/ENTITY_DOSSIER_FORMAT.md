@@ -58,7 +58,7 @@ workspaces/demo/
     police-mafia.md
 ```
 
-Models, worlds, scenarios, formats, entities, and connections live next to each other inside the world source folder.
+Models, worlds, scenarios, formats, entities, and connections live next to each other inside the workspace source folder.
 
 Worlds and scenarios are unstructured Markdown files that describe objective canonical truth only. Formats are Markdown files that define the desired turn-output schema. Models are JSON or YAML files with endpoint metadata.
 

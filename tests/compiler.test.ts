@@ -6,13 +6,13 @@ import test from "node:test";
 import { promisify } from "node:util";
 import { DoxveltGenerationError, describeModelForDiagnostics, generateDoxveltText } from "../src/ai/generate.ts";
 import { createRetainedBeliefDraft, resolveCurrentBeliefs, weakenRetainedStrength } from "../src/core/beliefs.ts";
-import { compileWorld } from "../src/core/compiler.ts";
+import { compileWorkspace } from "../src/core/compiler.ts";
 import { assembleActorContext } from "../src/core/context.ts";
 import { advanceTurn, buildActorContext, startSimulation } from "../src/core/engine.ts";
 import { closeEpisode } from "../src/core/episode.ts";
 import { parseFrontmatter } from "../src/core/frontmatter.ts";
 import { ensureFirstImpressions } from "../src/core/impressions.ts";
-import { initWorld } from "../src/core/init.ts";
+import { initWorkspace } from "../src/core/init.ts";
 import { loadModelRecord } from "../src/core/models.ts";
 import type { AssetRecord, EntityRecord, SimulationRecord, TranscriptTurn } from "../src/core/types.ts";
 import { createLocalApiServer } from "../src/local-api/server.ts";
@@ -20,12 +20,12 @@ import { openRuntimeStore } from "../src/store/sqlite.ts";
 
 const execFileAsync = promisify(execFile);
 
-test("initWorld creates a sparse compilable scaffold", async (context) => {
+test("initWorkspace creates a sparse compilable scaffold", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
 
-  await initWorld(worldPath);
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath);
+  const compiled = await compileWorkspace(workspacePath);
 
   assert.equal(compiled.entities.length, 1);
   assert.equal(compiled.scenarios.at(0)?.id, "scenario");
@@ -34,12 +34,12 @@ test("initWorld creates a sparse compilable scaffold", async (context) => {
   assert.ok(compiled.beliefs.at(0)?.sourceSpan.file);
 });
 
-test("initWorld can seed the executive interviews example", async (context) => {
+test("initWorkspace can seed the executive interviews example", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
+  const compiled = await compileWorkspace(workspacePath);
 
   assert.equal(compiled.entities.length, 3);
   assert.equal(compiled.scenarios.at(0)?.id, "executive-interviews");
@@ -48,34 +48,34 @@ test("initWorld can seed the executive interviews example", async (context) => {
   assert.ok(compiled.beliefs.at(0)?.sourceSpan.file);
 });
 
-test("initWorld template lookup works outside the repository root", async (context) => {
+test("initWorkspace template lookup works outside the repository root", async (context) => {
   const previousCwd = process.cwd();
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
 
   try {
     process.chdir(root);
-    await initWorld(worldPath, { template: "executive-interviews" });
+    await initWorkspace(workspacePath, { template: "executive-interviews" });
   } finally {
     process.chdir(previousCwd);
   }
 
-  const compiled = await compileWorld(worldPath);
+  const compiled = await compileWorkspace(workspacePath);
   assert.equal(compiled.entities.length, 3);
 });
 
-test("initWorld rejects unknown templates", async (context) => {
+test("initWorkspace rejects unknown templates", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
 
   await assert.rejects(
-    () => initWorld(worldPath, { template: "missing-template" }),
+    () => initWorkspace(workspacePath, { template: "missing-template" }),
     /Unknown Doxvelt init template/
   );
 });
 
 test("compiled example source is inspectable without running init", async () => {
-  const compiled = await compileWorld("examples/executive-interviews");
+  const compiled = await compileWorkspace("examples/executive-interviews");
 
   assert.equal(compiled.entities.length, 3);
   assert.equal(compiled.scenarios.at(0)?.id, "executive-interviews");
@@ -83,11 +83,11 @@ test("compiled example source is inspectable without running init", async () => 
 
 test("compiler validates model record metadata shape", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
 
-  await initWorld(worldPath);
+  await initWorkspace(workspacePath);
   await writeFile(
-    path.join(worldPath, "models", "missing-provider.yaml"),
+    path.join(workspacePath, "models", "missing-provider.yaml"),
     `---
 id: missing-provider
 model: llama3.1
@@ -95,7 +95,7 @@ model: llama3.1
 `
   );
   await writeFile(
-    path.join(worldPath, "models", "bad-base-url.yaml"),
+    path.join(workspacePath, "models", "bad-base-url.yaml"),
     `---
 id: bad-base-url
 provider: openai-compatible
@@ -105,18 +105,18 @@ base_url: not-a-url
 `
   );
 
-  const compiled = await compileWorld(worldPath);
+  const compiled = await compileWorkspace(workspacePath);
   assert.ok(compiled.diagnostics.some((diagnostic) => diagnostic.code === "model_missing_provider"));
   assert.ok(compiled.diagnostics.some((diagnostic) => diagnostic.code === "model_invalid_base_url"));
 });
 
 test("compiler does not infer belief strength from untagged prose", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
 
-  await initWorld(worldPath);
+  await initWorkspace(workspacePath);
   await writeFile(
-    path.join(worldPath, "entities", "actor", "BELIEFS.md"),
+    path.join(workspacePath, "entities", "actor", "BELIEFS.md"),
     [
       "@actor knows @other is late.",
       "@actor suspects @other is hiding something.",
@@ -125,7 +125,7 @@ test("compiler does not infer belief strength from untagged prose", async (conte
     ].join("\n")
   );
 
-  const compiled = await compileWorld(worldPath);
+  const compiled = await compileWorkspace(workspacePath);
   assert.deepEqual(
     compiled.beliefs.map((belief) => belief.propositionText),
     ["@actor treats tagged material as compiled."]
@@ -134,11 +134,11 @@ test("compiler does not infer belief strength from untagged prose", async (conte
 
 test("compiler reports invalid entity kind metadata", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
 
-  await initWorld(worldPath);
+  await initWorkspace(workspacePath);
   await writeFile(
-    path.join(worldPath, "entities", "actor", "IDENTITY.md"),
+    path.join(workspacePath, "entities", "actor", "IDENTITY.md"),
     `---
 id: actor
 kind: organization
@@ -150,7 +150,7 @@ visibility: public
 `
   );
 
-  const compiled = await compileWorld(worldPath);
+  const compiled = await compileWorkspace(workspacePath);
   const diagnostic = compiled.diagnostics.find((candidate) => candidate.code === "entity_invalid_kind");
   assert.ok(diagnostic);
   assert.match(diagnostic.message, /organization/);
@@ -158,11 +158,11 @@ visibility: public
 
 test("compiler reports membership access cycles", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
 
-  await writeMembershipWorld(worldPath);
+  await writeMembershipWorld(workspacePath);
   await writeFile(
-    path.join(worldPath, "connections", "mafia-alice.md"),
+    path.join(workspacePath, "connections", "mafia-alice.md"),
     `---
 id: mafia-alice
 kind: connection
@@ -173,7 +173,7 @@ This connection gives @mafia access to @alice knowledge. :access:member
 `
   );
   await writeFile(
-    path.join(worldPath, "connections", "alice-self.md"),
+    path.join(workspacePath, "connections", "alice-self.md"),
     `---
 id: alice-self
 kind: connection
@@ -184,7 +184,7 @@ This connection gives @alice access to @alice knowledge. :access:member
 `
   );
 
-  const compiled = await compileWorld(worldPath);
+  const compiled = await compileWorkspace(workspacePath);
   const cycle = compiled.diagnostics.find((diagnostic) => diagnostic.code === "membership_cycle");
   const selfLoop = compiled.diagnostics.find((diagnostic) => diagnostic.code === "membership_self_loop");
   assert.ok(cycle);
@@ -194,12 +194,12 @@ This connection gives @alice access to @alice knowledge. :access:member
 
 test("CLI start rejects compiled worlds with membership access loops", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await writeMembershipWorld(worldPath);
+  await writeMembershipWorld(workspacePath);
   await writeFile(
-    path.join(worldPath, "connections", "mafia-alice.md"),
+    path.join(workspacePath, "connections", "mafia-alice.md"),
     `---
 id: mafia-alice
 kind: connection
@@ -211,23 +211,23 @@ This connection gives @mafia access to @alice knowledge. :access:member
   );
 
   await assert.rejects(
-    () => runCli(["start", worldPath, "--scenario", "membership-room", "--db", dbPath, "--json"]),
+    () => runCli(["start", workspacePath, "--scenario", "membership-room", "--db", dbPath, "--json"]),
     /Membership access cycle is invalid/
   );
 });
 
 test("CLI positional parsing ignores option values", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await writeMembershipWorld(worldPath);
+  await writeMembershipWorld(workspacePath);
 
   const started = await runCli([
     "start",
     "--scenario",
     "membership-room",
-    worldPath,
+    workspacePath,
     "--db",
     dbPath,
     "--json"
@@ -279,11 +279,11 @@ test("AI generation reports invalid OpenAI-compatible base URLs without SDK retr
 
 test("runtime store saves compiled actors and manual turns", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -320,16 +320,16 @@ test("runtime store saves compiled actors and manual turns", async (context) => 
 
 test("core engine starts simulations and advances turns without CLI parsing", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
   const store = await openRuntimeStore(dbPath).open();
 
   try {
     const started = await startSimulation({
       store,
-      worldPath,
+      workspacePath,
       scenarioId: "executive-interviews"
     });
 
@@ -357,6 +357,14 @@ test("core engine starts simulations and advances turns without CLI parsing", as
 
     assert.match(afterTurnContext.promptPreview, /The board needs a clearer operating picture/);
     assert.doesNotMatch(afterTurnContext.promptPreview, /Keep the board panic private/);
+
+    await startSimulation({
+      store,
+      workspacePath,
+      scenarioId: "executive-interviews"
+    });
+
+    assert.equal(store.listTranscript("default").length, 0);
   } finally {
     store.close();
   }
@@ -364,7 +372,7 @@ test("core engine starts simulations and advances turns without CLI parsing", as
 
 test("local API exposes the core play loop without shelling out to the CLI", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
   const packageDir = path.join(root, "package");
 
@@ -390,22 +398,42 @@ test("local API exposes the core play loop without shelling out to the CLI", asy
   const initialized = await apiJson(`${baseUrl}/source/init`, {
     method: "POST",
     body: {
-      worldPath,
+      workspacePath,
       template: "executive-interviews"
     }
   });
-  assert.equal(initialized.root, path.resolve(worldPath));
+  assert.equal(initialized.root, path.resolve(workspacePath));
 
   const compiled = await apiJson(`${baseUrl}/source/compile`, {
     method: "POST",
-    body: { worldPath }
+    body: { workspacePath }
   });
   assert.equal(compiled.entities.length, 3);
+
+  const sourceList = await apiJson(`${baseUrl}/source?workspacePath=${encodeURIComponent(workspacePath)}`);
+  assert.ok(sourceList.files.some((file: { path: string }) => file.path === "entities/ceo/IDENTITY.md"));
+
+  const sourceFile = await apiJson(
+    `${baseUrl}/source/file?workspacePath=${encodeURIComponent(workspacePath)}&path=${encodeURIComponent("worlds/strategy-class.md")}`
+  );
+  assert.match(sourceFile.text, /strategy class/i);
+
+  const studioNote = "---\nid: studio-note\nname: Studio Note\n---\n\nStudio authoring works.\n";
+  const writtenFile = await apiJson(`${baseUrl}/source/file`, {
+    method: "POST",
+    body: {
+      workspacePath,
+      path: "worlds/studio-note.md",
+      text: studioNote
+    }
+  });
+  assert.equal(writtenFile.path, "worlds/studio-note.md");
+  assert.equal(await readFile(path.join(workspacePath, "worlds", "studio-note.md"), "utf8"), studioNote);
 
   const started = await apiJson(`${baseUrl}/simulations/start`, {
     method: "POST",
     body: {
-      worldPath,
+      workspacePath,
       scenarioId: "executive-interviews"
     }
   });
@@ -496,11 +524,11 @@ test("local API exposes the core play loop without shelling out to the CLI", asy
 
 test("actor context includes subjective beliefs and accessible transcript only", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -599,11 +627,11 @@ test("actor context enforces subjective isolation without fixture source", () =>
 
 test("actor context filters hidden scenario lines for other actors", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -641,11 +669,11 @@ test("actor context filters hidden scenario lines for other actors", async (cont
 
 test("actor context includes affiliation beliefs through transitive membership access", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await writeMembershipWorld(worldPath);
-  const compiled = await compileWorld(worldPath);
+  await writeMembershipWorld(workspacePath);
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -807,11 +835,11 @@ test("current belief resolution derives current, superseded, and conflicting bel
 
 test("runtime access events override compiled membership links", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await writeMembershipWorld(worldPath);
-  const compiled = await compileWorld(worldPath);
+  await writeMembershipWorld(workspacePath);
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -902,11 +930,11 @@ test("runtime access events override compiled membership links", async (context)
 
 test("runtime access grants cannot create membership cycles", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await writeMembershipWorld(worldPath);
-  const compiled = await compileWorld(worldPath);
+  await writeMembershipWorld(workspacePath);
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -951,11 +979,11 @@ test("runtime access grants cannot create membership cycles", async (context) =>
 
 test("episode closure persists retained beliefs after membership access loss", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await writeMembershipWorld(worldPath);
-  const compiled = await compileWorld(worldPath);
+  await writeMembershipWorld(workspacePath);
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -1018,11 +1046,11 @@ test("episode closure persists retained beliefs after membership access loss", a
 
 test("CLI access command records and lists runtime access events", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await writeMembershipWorld(worldPath);
-  const compiled = await compileWorld(worldPath);
+  await writeMembershipWorld(workspacePath);
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -1091,11 +1119,11 @@ test("CLI access command records and lists runtime access events", async (contex
 
 test("stage whispers are private one-turn context", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -1160,11 +1188,11 @@ test("stage whispers are private one-turn context", async (context) => {
 
 test("first impressions are deterministic and created once from observed surfaces", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await writeMembershipWorld(worldPath);
-  const compiled = await compileWorld(worldPath);
+  await writeMembershipWorld(workspacePath);
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -1225,11 +1253,11 @@ test("first impressions are deterministic and created once from observed surface
 
 test("CLI context automatically persists first impressions", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await writeMembershipWorld(worldPath);
-  const compiled = await compileWorld(worldPath);
+  await writeMembershipWorld(workspacePath);
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -1257,11 +1285,11 @@ test("CLI context automatically persists first impressions", async (context) => 
 
 test("CLI whisper command stores and turn command consumes stage whispers", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -1323,11 +1351,11 @@ test("CLI whisper command stores and turn command consumes stage whispers", asyn
 
 test("audience events define default turn audience", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -1376,11 +1404,11 @@ test("audience events define default turn audience", async (context) => {
 
 test("CLI audience command controls default turn audience", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -1430,14 +1458,14 @@ test("CLI audience command controls default turn audience", async (context) => {
 
 test("CLI export and import round trip source and runtime state", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
   const packageDir = path.join(root, "package");
   const importedWorldPath = path.join(root, "imported-world");
   const importedDbPath = path.join(root, "imported-runtime.sqlite");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -1482,19 +1510,19 @@ test("CLI export and import round trip source and runtime state", async (context
     importedStore.close();
   }
 
-  const importedCompiled = await compileWorld(importedWorldPath);
+  const importedCompiled = await compileWorkspace(importedWorldPath);
   assert.equal(importedCompiled.entities.length, 3);
 });
 
 test("CLI export sanitizes source secrets", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
   const packageDir = path.join(root, "package");
 
-  await initWorld(worldPath);
+  await initWorkspace(workspacePath);
   await writeFile(
-    path.join(worldPath, "models", "secret-hosted.yaml"),
+    path.join(workspacePath, "models", "secret-hosted.yaml"),
     `---
 id: secret-hosted
 provider: gateway
@@ -1504,10 +1532,10 @@ api_key_env: HOSTED_API_KEY
 ---
 `
   );
-  await writeFile(path.join(worldPath, ".env"), "HOSTED_API_KEY=sk-env-secret\n");
-  await writeFile(path.join(worldPath, "private.pem"), "-----BEGIN PRIVATE KEY-----\nsecret\n");
+  await writeFile(path.join(workspacePath, ".env"), "HOSTED_API_KEY=sk-env-secret\n");
+  await writeFile(path.join(workspacePath, "private.pem"), "-----BEGIN PRIVATE KEY-----\nsecret\n");
 
-  const compiled = await compileWorld(worldPath);
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
   try {
     store.saveSimulation({
@@ -1542,11 +1570,11 @@ api_key_env: HOSTED_API_KEY
 
 test("CLI inspection commands list transcript memories and beliefs", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -1594,11 +1622,11 @@ test("CLI inspection commands list transcript memories and beliefs", async (cont
 
 test("episode closure writes deterministic memories from accessible turns", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -1648,11 +1676,11 @@ test("episode closure writes deterministic memories from accessible turns", asyn
 
 test("episode closure only processes turns since the previous closure", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {
@@ -1701,11 +1729,11 @@ test("episode closure only processes turns since the previous closure", async (c
 
 test("episode closure can use injected AI-style generation", async (context) => {
   const root = await createRepoLocalRunRoot(context);
-  const worldPath = path.join(root, "world");
+  const workspacePath = path.join(root, "workspace");
   const dbPath = path.join(root, "runtime.sqlite");
 
-  await initWorld(worldPath, { template: "executive-interviews" });
-  const compiled = await compileWorld(worldPath);
+  await initWorkspace(workspacePath, { template: "executive-interviews" });
+  const compiled = await compileWorkspace(workspacePath);
   const store = await openRuntimeStore(dbPath).open();
 
   try {

@@ -1,10 +1,10 @@
-import { compileWorld } from "./compiler.ts";
+import { compileWorkspace } from "./compiler.ts";
 import { assembleActorContext } from "./context.ts";
 import { ensureFirstImpressions } from "./impressions.ts";
 import type {
   ActorContext,
   AssetRecord,
-  CompiledWorld,
+  CompiledWorkspace,
   EntityRecord,
   StageWhisperRecord,
   TranscriptTurn
@@ -14,7 +14,7 @@ import type { RuntimeStore } from "../store/sqlite.ts";
 export type StartSimulationResult = {
   simulationId: string;
   scenarioId: string | null;
-  compiled: CompiledWorld;
+  compiled: CompiledWorkspace;
   actors: EntityRecord[];
 };
 
@@ -33,23 +33,24 @@ export type AdvanceTurnResult = {
 
 export async function startSimulation({
   store,
-  worldPath,
+  workspacePath,
   simulationId = "default",
   scenarioId = "default"
 }: {
   store: RuntimeStore;
-  worldPath: string;
+  workspacePath: string;
   simulationId?: string;
   scenarioId?: string | null;
 }): Promise<StartSimulationResult> {
-  const compiled = await compileWorld(worldPath);
+  const compiled = await compileWorkspace(workspacePath);
   assertNoCompilerErrors(compiled);
 
   store.saveSimulation({
     id: simulationId,
     sourceRoot: compiled.sourceRoot,
     scenarioId,
-    compiled
+    compiled,
+    resetRuntime: true
   });
 
   return {

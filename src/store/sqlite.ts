@@ -7,7 +7,7 @@ import type {
   AudienceEventRecord,
   AudienceMemberRecord,
   BeliefRecord,
-  CompiledWorld,
+  CompiledWorkspace,
   EntityRecord,
   EpisodeMemoryRecord,
   EpisodeRecord,
@@ -177,14 +177,18 @@ export class RuntimeStore {
     id,
     sourceRoot,
     scenarioId,
-    compiled
+    compiled,
+    resetRuntime = false
   }: {
     id: string;
     sourceRoot: string;
     scenarioId: string | null;
-    compiled: CompiledWorld;
+    compiled: CompiledWorkspace;
+    resetRuntime?: boolean;
   }): void {
     const createdAt = new Date().toISOString();
+    if (resetRuntime) this.deleteSimulationRuntime(id);
+
     this.requireDb()
       .prepare(`
         INSERT INTO simulations (id, source_root, scenario_id, created_at)
@@ -237,6 +241,25 @@ export class RuntimeStore {
         `${accessLink.member}:${accessLink.container}:${accessLink.sourceSpan.file}:${accessLink.sourceSpan.line}`,
         JSON.stringify(accessLink)
       );
+    }
+  }
+
+  deleteSimulationRuntime(simulationId: string): void {
+    const tables = [
+      "transcript_turns",
+      "episodes",
+      "episode_memories",
+      "long_term_memories",
+      "extracted_beliefs",
+      "runtime_access_events",
+      "stage_whispers",
+      "audience_events",
+      "first_impressions",
+      "retained_beliefs"
+    ];
+
+    for (const table of tables) {
+      this.requireDb().prepare(`DELETE FROM ${table} WHERE simulation_id = ?`).run(simulationId);
     }
   }
 

@@ -154,6 +154,24 @@ Private, directed context from the player to the next actor for the next turn on
 
 One actor's contribution to the growing chat transcript. MVP uses hard turns: exactly one actor acts per turn.
 
+## Workspace
+
+A local source folder that contains the authored material for one Doxvelt project. A workspace is the container that holds models, worlds, scenarios, formats, entities, and connections.
+
+Example layout:
+
+```text
+workspaces/demo/
+  models/
+  worlds/
+  scenarios/
+  formats/
+  entities/
+  connections/
+```
+
+A workspace is not itself a world. It may contain one or more world files, scenarios, and reusable assets.
+
 ## World
 
 Immutable laws and norms that govern the simulation or RPG. Worlds live next to entities and connections on disk as unstructured Markdown.

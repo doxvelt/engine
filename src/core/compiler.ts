@@ -1,10 +1,10 @@
-import { readWorldSource } from "./source.ts";
+import { readWorkspaceSource } from "./source.ts";
 import type {
   AccessLinkRecord,
   AssetKind,
   AssetRecord,
   BeliefRecord,
-  CompiledWorld,
+  CompiledWorkspace,
   LineRecordContext,
   SourceFile
 } from "./types.ts";
@@ -19,8 +19,8 @@ const STRENGTHS = new Map([
   ["-3", -3]
 ]);
 
-export async function compileWorld(worldPath: string): Promise<CompiledWorld> {
-  const source = await readWorldSource(worldPath);
+export async function compileWorkspace(workspacePath: string): Promise<CompiledWorkspace> {
+  const source = await readWorkspaceSource(workspacePath);
   const records = {
     sourceRoot: source.root,
     models: source.models.map(toAssetRecord("model")),
@@ -70,7 +70,7 @@ function toAssetRecord(kind: AssetKind): (asset: SourceFile) => AssetRecord {
   });
 }
 
-function collectLineRecords(records: CompiledWorld, file: SourceFile, context: LineRecordContext): void {
+function collectLineRecords(records: CompiledWorkspace, file: SourceFile, context: LineRecordContext): void {
   const lines = file.body.replace(/\r\n/g, "\n").split("\n");
 
   lines.forEach((line, index) => {
@@ -134,7 +134,7 @@ function collectLineRecords(records: CompiledWorld, file: SourceFile, context: L
   });
 }
 
-function validateRecords(records: CompiledWorld): void {
+function validateRecords(records: CompiledWorkspace): void {
   validateModelRecords(records);
   validateEntityRecords(records);
 
@@ -166,7 +166,7 @@ function validateRecords(records: CompiledWorld): void {
   validateMembershipLoops(records);
 }
 
-function validateEntityRecords(records: CompiledWorld): void {
+function validateEntityRecords(records: CompiledWorkspace): void {
   for (const entity of records.entities) {
     const rawKind = entity.rawKind;
     if (rawKind === undefined) continue;
@@ -188,7 +188,7 @@ function validateEntityRecords(records: CompiledWorld): void {
   }
 }
 
-function validateModelRecords(records: CompiledWorld): void {
+function validateModelRecords(records: CompiledWorkspace): void {
   for (const model of records.models) {
     const provider = stringValue(model.metadata.provider);
     const modelName = stringValue(model.metadata.model);
@@ -250,7 +250,7 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
-function validateMembershipLoops(records: CompiledWorld): void {
+function validateMembershipLoops(records: CompiledWorkspace): void {
   const linksByMember = new Map<string, AccessLinkRecord[]>();
 
   for (const link of records.accessLinks) {
@@ -287,7 +287,7 @@ function walkMembershipAccess({
   pathLinks,
   link
 }: {
-  records: CompiledWorld;
+  records: CompiledWorkspace;
   linksByMember: Map<string, AccessLinkRecord[]>;
   reported: Set<string>;
   path: string[];

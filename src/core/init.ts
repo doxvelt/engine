@@ -3,11 +3,11 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { SOURCE_FOLDERS } from "./source.ts";
 
-export type InitWorldOptions = {
+export type InitWorkspaceOptions = {
   template?: string | null;
 };
 
-export async function initWorld(targetPath: string, options: InitWorldOptions = {}): Promise<{ root: string }> {
+export async function initWorkspace(targetPath: string, options: InitWorkspaceOptions = {}): Promise<{ root: string }> {
   const root = path.resolve(targetPath);
   const template = options.template || null;
 

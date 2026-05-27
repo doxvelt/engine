@@ -1,8 +1,8 @@
-import { readWorldSource } from "./source.ts";
+import { readWorkspaceSource } from "./source.ts";
 import type { AssetRecord, SourceFile } from "./types.ts";
 
 export async function loadModelRecord(sourceRoot: string, modelId: string): Promise<AssetRecord | null> {
-  const source = await readWorldSource(sourceRoot);
+  const source = await readWorkspaceSource(sourceRoot);
   const model = source.models.find((candidate) => candidate.id === modelId);
   return model ? toModelRecord(model) : null;
 }

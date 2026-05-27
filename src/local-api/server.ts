@@ -3,13 +3,14 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { DoxveltGenerationError, generateDoxveltText } from "../ai/generate.ts";
 import { resolveCurrentBeliefs } from "../core/beliefs.ts";
-import { compileWorld } from "../core/compiler.ts";
+import { compileWorkspace } from "../core/compiler.ts";
 import { resolveBeliefAccess } from "../core/context.ts";
 import { advanceTurn, buildActorContext, startSimulation } from "../core/engine.ts";
 import { closeEpisode } from "../core/episode.ts";
-import { initWorld } from "../core/init.ts";
+import { initWorkspace } from "../core/init.ts";
 import { loadModelRecord } from "../core/models.ts";
 import { exportSimulationPackage, importSimulationPackage } from "../core/portable.ts";
+import { listWorkspaceSourceFiles, readSourceText, writeSourceText } from "../core/source.ts";
 import type { EntityRecord } from "../core/types.ts";
 import { openRuntimeStore, type RuntimeStore } from "../store/sqlite.ts";
 
@@ -49,28 +50,50 @@ export async function handleLocalApiRequest(
     return;
   }
 
+  if (method === "GET" && parts.length === 1 && parts[0] === "source") {
+    const workspacePath = requiredWorkspaceSearchParam(url);
+    sendJson(response, 200, await listWorkspaceSourceFiles(workspacePath));
+    return;
+  }
+
+  if (method === "GET" && parts.length === 2 && parts[0] === "source" && parts[1] === "file") {
+    const workspacePath = requiredWorkspaceSearchParam(url);
+    const relativePath = requiredSearchParam(url, "path");
+    sendJson(response, 200, await readSourceText(workspacePath, relativePath));
+    return;
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "source" && parts[1] === "file") {
+    const body = await readJsonBody(request);
+    const workspacePath = requireWorkspacePath(body);
+    const relativePath = requireString(body, "path");
+    const text = requireAnyString(body, "text");
+    sendJson(response, 200, await writeSourceText(workspacePath, relativePath, text));
+    return;
+  }
+
   if (method === "POST" && parts.length === 2 && parts[0] === "source" && parts[1] === "init") {
     const body = await readJsonBody(request);
-    const worldPath = requireString(body, "worldPath");
-    const resolvedWorldPath = path.resolve(worldPath);
+    const workspacePath = requireWorkspacePath(body);
+    const resolvedWorkspacePath = path.resolve(workspacePath);
     const template = optionalString(body, "template") || null;
-    if (existsSync(resolvedWorldPath)) {
+    if (existsSync(resolvedWorkspacePath)) {
       sendJson(response, 200, {
-        root: resolvedWorldPath,
+        root: resolvedWorkspacePath,
         created: false,
-        message: "World source already exists."
+        message: "Workspace source already exists."
       });
       return;
     }
 
-    sendJson(response, 200, await initWorld(worldPath, { template }));
+    sendJson(response, 200, await initWorkspace(workspacePath, { template }));
     return;
   }
 
   if (method === "POST" && parts.length === 2 && parts[0] === "source" && parts[1] === "compile") {
     const body = await readJsonBody(request);
-    const worldPath = requireString(body, "worldPath");
-    sendJson(response, 200, await compileWorld(worldPath));
+    const workspacePath = requireWorkspacePath(body);
+    sendJson(response, 200, await compileWorkspace(workspacePath));
     return;
   }
 
@@ -109,14 +132,14 @@ export async function handleLocalApiRequest(
 
   if (method === "POST" && parts.length === 2 && parts[0] === "simulations" && parts[1] === "start") {
     const body = await readJsonBody(request);
-    const worldPath = requireString(body, "worldPath");
+    const workspacePath = requireWorkspacePath(body);
     const simulationId = optionalString(body, "simulationId") || "default";
     const scenarioId = optionalString(body, "scenarioId") || "default";
 
     await withStore(options, async (store) => {
       const result = await startSimulation({
         store,
-        worldPath,
+        workspacePath,
         simulationId,
         scenarioId
       });
@@ -463,6 +486,30 @@ function requireString(body: Record<string, unknown>, key: string): string {
   const value = body[key];
   if (typeof value === "string" && value.length > 0) return value;
   throw new HttpError(400, `${key} must be a non-empty string.`);
+}
+
+function requireWorkspacePath(body: Record<string, unknown>): string {
+  const value = body.workspacePath ?? body.worldPath;
+  if (typeof value === "string" && value.length > 0) return value;
+  throw new HttpError(400, "workspacePath must be a non-empty string.");
+}
+
+function requireAnyString(body: Record<string, unknown>, key: string): string {
+  const value = body[key];
+  if (typeof value === "string") return value;
+  throw new HttpError(400, `${key} must be a string.`);
+}
+
+function requiredWorkspaceSearchParam(url: URL): string {
+  const value = url.searchParams.get("workspacePath") || url.searchParams.get("worldPath");
+  if (value) return value;
+  throw new HttpError(400, "workspacePath query parameter is required.");
+}
+
+function requiredSearchParam(url: URL, key: string): string {
+  const value = url.searchParams.get(key);
+  if (value) return value;
+  throw new HttpError(400, `${key} query parameter is required.`);
 }
 
 function optionalString(body: Record<string, unknown>, key: string): string | undefined {

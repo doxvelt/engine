@@ -27,7 +27,7 @@ export type EntitySource = {
   files: EntitySourceFile[];
 };
 
-export type WorldSource = {
+export type WorkspaceSource = {
   root: string;
   models: SourceFile[];
   worlds: SourceFile[];
@@ -178,7 +178,7 @@ export type DiagnosticRecord = {
   sourceSpans?: SourceSpan[];
 };
 
-export type CompiledWorld = {
+export type CompiledWorkspace = {
   sourceRoot: string;
   models: AssetRecord[];
   worlds: AssetRecord[];

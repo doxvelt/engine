@@ -1,8 +1,8 @@
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "./frontmatter.ts";
-import type { EntityKind, EntitySource, EntitySourceFile, SourceFile, WorldSource } from "./types.ts";
+import type { EntityKind, EntitySource, EntitySourceFile, SourceFile, WorkspaceSource } from "./types.ts";
 
 export const SOURCE_FOLDERS = [
   "models",
@@ -13,8 +13,19 @@ export const SOURCE_FOLDERS = [
   "connections"
 ];
 
-export async function readWorldSource(worldPath: string): Promise<WorldSource> {
-  const root = path.resolve(worldPath);
+export type SourceFileSummary = {
+  id: string;
+  name: string;
+  path: string;
+  kind: "model" | "world" | "scenario" | "format" | "entity-file" | "connection";
+  entityId?: string;
+  entityName?: string;
+  entityKind?: EntityKind;
+  section?: string;
+};
+
+export async function readWorkspaceSource(workspacePath: string): Promise<WorkspaceSource> {
+  const root = path.resolve(workspacePath);
 
   return {
     root,
@@ -24,6 +35,62 @@ export async function readWorldSource(worldPath: string): Promise<WorldSource> {
     formats: await readFlatMarkdownLike(root, "formats"),
     entities: await readEntityFolders(root),
     connections: await readFlatMarkdownLike(root, "connections")
+  };
+}
+
+export async function listWorkspaceSourceFiles(workspacePath: string): Promise<{ root: string; files: SourceFileSummary[] }> {
+  const source = await readWorkspaceSource(workspacePath);
+  const files: SourceFileSummary[] = [
+    ...source.models.map((file) => summarizeFlatSourceFile(file, "model")),
+    ...source.worlds.map((file) => summarizeFlatSourceFile(file, "world")),
+    ...source.scenarios.map((file) => summarizeFlatSourceFile(file, "scenario")),
+    ...source.formats.map((file) => summarizeFlatSourceFile(file, "format")),
+    ...source.connections.map((file) => summarizeFlatSourceFile(file, "connection"))
+  ];
+
+  for (const entity of source.entities) {
+    for (const file of entity.files) {
+      files.push({
+        id: `${entity.id}:${file.section}`,
+        name: file.name,
+        path: file.path,
+        kind: "entity-file",
+        entityId: entity.id,
+        entityName: entity.name,
+        entityKind: entity.kind,
+        section: file.section
+      });
+    }
+  }
+
+  files.sort((left, right) => left.path.localeCompare(right.path));
+  return { root: source.root, files };
+}
+
+export async function readSourceText(workspacePath: string, relativePath: string): Promise<{ root: string; path: string; text: string }> {
+  const root = path.resolve(workspacePath);
+  const absolutePath = resolveSourcePath(root, relativePath);
+  const text = await readFile(absolutePath, "utf8");
+  return {
+    root,
+    path: path.relative(root, absolutePath).replaceAll("\\", "/"),
+    text
+  };
+}
+
+export async function writeSourceText(
+  workspacePath: string,
+  relativePath: string,
+  text: string
+): Promise<{ root: string; path: string; text: string }> {
+  const root = path.resolve(workspacePath);
+  const absolutePath = resolveSourcePath(root, relativePath);
+  await mkdir(path.dirname(absolutePath), { recursive: true });
+  await writeFile(absolutePath, text, "utf8");
+  return {
+    root,
+    path: path.relative(root, absolutePath).replaceAll("\\", "/"),
+    text
   };
 }
 
@@ -104,6 +171,38 @@ async function safeReaddir(dir: string, options: { withFileTypes: true }): Promi
     if (isNodeError(error) && error.code === "ENOENT") return [];
     throw error;
   }
+}
+
+function summarizeFlatSourceFile(
+  file: SourceFile,
+  kind: SourceFileSummary["kind"]
+): SourceFileSummary {
+  return {
+    id: file.id,
+    name: file.name,
+    path: file.path,
+    kind
+  };
+}
+
+function resolveSourcePath(root: string, relativePath: string): string {
+  const normalizedRelativePath = relativePath.replaceAll("\\", "/");
+  const firstSegment = normalizedRelativePath.split("/").at(0);
+  if (!firstSegment || !SOURCE_FOLDERS.includes(firstSegment)) {
+    throw new Error(`Source path must start with one of: ${SOURCE_FOLDERS.join(", ")}.`);
+  }
+
+  if (!/\.(md|markdown|ya?ml|json)$/i.test(normalizedRelativePath)) {
+    throw new Error("Source path must be a Markdown, YAML, or JSON file.");
+  }
+
+  const absolutePath = path.resolve(root, normalizedRelativePath);
+  const relativeToRoot = path.relative(root, absolutePath);
+  if (relativeToRoot.startsWith("..") || path.isAbsolute(relativeToRoot)) {
+    throw new Error("Source path must stay inside the workspace source folder.");
+  }
+
+  return absolutePath;
 }
 
 function idFromFilename(filename: string): string {

@@ -3,11 +3,11 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { DoxveltGenerationError, generateDoxveltObject, generateDoxveltText } from "../ai/generate.ts";
 import { resolveCurrentBeliefs } from "../core/beliefs.ts";
-import { compileWorld } from "../core/compiler.ts";
+import { compileWorkspace } from "../core/compiler.ts";
 import { resolveBeliefAccess } from "../core/context.ts";
 import { advanceTurn, buildActorContext, startSimulation, type StartSimulationResult } from "../core/engine.ts";
 import { closeEpisode, type EpisodeClosureGenerator } from "../core/episode.ts";
-import { initWorld } from "../core/init.ts";
+import { initWorkspace } from "../core/init.ts";
 import { loadModelRecord } from "../core/models.ts";
 import { exportSimulationPackage, importSimulationPackage } from "../core/portable.ts";
 import type { ActorContext, EntityRecord } from "../core/types.ts";
@@ -63,10 +63,10 @@ async function initCommand(args: string[]): Promise<void> {
     throw new CliError(`Target already exists: ${target}`, 1);
   }
 
-  const result = await initWorld(target, { template });
+  const result = await initWorkspace(target, { template });
   print(
     {
-      message: template ? `Initialized Doxvelt world source from ${template}.` : "Initialized Doxvelt world scaffold.",
+      message: template ? `Initialized Doxvelt workspace source from ${template}.` : "Initialized Doxvelt workspace scaffold.",
       root: result.root,
       template
     },
@@ -75,13 +75,13 @@ async function initCommand(args: string[]): Promise<void> {
 }
 
 async function compileCommand(args: string[]): Promise<void> {
-  const worldPath = positionalArgs(args)[0] || "workspaces/demo";
-  const compiled = await compileWorld(worldPath);
+  const workspacePath = positionalArgs(args)[0] || "workspaces/demo";
+  const compiled = await compileWorkspace(workspacePath);
   print(compiled, hasFlag(args, "--json"));
 }
 
 async function startCommand(args: string[]): Promise<void> {
-  const worldPath = positionalArgs(args)[0] || "workspaces/demo";
+  const workspacePath = positionalArgs(args)[0] || "workspaces/demo";
   const scenarioId = optionValue(args, "--scenario") || "default";
   const simulationId = optionValue(args, "--simulation") || "default";
   const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
@@ -91,7 +91,7 @@ async function startCommand(args: string[]): Promise<void> {
   try {
     result = await startSimulation({
       store,
-      worldPath,
+      workspacePath,
       simulationId,
       scenarioId
     });
