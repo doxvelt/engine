@@ -1,0 +1,173 @@
+@font-face {
+  font-family: "Geist";
+  src: url("./fonts/Geist/Geist-VariableFont_wght.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist";
+  src: url("./fonts/Geist/Geist-Italic-VariableFont_wght.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("./fonts/Geist_Mono/GeistMono-VariableFont_wght.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+
+  --dx-font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --dx-font-mono: "Geist Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  /* Neutral is an OKLCH warm-neutral ramp calibrated to parchment at 100 and ink at 900. */
+  --dx-color-neutral-50: #fefaf1;
+  --dx-color-neutral-100: #f8f3e8;
+  --dx-color-neutral-200: #e6e1d5;
+  --dx-color-neutral-300: #d0cabe;
+  --dx-color-neutral-400: #b1aa9e;
+  --dx-color-neutral-500: #8c857b;
+  --dx-color-neutral-600: #686259;
+  --dx-color-neutral-700: #4a443c;
+  --dx-color-neutral-800: #343028;
+  --dx-color-neutral-900: #221e18;
+  --dx-color-neutral-950: #0e0b06;
+
+  --dx-color-ink: var(--dx-color-neutral-900);
+  --dx-color-parchment: var(--dx-color-neutral-100);
+
+  /* Ember is an OKLCH warm-action ramp calibrated to the source ember at 500. */
+  --dx-color-ember-50: #fff0ea;
+  --dx-color-ember-100: #ffdbd0;
+  --dx-color-ember-200: #f7baa9;
+  --dx-color-ember-300: #e8967f;
+  --dx-color-ember-400: #dc795e;
+  --dx-color-ember-500: #d86a4d;
+  --dx-color-ember-600: #93422c;
+  --dx-color-ember-700: #702d1b;
+  --dx-color-ember-800: #4d1c0f;
+  --dx-color-ember-900: #321209;
+  --dx-color-ember-950: #170603;
+
+  /* Oxblood is an OKLCH severity ramp calibrated to the source oxblood at 600. */
+  --dx-color-oxblood-50: #ffefeb;
+  --dx-color-oxblood-100: #ffdad3;
+  --dx-color-oxblood-200: #f8b9ae;
+  --dx-color-oxblood-300: #e99486;
+  --dx-color-oxblood-400: #d47263;
+  --dx-color-oxblood-500: #a74639;
+  --dx-color-oxblood-600: #6e261d;
+  --dx-color-oxblood-700: #551912;
+  --dx-color-oxblood-800: #3d110c;
+  --dx-color-oxblood-900: #260906;
+  --dx-color-oxblood-950: #120302;
+
+  --dx-color-positive-50: #eef8f0;
+  --dx-color-positive-500: #3d8b4f;
+  --dx-color-positive-700: #286338;
+  --dx-color-caution-50: #fff7dd;
+  --dx-color-caution-500: #c88816;
+  --dx-color-caution-700: #8c5d0e;
+  --dx-color-negative-50: #fff0ee;
+  --dx-color-negative-500: #b84a3c;
+  --dx-color-negative-700: #7d2d25;
+  --dx-color-info-50: #eef5fb;
+  --dx-color-info-500: #39779e;
+  --dx-color-info-700: #285675;
+
+  --dx-surface-canvas: var(--dx-color-neutral-50);
+  --dx-surface-panel: var(--dx-color-neutral-100);
+  --dx-surface-raised: var(--dx-color-neutral-200);
+  --dx-surface-subtle: var(--dx-color-neutral-300);
+  --dx-surface-inverse: var(--dx-color-neutral-900);
+  --dx-text-strong: var(--dx-color-neutral-950);
+  --dx-text: var(--dx-color-neutral-900);
+  --dx-text-muted: var(--dx-color-neutral-600);
+  --dx-text-subtle: var(--dx-color-neutral-500);
+  --dx-text-inverse: var(--dx-color-neutral-100);
+  --dx-border-subtle: color-mix(in oklch, var(--dx-text) 10%, transparent);
+  --dx-border: color-mix(in oklch, var(--dx-text) 16%, transparent);
+  --dx-border-strong: color-mix(in oklch, var(--dx-text) 28%, transparent);
+  --dx-accent: var(--dx-color-ember-600);
+  --dx-accent-hover: var(--dx-color-ember-700);
+  --dx-accent-subtle: var(--dx-color-ember-50);
+  --dx-accent-text: var(--dx-color-ember-800);
+  --dx-danger: var(--dx-color-oxblood-600);
+  --dx-danger-hover: var(--dx-color-oxblood-700);
+  --dx-danger-text: var(--dx-color-neutral-50);
+  --dx-success: var(--dx-color-positive-500);
+  --dx-success-subtle: color-mix(in oklch, var(--dx-color-positive-500) 12%, var(--dx-surface-panel));
+  --dx-success-text: var(--dx-color-positive-700);
+  --dx-info: var(--dx-color-info-500);
+  --dx-info-subtle: color-mix(in oklch, var(--dx-color-info-500) 12%, var(--dx-surface-panel));
+  --dx-info-text: var(--dx-color-info-700);
+  --dx-focus: var(--dx-color-ember-500);
+  --dx-canvas-glow: rgba(255, 255, 255, 0.3);
+  --dx-canvas-shade: rgba(34, 30, 24, 0.035);
+  --dx-light-glow: rgba(255, 255, 255, 0.32);
+  --dx-light-shade: rgba(34, 30, 24, 0.055);
+  --dx-light-field:
+    radial-gradient(circle at 16% 0%, var(--dx-light-glow), transparent 42%),
+    radial-gradient(circle at 92% 105%, var(--dx-light-shade), transparent 38%);
+  --dx-shadow-soft: 0 1px 1px rgba(34, 30, 24, 0.05), 0 16px 42px rgba(34, 30, 24, 0.08);
+
+  --dx-radius-xs: 3px;
+  --dx-radius-sm: 5px;
+  --dx-radius-md: 8px;
+  --dx-space-1: 0.25rem;
+  --dx-space-2: 0.5rem;
+  --dx-space-3: 0.75rem;
+  --dx-space-4: 1rem;
+  --dx-space-5: 1.25rem;
+  --dx-space-6: 1.5rem;
+  --dx-space-8: 2rem;
+  --dx-space-10: 2.5rem;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --dx-surface-canvas: var(--dx-color-neutral-950);
+  --dx-surface-panel: var(--dx-color-neutral-900);
+  --dx-surface-raised: var(--dx-color-neutral-800);
+  --dx-surface-subtle: var(--dx-color-neutral-700);
+  --dx-surface-inverse: var(--dx-color-neutral-100);
+  --dx-text-strong: var(--dx-color-neutral-50);
+  --dx-text: var(--dx-color-neutral-100);
+  --dx-text-muted: var(--dx-color-neutral-300);
+  --dx-text-subtle: var(--dx-color-neutral-400);
+  --dx-text-inverse: var(--dx-color-neutral-950);
+  --dx-border-subtle: color-mix(in oklch, var(--dx-text) 10%, transparent);
+  --dx-border: color-mix(in oklch, var(--dx-text) 16%, transparent);
+  --dx-border-strong: color-mix(in oklch, var(--dx-text) 28%, transparent);
+  --dx-accent: var(--dx-color-ember-400);
+  --dx-accent-hover: var(--dx-color-ember-300);
+  --dx-accent-subtle: rgba(216, 106, 77, 0.14);
+  --dx-accent-text: var(--dx-color-ember-100);
+  --dx-danger: var(--dx-color-oxblood-300);
+  --dx-danger-hover: var(--dx-color-oxblood-400);
+  --dx-danger-text: var(--dx-color-neutral-950);
+  --dx-success: var(--dx-color-positive-500);
+  --dx-success-subtle: color-mix(in oklch, var(--dx-color-positive-500) 18%, var(--dx-surface-panel));
+  --dx-success-text: var(--dx-color-positive-50);
+  --dx-info: #8fc0dc;
+  --dx-info-subtle: color-mix(in oklch, var(--dx-color-info-500) 18%, var(--dx-surface-panel));
+  --dx-info-text: #b9d7e7;
+  --dx-focus: var(--dx-color-ember-300);
+  --dx-canvas-glow: rgba(248, 243, 232, 0.035);
+  --dx-canvas-shade: rgba(0, 0, 0, 0.08);
+  --dx-light-glow: rgba(248, 243, 232, 0.055);
+  --dx-light-shade: rgba(0, 0, 0, 0.1);
+  --dx-light-field:
+    radial-gradient(circle at 16% 0%, var(--dx-light-glow), transparent 44%),
+    radial-gradient(circle at 94% 106%, var(--dx-light-shade), transparent 40%);
+  --dx-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.22), 0 18px 50px rgba(0, 0, 0, 0.24);
+}

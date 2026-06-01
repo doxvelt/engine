@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 589 589" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+    <g transform="matrix(1,0,0,1,-4706.4,-2064.3)">
+        <g id="mark-oxblood-solid" transform="matrix(1.148633,0,0,1.148633,4706.4,2064.3)">
+            <rect x="0" y="0" width="512" height="512" style="fill:rgb(110,38,29);"/>
+            <g id="mark" transform="matrix(3.119126,0,0,0.8706,48.846282,33.187853)">
+                <g id="arms">
+                    <g transform="matrix(7.338655,-26.292421,2.876417,10.305427,-6617.356281,17311.717573)">
+                        <rect x="778.82" y="338.845" width="1.824" height="8.52" style="fill:rgb(248,243,232);fill-rule:nonzero;"/>
+                    </g>
+                    <g transform="matrix(7.338655,-26.292421,2.795261,10.014666,-6640.460367,17229.199926)">
+                        <rect x="778.82" y="338.845" width="1.824" height="8.52" style="fill:rgb(248,243,232);fill-rule:nonzero;"/>
+                    </g>
+                    <g transform="matrix(7.338655,26.292421,-2.880644,10.320572,-4692.629278,-23695.478884)">
+                        <rect x="778.82" y="338.845" width="1.824" height="8.52" style="fill:rgb(248,243,232);fill-rule:nonzero;"/>
+                    </g>
+                    <g transform="matrix(7.338655,26.292421,-2.790804,9.998697,-4672.575939,-23767.58266)">
+                        <rect x="778.82" y="338.845" width="1.824" height="8.52" style="fill:rgb(248,243,232);fill-rule:nonzero;"/>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

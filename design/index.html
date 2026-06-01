@@ -1,0 +1,1926 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Doxvelt Design Tokens</title>
+    <link rel="stylesheet" href="./tokens.css">
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        font-family: var(--dx-font-sans);
+        background: var(--dx-surface-canvas);
+        color: var(--dx-text);
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        letter-spacing: 0;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        letter-spacing: 0;
+      }
+
+      .shell {
+        position: relative;
+        min-height: 100vh;
+        background: var(--dx-surface-canvas);
+      }
+
+      .shell::before {
+        position: fixed;
+        inset: 64px 0 0;
+        z-index: 0;
+        background:
+          radial-gradient(ellipse at 28% 8%, var(--dx-canvas-glow), transparent 34%),
+          radial-gradient(ellipse at 92% 26%, var(--dx-canvas-shade), transparent 32%);
+        content: "";
+        pointer-events: none;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--dx-space-4);
+        min-height: 64px;
+        padding: var(--dx-space-3) clamp(1rem, 4vw, 3rem);
+        border-bottom: 1px solid var(--dx-border-subtle);
+        background: color-mix(in oklch, var(--dx-surface-panel) 92%, transparent);
+        backdrop-filter: blur(14px);
+      }
+
+      .brand {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: var(--dx-space-3);
+      }
+
+      .brand-logo {
+        width: 148px;
+        max-width: 42vw;
+        height: auto;
+        display: block;
+      }
+
+      .brand-logo-dark {
+        display: none;
+      }
+
+      [data-theme="dark"] .brand-logo-light {
+        display: none;
+      }
+
+      [data-theme="dark"] .brand-logo-dark {
+        display: block;
+      }
+
+      .container {
+        position: relative;
+        z-index: 1;
+        width: min(1180px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 3.5rem 0 4.5rem;
+      }
+
+      .intro {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+        gap: var(--dx-space-10);
+        align-items: end;
+        padding-bottom: 3.5rem;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        max-width: 820px;
+        color: var(--dx-text-strong);
+        font-size: clamp(2.25rem, 7vw, 5.75rem);
+        line-height: 0.94;
+        font-weight: 300;
+      }
+
+      .lede {
+        max-width: 720px;
+        margin-top: var(--dx-space-5);
+        color: var(--dx-text-muted);
+        font-size: clamp(1rem, 2vw, 1.1875rem);
+        line-height: 1.6;
+      }
+
+      .source-card {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-md);
+        background: var(--dx-surface-panel);
+        box-shadow: var(--dx-shadow-soft);
+        padding: var(--dx-space-6);
+        --dx-light-origin: 18% -8%;
+        --dx-light-falloff: 48%;
+        --dx-shadow-origin: 96% 110%;
+        --dx-shadow-falloff: 44%;
+      }
+
+      .icon {
+        width: 1rem;
+        height: 1rem;
+        flex: 0 0 auto;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.9;
+        fill: none;
+      }
+
+      .icon.sm {
+        width: 0.875rem;
+        height: 0.875rem;
+      }
+
+      .icon.lg {
+        width: 1.125rem;
+        height: 1.125rem;
+      }
+
+      .icon-label {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--dx-space-2);
+      }
+
+      .section-heading .icon-label {
+        align-items: baseline;
+      }
+
+      .section-heading .icon-label .icon {
+        width: 0.78em;
+        height: 0.78em;
+        color: var(--dx-text-subtle);
+        transform: translateY(0.02em);
+      }
+
+      [data-light-field]::before {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background:
+          radial-gradient(circle at var(--dx-light-origin, 16% 0%), var(--dx-light-glow), transparent var(--dx-light-falloff, 42%)),
+          radial-gradient(circle at var(--dx-shadow-origin, 92% 105%), var(--dx-light-shade), transparent var(--dx-shadow-falloff, 38%));
+        content: "";
+        pointer-events: none;
+      }
+
+      [data-light-field] > * {
+        position: relative;
+      }
+
+      [data-light-field] {
+        box-shadow: var(--dx-shadow-soft);
+      }
+
+      .source-card h2 {
+        color: var(--dx-text-strong);
+        font-size: 0.875rem;
+        text-transform: uppercase;
+      }
+
+      .source-grid {
+        display: grid;
+        gap: var(--dx-space-3);
+        margin-top: var(--dx-space-4);
+      }
+
+      .source-row {
+        display: grid;
+        grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+        gap: var(--dx-space-3);
+        align-items: center;
+      }
+
+      .source-swatch {
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: var(--dx-radius-sm);
+      }
+
+      .source-row strong {
+        display: block;
+        color: var(--dx-text-strong);
+        font-size: 0.9375rem;
+      }
+
+      code {
+        font-family: var(--dx-font-mono);
+        color: var(--dx-text-muted);
+        font-size: 0.8125rem;
+      }
+
+      section {
+        padding: 3rem 0;
+      }
+
+      .section-heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: var(--dx-space-4);
+        margin-bottom: var(--dx-space-6);
+      }
+
+      .section-heading h2 {
+        color: var(--dx-text-strong);
+        font-size: clamp(1.5rem, 3vw, 2.25rem);
+      }
+
+      .section-heading p {
+        max-width: 560px;
+        color: var(--dx-text-muted);
+        line-height: 1.55;
+      }
+
+      .palette-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--dx-space-5);
+      }
+
+      .support-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: var(--dx-space-3);
+        margin-top: var(--dx-space-5);
+      }
+
+      .support-color {
+        display: grid;
+        gap: var(--dx-space-3);
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-md);
+        background: var(--dx-surface-panel);
+        padding: var(--dx-space-4);
+      }
+
+      .support-color h3 {
+        color: var(--dx-text-strong);
+        font-size: 0.875rem;
+      }
+
+      .support-steps {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        overflow: hidden;
+        border-radius: var(--dx-radius-sm);
+      }
+
+      .support-step {
+        min-height: 44px;
+      }
+
+      .support-color code {
+        font-size: 0.75rem;
+      }
+
+      .palette {
+        overflow: hidden;
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-md);
+        background: var(--dx-surface-panel);
+      }
+
+      .palette-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--dx-space-2);
+        padding: var(--dx-space-4);
+        background: var(--dx-surface-panel);
+      }
+
+      .palette-title h3 {
+        color: var(--dx-text-strong);
+        font-size: 1rem;
+      }
+
+      .palette-title code {
+        white-space: nowrap;
+      }
+
+      .scale {
+        display: grid;
+      }
+
+      .shade {
+        display: grid;
+        grid-template-columns: 3.5rem minmax(0, 1fr);
+        min-height: 44px;
+        background: var(--dx-surface-panel);
+      }
+
+      .shade:nth-child(even) {
+        background: var(--dx-surface-raised);
+      }
+
+      .shade .chip {
+        min-height: 42px;
+      }
+
+      .shade .meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--dx-space-2);
+        padding: 0 var(--dx-space-3);
+        min-width: 0;
+      }
+
+      .shade b {
+        color: var(--dx-text-strong);
+        font-size: 0.8125rem;
+      }
+
+      .shade code {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .semantic-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--dx-space-5);
+      }
+
+      .specimen-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--dx-space-5);
+      }
+
+      .specimen-card {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-md);
+        background: var(--dx-surface-panel);
+        padding: var(--dx-space-6);
+        --dx-light-origin: 12% -6%;
+        --dx-light-falloff: 46%;
+        --dx-shadow-origin: 92% 112%;
+        --dx-shadow-falloff: 42%;
+      }
+
+      .specimen-card.wide {
+        grid-column: span 2;
+      }
+
+      .specimen-card:nth-child(2) {
+        --dx-light-origin: 82% -10%;
+        --dx-light-falloff: 52%;
+        --dx-shadow-origin: 2% 108%;
+        --dx-shadow-falloff: 40%;
+      }
+
+      .specimen-card:nth-child(3) {
+        --dx-light-origin: 24% 4%;
+        --dx-light-falloff: 38%;
+        --dx-shadow-origin: 104% 78%;
+        --dx-shadow-falloff: 46%;
+      }
+
+      .specimen-card:nth-child(4) {
+        --dx-light-origin: 68% -12%;
+        --dx-light-falloff: 48%;
+        --dx-shadow-origin: 6% 96%;
+        --dx-shadow-falloff: 36%;
+      }
+
+      .specimen-card:nth-child(5) {
+        --dx-light-origin: 50% -18%;
+        --dx-light-falloff: 62%;
+        --dx-shadow-origin: 94% 78%;
+        --dx-shadow-falloff: 42%;
+      }
+
+      .specimen-label,
+      .eyebrow {
+        color: var(--dx-danger);
+        font-family: var(--dx-font-mono);
+        font-size: 0.75rem;
+        font-weight: 500;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      [data-theme="dark"] .specimen-label,
+      [data-theme="dark"] .eyebrow {
+        color: var(--dx-accent);
+      }
+
+      .display-sample {
+        margin-top: var(--dx-space-4);
+        color: var(--dx-text-strong);
+        font-size: clamp(3rem, 8vw, 5.75rem);
+        font-weight: 300;
+        line-height: 0.94;
+      }
+
+      .heading-sample {
+        margin-top: var(--dx-space-4);
+        color: var(--dx-text-strong);
+        font-size: 2rem;
+        font-weight: 760;
+        line-height: 1.05;
+      }
+
+      .body-sample {
+        margin-top: var(--dx-space-4);
+        color: var(--dx-text-muted);
+        font-size: 1rem;
+        line-height: 1.65;
+      }
+
+      .quote-sample {
+        margin-top: var(--dx-space-4);
+        color: var(--dx-text);
+        font-size: 1.45rem;
+        font-style: italic;
+        font-weight: 360;
+        line-height: 1.35;
+      }
+
+      .caption-sample {
+        margin-top: var(--dx-space-4);
+        color: var(--dx-text-subtle);
+        font-size: 0.8125rem;
+        font-weight: 400;
+        line-height: 1.45;
+      }
+
+      .source-sample {
+        margin-top: var(--dx-space-4);
+        border-radius: var(--dx-radius-sm);
+        background: var(--dx-surface-raised);
+        color: var(--dx-text);
+        font-family: var(--dx-font-mono);
+        font-size: 0.875rem;
+        line-height: 1.65;
+        overflow: auto;
+        padding: var(--dx-space-4);
+      }
+
+      .source-sample.rich {
+        display: grid;
+        gap: var(--dx-space-2);
+        white-space: normal;
+      }
+
+      .source-line {
+        display: block;
+        white-space: pre-wrap;
+      }
+
+      .source-mention {
+        color: var(--dx-info);
+        font-weight: 650;
+      }
+
+      .source-tag {
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-xs);
+        background: var(--dx-surface-panel);
+        color: var(--dx-text-muted);
+        padding: 0.05rem 0.25rem;
+      }
+
+      .metric-sample {
+        margin-top: var(--dx-space-4);
+        color: var(--dx-text-strong);
+        font-family: var(--dx-font-mono);
+        font-size: 2.25rem;
+        font-weight: 650;
+        line-height: 1;
+      }
+
+      .component-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+        gap: var(--dx-space-5);
+      }
+
+      .component-card {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-md);
+        background: var(--dx-surface-panel);
+        padding: var(--dx-space-6);
+        --dx-light-origin: 20% -10%;
+        --dx-light-falloff: 44%;
+        --dx-shadow-origin: 96% 108%;
+        --dx-shadow-falloff: 42%;
+      }
+
+      .component-card:nth-child(2n) {
+        --dx-light-origin: 88% -8%;
+        --dx-light-falloff: 50%;
+        --dx-shadow-origin: 2% 106%;
+        --dx-shadow-falloff: 40%;
+      }
+
+      .component-card:nth-child(3n) {
+        --dx-light-origin: 42% -16%;
+        --dx-light-falloff: 58%;
+        --dx-shadow-origin: 102% 72%;
+        --dx-shadow-falloff: 36%;
+      }
+
+      .component-card h3 {
+        color: var(--dx-text-strong);
+        font-size: 1rem;
+      }
+
+      .light-lab {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--dx-space-5);
+      }
+
+      .light-lab .component-card {
+        min-height: 220px;
+      }
+
+      .light-lab .component-card:nth-child(1) {
+        --dx-light-origin: 18% 0%;
+        --dx-light-falloff: 48%;
+        --dx-shadow-origin: 110% 96%;
+        --dx-shadow-falloff: 44%;
+      }
+
+      .light-lab .component-card:nth-child(2) {
+        --dx-light-origin: 76% 10%;
+        --dx-light-falloff: 56%;
+        --dx-shadow-origin: -8% 112%;
+        --dx-shadow-falloff: 48%;
+      }
+
+      .light-lab .component-card:nth-child(3) {
+        --dx-light-origin: 46% -14%;
+        --dx-light-falloff: 64%;
+        --dx-shadow-origin: 88% 88%;
+        --dx-shadow-falloff: 42%;
+      }
+
+      .light-lab p {
+        margin-top: var(--dx-space-4);
+        color: var(--dx-text-muted);
+        line-height: 1.55;
+      }
+
+      .light-lab .eyebrow {
+        margin-top: 0;
+        color: var(--dx-danger);
+      }
+
+      [data-theme="dark"] .light-lab .eyebrow {
+        color: var(--dx-accent);
+      }
+
+      .light-lab h3 {
+        margin-top: var(--dx-space-4);
+      }
+
+      .button-stack,
+      .field-stack {
+        display: grid;
+        gap: var(--dx-space-3);
+        margin-top: var(--dx-space-5);
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--dx-space-2);
+        align-items: center;
+      }
+
+      .dx-button {
+        min-height: 38px;
+        border: 1px solid transparent;
+        border-radius: var(--dx-radius-sm);
+        padding: 0 var(--dx-space-4);
+        font-weight: 500;
+        color: var(--dx-text);
+        background: transparent;
+      }
+
+      .dx-button.primary {
+        background: var(--dx-accent);
+        color: var(--dx-text-inverse);
+      }
+
+      .dx-button.secondary {
+        border-color: var(--dx-border);
+        background: var(--dx-surface-raised);
+      }
+
+      .dx-button.ghost {
+        background: transparent;
+      }
+
+      .dx-button.danger {
+        background: var(--dx-danger);
+        color: var(--dx-danger-text);
+      }
+
+      .dx-button.is-hover,
+      .dx-button:hover {
+        background: var(--dx-surface-subtle);
+      }
+
+      .dx-button.primary.is-hover,
+      .dx-button.primary:hover {
+        background: var(--dx-accent-hover);
+      }
+
+      .dx-button.danger.is-hover,
+      .dx-button.danger:hover {
+        background: var(--dx-danger-hover);
+        color: var(--dx-danger-text);
+      }
+
+      .dx-button.is-focus,
+      .dx-button:focus-visible,
+      .dx-field.is-focus,
+      .dx-field:focus-visible,
+      .dx-check.is-focus {
+        outline: 3px solid color-mix(in srgb, var(--dx-focus) 36%, transparent);
+        outline-offset: 2px;
+      }
+
+      .dx-field.is-focus {
+        border-color: var(--dx-focus);
+      }
+
+      .dx-check.is-focus {
+        border-radius: var(--dx-radius-xs);
+      }
+
+      .dx-button:disabled,
+      .dx-button.is-disabled,
+      .dx-field:disabled,
+      .dx-field.is-disabled {
+        opacity: 0.48;
+      }
+
+      .field-label {
+        display: grid;
+        gap: var(--dx-space-2);
+        color: var(--dx-text);
+        font-family: var(--dx-font-mono);
+        font-size: 0.75rem;
+        font-weight: 700;
+      }
+
+      .dx-field {
+        width: 100%;
+        min-height: 40px;
+        border: 1px solid var(--dx-border);
+        border-radius: var(--dx-radius-sm);
+        background: var(--dx-surface-canvas);
+        color: var(--dx-text);
+        font-family: var(--dx-font-sans);
+        font-size: 0.875rem;
+        font-weight: 400;
+        padding: 0 var(--dx-space-3);
+      }
+
+      textarea.dx-field {
+        min-height: 88px;
+        padding-top: var(--dx-space-3);
+        resize: vertical;
+      }
+
+      .field-hint {
+        color: var(--dx-text-subtle);
+        font-family: var(--dx-font-sans);
+        font-size: 0.8125rem;
+        font-weight: 400;
+        line-height: 1.4;
+      }
+
+      .choice-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--dx-space-4);
+      }
+
+      .dx-check {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--dx-space-2);
+        color: var(--dx-text);
+        font-size: 0.875rem;
+        font-weight: 400;
+      }
+
+      .dx-check input {
+        accent-color: var(--dx-accent);
+      }
+
+      .badge-lab {
+        display: grid;
+        gap: var(--dx-space-5);
+        margin-top: var(--dx-space-5);
+      }
+
+      .badge-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--dx-space-2);
+        align-items: center;
+      }
+
+      .dx-badge,
+      .dx-tag,
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        align-self: start;
+        gap: 0.35rem;
+        min-height: 24px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--dx-surface-raised);
+        color: var(--dx-text-muted);
+        font-family: var(--dx-font-mono);
+        font-size: 0.75rem;
+        font-weight: 500;
+        line-height: 1;
+        padding: 0 0.45rem;
+      }
+
+      .dx-badge.soft,
+      .dx-tag.soft,
+      .badge {
+        border-color: transparent;
+        background: var(--dx-surface-raised);
+        color: var(--dx-text-muted);
+      }
+
+      .dx-badge.positive {
+        background: var(--dx-success-subtle);
+        color: var(--dx-success-text);
+      }
+
+      .dx-badge.suspect {
+        background: var(--dx-surface-raised);
+        color: var(--dx-text-muted);
+      }
+
+      .dx-badge.doubt {
+        background: var(--dx-surface-raised);
+        color: var(--dx-text-muted);
+      }
+
+      .dx-badge.false,
+      .dx-badge.danger {
+        background: var(--dx-surface-raised);
+        color: var(--dx-text-muted);
+      }
+
+      .dx-badge.neutral {
+        background: var(--dx-surface-raised);
+        color: var(--dx-text-muted);
+      }
+
+      .dx-badge.access,
+      .badge.access {
+        background: var(--dx-info-subtle);
+        color: var(--dx-info-text);
+      }
+
+      .dx-badge.hidden {
+        border: 1px dashed var(--dx-border);
+        background: transparent;
+        color: var(--dx-text-muted);
+      }
+
+      .badge.danger {
+        background: var(--dx-surface-raised);
+        color: var(--dx-text-muted);
+      }
+
+      .tag-close {
+        color: inherit;
+        opacity: 0.65;
+      }
+
+      .theme-panel {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-md);
+        background: var(--dx-surface-panel);
+        color: var(--dx-text);
+        padding: var(--dx-space-6);
+        --dx-light-origin: 18% -8%;
+        --dx-light-falloff: 48%;
+        --dx-shadow-origin: 96% 108%;
+        --dx-shadow-falloff: 42%;
+      }
+
+      .theme-panel:nth-child(2) {
+        --dx-light-origin: 84% -10%;
+        --dx-light-falloff: 54%;
+        --dx-shadow-origin: 0% 110%;
+        --dx-shadow-falloff: 42%;
+      }
+
+      .theme-panel h3 {
+        color: var(--dx-text-strong);
+      }
+
+      .theme-panel[data-sample-theme="light"] {
+        color-scheme: light;
+        --dx-surface-canvas: var(--dx-color-neutral-50);
+        --dx-surface-panel: var(--dx-color-neutral-100);
+        --dx-surface-raised: var(--dx-color-neutral-200);
+        --dx-surface-subtle: var(--dx-color-neutral-300);
+        --dx-text-strong: var(--dx-color-neutral-950);
+        --dx-text: var(--dx-color-neutral-900);
+        --dx-text-muted: var(--dx-color-neutral-600);
+        --dx-text-inverse: var(--dx-color-neutral-100);
+        --dx-accent: var(--dx-color-ember-600);
+        --dx-accent-hover: var(--dx-color-ember-700);
+        --dx-accent-subtle: var(--dx-color-ember-50);
+        --dx-accent-text: var(--dx-color-ember-800);
+        --dx-info: var(--dx-color-info-500);
+        --dx-info-subtle: color-mix(in oklch, var(--dx-color-info-500) 12%, var(--dx-surface-panel));
+        --dx-info-text: var(--dx-color-info-700);
+        --dx-success: var(--dx-color-positive-500);
+        --dx-success-subtle: color-mix(in oklch, var(--dx-color-positive-500) 12%, var(--dx-surface-panel));
+        --dx-success-text: var(--dx-color-positive-700);
+        --dx-danger: var(--dx-color-oxblood-600);
+        --dx-danger-hover: var(--dx-color-oxblood-700);
+        --dx-danger-text: var(--dx-color-neutral-50);
+        --dx-canvas-glow: rgba(255, 255, 255, 0.3);
+        --dx-canvas-shade: rgba(34, 30, 24, 0.035);
+        --dx-light-glow: rgba(255, 255, 255, 0.32);
+        --dx-light-shade: rgba(34, 30, 24, 0.055);
+        --dx-border-subtle: color-mix(in oklch, var(--dx-text) 10%, transparent);
+        --dx-border: color-mix(in oklch, var(--dx-text) 16%, transparent);
+      }
+
+      .theme-panel[data-sample-theme="dark"] {
+        color-scheme: dark;
+        --dx-surface-canvas: var(--dx-color-neutral-950);
+        --dx-surface-panel: var(--dx-color-neutral-900);
+        --dx-surface-raised: var(--dx-color-neutral-800);
+        --dx-surface-subtle: var(--dx-color-neutral-700);
+        --dx-text-strong: var(--dx-color-neutral-50);
+        --dx-text: var(--dx-color-neutral-100);
+        --dx-text-muted: var(--dx-color-neutral-300);
+        --dx-text-inverse: var(--dx-color-neutral-950);
+        --dx-accent: var(--dx-color-ember-400);
+        --dx-accent-hover: var(--dx-color-ember-300);
+        --dx-accent-subtle: color-mix(in oklch, var(--dx-color-ember-700) 42%, transparent);
+        --dx-accent-text: var(--dx-color-ember-100);
+        --dx-info: #8fc0dc;
+        --dx-info-subtle: color-mix(in oklch, var(--dx-color-info-500) 18%, var(--dx-surface-panel));
+        --dx-info-text: #b9d7e7;
+        --dx-success: var(--dx-color-positive-500);
+        --dx-success-subtle: color-mix(in oklch, var(--dx-color-positive-500) 18%, var(--dx-surface-panel));
+        --dx-success-text: var(--dx-color-positive-50);
+        --dx-danger: var(--dx-color-oxblood-300);
+        --dx-danger-hover: var(--dx-color-oxblood-400);
+        --dx-danger-text: var(--dx-color-neutral-950);
+        --dx-canvas-glow: rgba(248, 243, 232, 0.035);
+        --dx-canvas-shade: rgba(0, 0, 0, 0.08);
+        --dx-light-glow: rgba(248, 243, 232, 0.055);
+        --dx-light-shade: rgba(0, 0, 0, 0.1);
+        --dx-border-subtle: color-mix(in oklch, var(--dx-text) 10%, transparent);
+        --dx-border: color-mix(in oklch, var(--dx-text) 16%, transparent);
+      }
+
+      .theme-demo {
+        display: grid;
+        gap: var(--dx-space-3);
+        margin-top: var(--dx-space-5);
+        padding: var(--dx-space-5);
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-md);
+        background: var(--dx-surface-canvas);
+      }
+
+      .fabric-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: var(--dx-space-3);
+        padding: var(--dx-space-4);
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-sm);
+        background: var(--dx-surface-panel);
+      }
+
+      .fabric-row strong {
+        color: var(--dx-text-strong);
+      }
+
+      .fabric-row p {
+        margin-top: 0.25rem;
+        color: var(--dx-text-muted);
+        font-size: 0.875rem;
+        line-height: 1.45;
+      }
+
+      .token-table {
+        display: grid;
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-md);
+        overflow: hidden;
+        background: var(--dx-surface-panel);
+      }
+
+      .token-row {
+        display: grid;
+        grid-template-columns: minmax(180px, 0.8fr) minmax(180px, 1fr) minmax(0, 1.3fr) auto;
+        gap: var(--dx-space-3);
+        align-items: center;
+        padding: var(--dx-space-4);
+        background: var(--dx-surface-canvas);
+      }
+
+      .token-row:nth-child(even) {
+        background: var(--dx-surface-panel);
+      }
+
+      .token-row strong {
+        color: var(--dx-text-strong);
+      }
+
+      .value-pill {
+        width: fit-content;
+        max-width: 100%;
+      }
+
+      .icon-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+        gap: var(--dx-space-5);
+      }
+
+      .icon-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--dx-space-3);
+        margin-top: var(--dx-space-5);
+      }
+
+      .icon-tile {
+        display: grid;
+        place-items: center;
+        width: 48px;
+        height: 48px;
+        border-radius: var(--dx-radius-sm);
+        background: var(--dx-surface-raised);
+        color: var(--dx-text);
+      }
+
+      .icon-tile svg {
+        width: 22px;
+        height: 22px;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.8;
+        fill: none;
+      }
+
+      .dx-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--dx-space-2);
+      }
+
+      .icon-note {
+        margin-top: var(--dx-space-4);
+        color: var(--dx-text-muted);
+        line-height: 1.55;
+      }
+
+      .logo-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--dx-space-5);
+      }
+
+      .logo-field {
+        display: grid;
+        gap: var(--dx-space-4);
+        min-height: 180px;
+        align-content: center;
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-md);
+        background: var(--dx-surface-panel);
+        padding: var(--dx-space-6);
+      }
+
+      .logo-field.on-light {
+        --dx-field-label: var(--dx-color-neutral-600);
+        --dx-field-caption: var(--dx-color-neutral-600);
+        --dx-field-eyebrow: var(--dx-color-oxblood-600);
+        background: var(--dx-color-neutral-100);
+        color: var(--dx-color-neutral-900);
+      }
+
+      .logo-field.on-dark {
+        --dx-field-label: var(--dx-color-neutral-300);
+        --dx-field-caption: var(--dx-color-neutral-300);
+        --dx-field-eyebrow: var(--dx-color-ember-400);
+        border-color: color-mix(in oklch, var(--dx-color-neutral-100) 16%, transparent);
+        background: var(--dx-color-neutral-900);
+        color: var(--dx-color-neutral-100);
+      }
+
+      .logo-field img {
+        width: min(260px, 100%);
+        height: auto;
+      }
+
+      .logo-variant-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--dx-space-4);
+      }
+
+      .logo-variant {
+        display: grid;
+        gap: var(--dx-space-3);
+        align-content: center;
+        min-height: 104px;
+      }
+
+      .logo-variant img {
+        width: min(220px, 100%);
+      }
+
+      .logo-variant.mark img {
+        width: 48px;
+      }
+
+      .logo-variant code {
+        display: block;
+        color: var(--dx-field-caption);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .component-card h3 + .logo-field,
+      .logo-field + .logo-field {
+        margin-top: var(--dx-space-5);
+      }
+
+      .logo-group-title {
+        margin: 0;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        text-transform: uppercase;
+      }
+
+      .logo-group-title.eyebrow {
+        color: var(--dx-field-eyebrow);
+      }
+
+      .logo-mark-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--dx-space-4);
+        align-items: center;
+      }
+
+      .logo-mark-row img {
+        width: 42px;
+        height: 42px;
+      }
+
+      .logo-mark-row.compact img {
+        width: 32px;
+        height: 32px;
+      }
+
+      .guideline-list {
+        display: grid;
+        gap: var(--dx-space-4);
+        max-width: 820px;
+        margin-top: var(--dx-space-6);
+      }
+
+      .guideline {
+        display: grid;
+        grid-template-columns: minmax(120px, 0.4fr) minmax(0, 1fr);
+        gap: var(--dx-space-3);
+        align-items: start;
+      }
+
+      .guideline strong {
+        color: var(--dx-text-strong);
+        font-size: 0.9375rem;
+      }
+
+      .guideline .icon-note {
+        margin-top: 0;
+      }
+
+      .site-footer {
+        position: relative;
+        z-index: 1;
+        width: min(1180px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 0 0 3rem;
+      }
+
+      .footer-divider {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: var(--dx-space-4);
+        align-items: center;
+        color: var(--dx-text-muted);
+      }
+
+      .footer-divider::before,
+      .footer-divider::after {
+        height: 1px;
+        background: var(--dx-border-subtle);
+        content: "";
+      }
+
+      .footer-divider img {
+        width: 28px;
+        height: 28px;
+      }
+
+      .site-footer p {
+        margin-top: var(--dx-space-4);
+        color: var(--dx-text-subtle);
+        font-size: 0.8125rem;
+        line-height: 1.5;
+        text-align: center;
+      }
+
+      @media (max-width: 980px) {
+        .intro,
+        .semantic-grid,
+        .palette-grid,
+        .specimen-grid,
+        .icon-grid,
+        .logo-grid,
+        .support-grid,
+        .light-lab,
+        .component-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .specimen-card.wide {
+          grid-column: auto;
+        }
+
+        .section-heading {
+          display: grid;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .topbar {
+          align-items: center;
+          flex-direction: row;
+        }
+
+        .source-row {
+          grid-template-columns: 2.5rem minmax(0, 1fr);
+        }
+
+        .source-row code {
+          grid-column: 2;
+        }
+
+        .token-row {
+          grid-template-columns: 1fr;
+        }
+
+        .token-copy {
+          justify-self: start;
+        }
+
+        .logo-variant-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <img class="brand-logo brand-logo-light" src="./assets/2026-05-doxvelt-wordmark-fg-ink-raw.svg" alt="Doxvelt">
+          <img class="brand-logo brand-logo-dark" src="./assets/2026-05-doxvelt-wordmark-fg-parchment-raw.svg" alt="Doxvelt">
+        </div>
+        <button class="dx-button ghost" type="button" aria-pressed="false" data-theme-toggle>
+          <span data-theme-icon></span>
+          <span data-theme-label>Dark</span>
+        </button>
+      </header>
+
+      <main class="container">
+        <div class="intro">
+          <div>
+            <h1>Subjective worlds need legible surfaces.</h1>
+            <p class="lede">
+              This first token pass turns the existing Doxvelt marks, Geist fonts, and product language into a quiet local workbench palette for dossiers, transcript turns, beliefs, access paths, and source review.
+            </p>
+          </div>
+
+          <aside class="source-card" data-light-field>
+            <h2>Source Colors</h2>
+            <div class="source-grid">
+              <div class="source-row">
+                <span class="source-swatch" style="background:var(--dx-color-ink)"></span>
+                <span><strong>Ink</strong><code>neutral-900</code></span>
+                <code>#221e18</code>
+              </div>
+              <div class="source-row">
+                <span class="source-swatch" style="background:var(--dx-color-parchment)"></span>
+                <span><strong>Parchment</strong><code>neutral-100</code></span>
+                <code>#f8f3e8</code>
+              </div>
+              <div class="source-row">
+                <span class="source-swatch" style="background:var(--dx-color-ember-500)"></span>
+                <span><strong>Ember</strong><code>rgb(216, 106, 77)</code></span>
+                <code>#d86a4d</code>
+              </div>
+              <div class="source-row">
+                <span class="source-swatch" style="background:var(--dx-color-oxblood-600)"></span>
+                <span><strong>Oxblood</strong><code>rgb(110, 38, 29)</code></span>
+                <code>#6e261d</code>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <section aria-labelledby="palette-title">
+          <div class="section-heading">
+          <div>
+              <h2 id="palette-title" class="icon-label"><span data-icon="swatches"></span>Color Scales</h2>
+              <p>One neutral ramp carries ink, parchment, surfaces, and text. Ember and oxblood stay separate for action, warmth, risk, and dramatic emphasis.</p>
+            </div>
+          </div>
+          <div class="palette-grid" data-palettes></div>
+          <div class="support-grid">
+            <article class="support-color">
+              <h3>Success</h3>
+              <div class="support-steps" aria-hidden="true">
+                <span class="support-step" style="background:var(--dx-color-positive-50)"></span>
+                <span class="support-step" style="background:var(--dx-color-positive-500)"></span>
+                <span class="support-step" style="background:var(--dx-color-positive-700)"></span>
+              </div>
+              <code>positive 50 / 500 / 700</code>
+            </article>
+            <article class="support-color">
+              <h3>Info</h3>
+              <div class="support-steps" aria-hidden="true">
+                <span class="support-step" style="background:var(--dx-color-info-50)"></span>
+                <span class="support-step" style="background:var(--dx-color-info-500)"></span>
+                <span class="support-step" style="background:var(--dx-color-info-700)"></span>
+              </div>
+              <code>info 50 / 500 / 700</code>
+            </article>
+            <article class="support-color">
+              <h3>Caution</h3>
+              <div class="support-steps" aria-hidden="true">
+                <span class="support-step" style="background:var(--dx-color-caution-50)"></span>
+                <span class="support-step" style="background:var(--dx-color-caution-500)"></span>
+                <span class="support-step" style="background:var(--dx-color-caution-700)"></span>
+              </div>
+              <code>caution 50 / 500 / 700</code>
+            </article>
+            <article class="support-color">
+              <h3>Negative</h3>
+              <div class="support-steps" aria-hidden="true">
+                <span class="support-step" style="background:var(--dx-color-negative-50)"></span>
+                <span class="support-step" style="background:var(--dx-color-negative-500)"></span>
+                <span class="support-step" style="background:var(--dx-color-negative-700)"></span>
+              </div>
+              <code>negative 50 / 500 / 700</code>
+            </article>
+          </div>
+        </section>
+
+        <section aria-labelledby="logo-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="logo-title" class="icon-label"><span data-icon="badge"></span>Logo</h2>
+              <p>Use the wordmark when the product needs to be named, and the mark when the surface is already branded or too small for legible type.</p>
+            </div>
+          </div>
+
+          <div class="logo-grid">
+            <article class="component-card">
+              <h3>Wordmark</h3>
+              <div class="logo-field on-light">
+                <h4 class="eyebrow logo-group-title">Light Theme</h4>
+                <div class="logo-variant-grid">
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-raw.svg" alt="Doxvelt ink foreground raw wordmark">
+                    <code>fg ink raw</code>
+                  </div>
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-raw-spark-oxblood.svg" alt="Doxvelt ink foreground raw wordmark with oxblood spark">
+                    <code>fg ink raw / oxblood spark</code>
+                  </div>
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-bg-parchment-spark-oxblood.svg" alt="Doxvelt ink foreground on parchment with oxblood spark wordmark">
+                    <code>fg ink / bg parchment / oxblood spark</code>
+                  </div>
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-bg-parchment-solid.svg" alt="Doxvelt ink foreground on parchment solid wordmark">
+                    <code>fg ink / bg parchment solid</code>
+                  </div>
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-clearspace.svg" alt="Doxvelt ink foreground clearspace wordmark">
+                    <code>fg ink clearspace</code>
+                  </div>
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-bg-oxblood-solid.svg" alt="Doxvelt parchment foreground on oxblood solid wordmark">
+                    <code>fg parchment / bg oxblood solid</code>
+                  </div>
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-bg-oxblood-spark.svg" alt="Doxvelt parchment foreground on oxblood with spark wordmark">
+                    <code>fg parchment / bg oxblood spark</code>
+                  </div>
+                </div>
+              </div>
+              <div class="logo-field on-dark">
+                <h4 class="eyebrow logo-group-title">Dark Theme</h4>
+                <div class="logo-variant-grid">
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-raw.svg" alt="Doxvelt parchment foreground raw wordmark">
+                    <code>fg parchment raw</code>
+                  </div>
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-raw-spark-ember.svg" alt="Doxvelt parchment foreground raw wordmark with ember spark">
+                    <code>fg parchment raw / ember spark</code>
+                  </div>
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-bg-ink-spark-ember.svg" alt="Doxvelt parchment foreground on ink with ember spark wordmark">
+                    <code>fg parchment / bg ink / ember spark</code>
+                  </div>
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-bg-ink-solid.svg" alt="Doxvelt parchment foreground on ink solid wordmark">
+                    <code>fg parchment / bg ink solid</code>
+                  </div>
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-clearspace.svg" alt="Doxvelt parchment foreground clearspace wordmark">
+                    <code>fg parchment clearspace</code>
+                  </div>
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-bg-ember-solid.svg" alt="Doxvelt ink foreground on ember solid wordmark">
+                    <code>fg ink / bg ember solid</code>
+                  </div>
+                  <div class="logo-variant">
+                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-bg-ember-spark.svg" alt="Doxvelt ink foreground on ember with spark wordmark">
+                    <code>fg ink / bg ember spark</code>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article class="component-card">
+              <h3>Marks</h3>
+              <div class="logo-field on-light">
+                <h4 class="eyebrow logo-group-title">Light Theme</h4>
+                <div class="logo-variant-grid">
+                  <div class="logo-variant mark">
+                    <img src="./assets/2026-05-doxvelt-mark-fg-ink-raw.svg" alt="Ink foreground raw mark">
+                    <code>fg ink raw</code>
+                  </div>
+                  <div class="logo-variant mark">
+                    <img src="./assets/2026-05-doxvelt-mark-fg-ink-raw-spark-oxblood.svg" alt="Ink foreground raw mark with oxblood spark">
+                    <code>fg ink raw / oxblood spark</code>
+                  </div>
+                  <div class="logo-variant mark">
+                    <img src="./assets/2026-05-doxvelt-mark-fg-ink-bg-parchment-spark-oxblood.svg" alt="Ink foreground on parchment with oxblood spark mark">
+                    <code>fg ink / bg parchment / oxblood spark</code>
+                  </div>
+                  <div class="logo-variant mark">
+                    <img src="./assets/2026-05-doxvelt-mark-fg-ink-bg-parchment-solid.svg" alt="Ink foreground on parchment solid mark">
+                    <code>fg ink / bg parchment solid</code>
+                  </div>
+                  <div class="logo-variant mark">
+                    <img src="./assets/2026-05-doxvelt-mark-fg-parchment-bg-oxblood-spark.svg" alt="Parchment foreground on oxblood with spark mark">
+                    <code>fg parchment / bg oxblood spark</code>
+                  </div>
+                  <div class="logo-variant mark">
+                    <img src="./assets/2026-05-doxvelt-mark-fg-parchment-bg-oxblood-solid.svg" alt="Parchment foreground on oxblood solid mark">
+                    <code>fg parchment / bg oxblood solid</code>
+                  </div>
+                </div>
+              </div>
+              <div class="logo-field on-dark">
+                <h4 class="eyebrow logo-group-title">Dark Theme</h4>
+                <div class="logo-variant-grid">
+                  <div class="logo-variant mark">
+                    <img src="./assets/2026-05-doxvelt-mark-fg-parchment-raw.svg" alt="Parchment foreground raw mark">
+                    <code>fg parchment raw</code>
+                  </div>
+                  <div class="logo-variant mark">
+                    <img src="./assets/2026-05-doxvelt-mark-fg-parchment-raw-spark-ember.svg" alt="Parchment foreground raw mark with ember spark">
+                    <code>fg parchment raw / ember spark</code>
+                  </div>
+                  <div class="logo-variant mark">
+                    <img src="./assets/2026-05-doxvelt-mark-fg-parchment-bg-ink-spark-ember.svg" alt="Parchment foreground on ink with ember spark mark">
+                    <code>fg parchment / bg ink / ember spark</code>
+                  </div>
+                  <div class="logo-variant mark">
+                    <img src="./assets/2026-05-doxvelt-mark-fg-parchment-bg-ink-solid.svg" alt="Parchment foreground on ink solid mark">
+                    <code>fg parchment / bg ink solid</code>
+                  </div>
+                  <div class="logo-variant mark">
+                    <img src="./assets/2026-05-doxvelt-mark-fg-ink-bg-ember-spark.svg" alt="Ink foreground on ember with spark mark">
+                    <code>fg ink / bg ember spark</code>
+                  </div>
+                  <div class="logo-variant mark">
+                    <img src="./assets/2026-05-doxvelt-mark-fg-ink-bg-ember-solid.svg" alt="Ink foreground on ember solid mark">
+                    <code>fg ink / bg ember solid</code>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div class="guideline-list">
+            <div class="guideline">
+              <strong class="icon-label"><span data-icon="contrast"></span>Theme</strong>
+              <p class="icon-note">Ink on light fields, parchment on dark fields. Accented variants are for emphasis, not default branding.</p>
+            </div>
+            <div class="guideline">
+              <strong class="icon-label"><span data-icon="minimize"></span>Small Sizes</strong>
+              <p class="icon-note">Use no-spark marks below 48px square, including favicons, app icons, tight navigation, and any surface where the spark loses detail.</p>
+            </div>
+            <div class="guideline">
+              <strong class="icon-label"><span data-icon="frame"></span>Clean Space</strong>
+              <p class="icon-note">Use raw unboxed assets when UI layout and CSS already control spacing. Use clearspace assets for documents and exports, and solid assets when the mark needs its own contrast field.</p>
+            </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="type-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="type-title" class="icon-label"><span data-icon="type"></span>Typography</h2>
+              <p>Geist Light carries the dramatic display voice. The system uses tighter, sturdier weights for operational labels, controls, source spans, and simulation metadata.</p>
+            </div>
+          </div>
+
+          <div class="specimen-grid">
+            <article class="specimen-card wide" data-light-field>
+              <p class="specimen-label">Display</p>
+              <p class="display-sample">Subjective context</p>
+              <p class="caption-sample">Geist Light, oversized, reserved for first-screen moments and major product identity.</p>
+            </article>
+            <article class="specimen-card">
+              <p class="specimen-label">Eyebrow</p>
+              <p class="eyebrow">Restricted Audience</p>
+              <p class="caption-sample">Geist Mono, uppercase, medium weight, accent color. Use for section metadata, mode labels, and theme showcase labels.</p>
+            </article>
+            <article class="specimen-card">
+              <p class="eyebrow">Episode Closure</p>
+              <p class="heading-sample">Memories before beliefs.</p>
+              <p class="body-sample">Headings stay compact and work-focused so dense engine screens remain scannable.</p>
+            </article>
+            <article class="specimen-card">
+              <p class="specimen-label">Quote</p>
+              <p class="quote-sample">"I remember what I was allowed to see, not what was true."</p>
+              <p class="caption-sample">Use for character voice, excerpted memories, and authored prose callouts.</p>
+            </article>
+            <article class="specimen-card">
+              <p class="specimen-label">Caption</p>
+              <p class="caption-sample">Figure 2. Belief access paths after @jade loses live membership in @mafia.</p>
+              <p class="metric-sample">+3</p>
+            </article>
+            <article class="specimen-card wide" data-light-field>
+              <p class="specimen-label">Source</p>
+              <div class="source-sample rich">
+                <span class="source-line"><span class="source-mention">@jade</span> is undercover inside <span class="source-mention">@mafia</span>. <span class="source-tag">:canonical</span> <span class="source-tag">:hidden</span></span>
+                <span class="source-line"><span class="source-mention">@pete</span> suspects <span class="source-mention">@mike</span> loves <span class="source-mention">@jade</span>. <span class="source-tag">:+1</span></span>
+                <span class="source-line">This connection gives <span class="source-mention">@jade</span> access to <span class="source-mention">@mafia</span> knowledge. <span class="source-tag">:access:member</span></span>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section aria-labelledby="components-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="components-title" class="icon-label"><span data-icon="sliders"></span>Components</h2>
+              <p>Core controls use medium-weight labels, restrained radius, selective borders, and explicit states. The goal is calm operational confidence, not decorative chrome.</p>
+            </div>
+          </div>
+
+          <div class="component-grid">
+            <article class="component-card" data-light-field>
+              <h3>Buttons</h3>
+              <div class="button-stack">
+                <div class="button-row">
+                  <button class="dx-button primary" type="button">Primary</button>
+                  <button class="dx-button secondary" type="button">Secondary</button>
+                  <button class="dx-button ghost" type="button">Ghost</button>
+                  <button class="dx-button danger" type="button">Danger</button>
+                </div>
+                <div class="button-row">
+                  <button class="dx-button primary is-hover" type="button">Hover</button>
+                  <button class="dx-button ghost is-hover" type="button">Ghost hover</button>
+                  <button class="dx-button secondary is-focus" type="button">Focus</button>
+                  <button class="dx-button ghost is-disabled" type="button" disabled>Disabled</button>
+                </div>
+              </div>
+            </article>
+
+            <article class="component-card">
+              <h3>Forms</h3>
+              <div class="field-stack">
+                <label class="field-label">
+                  Workspace
+                  <input class="dx-field" value="workspaces/demo">
+                  <span class="field-hint">Plain text input with visible but quiet boundaries.</span>
+                </label>
+                <label class="field-label">
+                  Actor kind
+                  <select class="dx-field">
+                    <option>Agent</option>
+                    <option>Affiliation</option>
+                    <option>Artifact</option>
+                    <option>Stateless</option>
+                  </select>
+                </label>
+                <label class="field-label">
+                  Stage whisper
+                  <textarea class="dx-field is-focus">Do not reveal the access path yet.</textarea>
+                </label>
+                <div class="choice-row">
+                  <label class="dx-check"><input type="checkbox" checked> Active audience</label>
+                  <label class="dx-check is-focus"><input type="radio" name="visibility" checked> Private turn</label>
+                  <label class="dx-check"><input type="checkbox" disabled> Locked</label>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section aria-labelledby="icons-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="icons-title" class="icon-label"><span data-icon="sparkles"></span>Icons</h2>
+              <p>Use icons as operational tools first: navigation, object type, provenance, visibility, and state. Lucide is the best default fit; Phosphor can stay available for richer narrative objects where warmth matters more than strict product chrome.</p>
+            </div>
+          </div>
+
+          <div class="icon-grid">
+            <article class="component-card" data-light-field>
+              <h3>Product set</h3>
+              <p class="icon-note">Lucide-style line icons pair well with the squared mark, restrained controls, and medium-weight labels.</p>
+              <div class="icon-row" aria-label="Product icon examples">
+                <span class="icon-tile" title="Actor">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path><path d="M4 21a8 8 0 0 1 16 0"></path></svg>
+                </span>
+                <span class="icon-tile" title="Memory">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l3 3v15H6Z"></path><path d="M14 3v4h4"></path><path d="M9 12h6"></path><path d="M9 16h4"></path></svg>
+                </span>
+                <span class="icon-tile" title="Access">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 11V8a4 4 0 0 1 8 0v3"></path><path d="M6 11h12v10H6Z"></path><path d="M12 15v2"></path></svg>
+                </span>
+                <span class="icon-tile" title="Visibility">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"></path><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path></svg>
+                </span>
+              </div>
+            </article>
+
+            <article class="component-card">
+              <h3>Narrative reserve</h3>
+              <p class="icon-note">Phosphor is narratively richer, but its roundness can soften the system too much if used everywhere. Keep it for authored-world affordances: artifacts, dossier flavor, and scenario-specific objects.</p>
+              <div class="badge-lab">
+                <div class="badge-group">
+                  <span class="dx-badge soft">UI chrome: Lucide</span>
+                  <span class="dx-badge soft">World objects: Phosphor optional</span>
+                  <span class="dx-badge hidden">no mixed metaphors</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section aria-labelledby="badges-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="badges-title" class="icon-label"><span data-icon="tags"></span>Tags And Badges</h2>
+              <p>Badges summarize runtime state. Tags mirror source hints. Mentions stay distinct because they are the bridge between prose and compiled fabric.</p>
+            </div>
+          </div>
+
+          <div class="component-grid">
+            <article class="component-card" data-light-field>
+              <h3>Belief Strength</h3>
+              <div class="badge-lab">
+                <div class="badge-group">
+                  <span class="dx-badge positive">+3 true</span>
+                  <span class="dx-badge suspect">+1 suspects</span>
+                  <span class="dx-badge neutral">0 neutral</span>
+                  <span class="dx-badge doubt">-1 doubts</span>
+                  <span class="dx-badge false">-3 false</span>
+                </div>
+                <div class="badge-group">
+                  <span class="dx-badge access">access:member</span>
+                  <span class="dx-badge hidden">hidden</span>
+                  <span class="dx-badge soft">canonical</span>
+                  <span class="dx-badge neutral">retained</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="component-card">
+              <h3>Authoring Tags</h3>
+              <div class="badge-lab">
+                <div class="badge-group">
+                  <span class="dx-tag soft">:surface:in_person</span>
+                  <span class="dx-tag soft">:+1</span>
+                  <span class="dx-tag soft">:hidden</span>
+                  <span class="dx-tag soft">:access:member</span>
+                </div>
+                <div class="badge-group">
+                  <span class="dx-tag">@jade <span class="tag-close">x</span></span>
+                  <span class="dx-tag">@mafia <span class="tag-close">x</span></span>
+                  <span class="dx-tag">@lukes-phone <span class="tag-close">x</span></span>
+                </div>
+                <div class="source-sample rich">
+                  <span class="source-line"><span class="source-mention">@jade</span> usually appears calm. <span class="source-tag">:surface:in_person,video</span> <span class="source-tag">:+3</span></span>
+                  <span class="source-line"><span class="source-mention">@lukes-phone</span> appears locked. <span class="source-tag">:surface:@artifact</span> <span class="source-tag">:+3</span></span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section aria-labelledby="light-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="light-title" class="icon-label"><span data-icon="sun"></span>Light And Shadow</h2>
+              <p>Cards can borrow a quiet environmental field to make subjective material feel situated. The effect should suggest depth and attention, never encode truth, secrecy, or access by itself.</p>
+            </div>
+          </div>
+
+          <div class="light-lab">
+            <article class="component-card" data-light-field>
+              <p class="eyebrow">Shed Light</p>
+              <h3>Reveal structure.</h3>
+              <p>Use the lighter side to make a panel feel approachable and readable without turning every surface into a framed object.</p>
+            </article>
+            <article class="component-card" data-light-field>
+              <p class="eyebrow">Cast Shadow</p>
+              <h3>Hold ambiguity.</h3>
+              <p>Let shade create quiet depth around dossiers, memories, and access paths while the actual state remains explicit in labels and badges.</p>
+            </article>
+            <article class="component-card" data-light-field>
+              <p class="eyebrow">Vary The Field</p>
+              <h3>Avoid pattern.</h3>
+              <p>Change origin and falloff per layout region so the page feels observed by ambient light instead of stamped with identical gradients.</p>
+            </article>
+          </div>
+        </section>
+
+        <section aria-labelledby="theme-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="theme-title" class="icon-label"><span data-icon="moon"></span>Theme Semantics</h2>
+              <p>Components should use semantic tokens first, then raw palette tokens only when a visual needs a fixed brand color.</p>
+            </div>
+          </div>
+
+          <div class="semantic-grid">
+            <div class="theme-panel" data-sample-theme="light" data-light-field>
+              <h3>Light Theme</h3>
+              <div class="theme-demo">
+                <div class="fabric-row">
+                  <div>
+                    <strong>@jade sees the room differently.</strong>
+                    <p>Surface, belief, and access cues remain distinct without making the interface theatrical.</p>
+                  </div>
+                  <span class="badge">:+1</span>
+                </div>
+                <div class="fabric-row">
+                  <div>
+                    <strong>Source span preserved</strong>
+                    <p><code>entities/jade/BELIEFS.md:12</code></p>
+                  </div>
+                  <span class="badge">held</span>
+                </div>
+                <button class="dx-button primary" type="button">Validate Source</button>
+              </div>
+            </div>
+
+            <div class="theme-panel" data-sample-theme="dark" data-light-field>
+              <h3>Dark Theme</h3>
+              <div class="theme-demo">
+                <div class="fabric-row">
+                  <div>
+                    <strong>@mafia belief is accessible live.</strong>
+                    <p>Dark mode keeps neutral warmth, but uses ember for actionable state and provenance emphasis.</p>
+                  </div>
+                  <span class="badge access">access</span>
+                </div>
+                <div class="fabric-row">
+                  <div>
+                    <strong>Episode closure pending</strong>
+                    <p><code>memory -> beliefs -> history</code></p>
+                  </div>
+                  <span class="badge danger">block</span>
+                </div>
+                <button class="dx-button primary" type="button">Close Episode</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="tokens-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="tokens-title" class="icon-label"><span data-icon="braces"></span>Core Tokens</h2>
+              <p>The next steps can extend this table with typography, spacing, form controls, transcript turns, editor states, and navigation patterns.</p>
+            </div>
+          </div>
+          <div class="token-table" data-token-table></div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <div class="footer-divider" aria-hidden="true">
+          <img class="brand-logo-light" src="./assets/2026-05-doxvelt-mark-fg-ink-raw.svg" alt="">
+          <img class="brand-logo-dark" src="./assets/2026-05-doxvelt-mark-fg-parchment-raw.svg" alt="">
+        </div>
+        <p>Copyright © 2026 Michael Schmidle. Doxvelt, the Doxvelt name, wordmarks, and marks are trademarks of Michael Schmidle.</p>
+      </footer>
+    </div>
+
+    <script>
+      const icons = {
+        badge: '<path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.77 4 4 0 0 1 0 6.76 4 4 0 0 1-4.78 4.77 4 4 0 0 1-6.74 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"></path><path d="m9 12 2 2 4-4"></path>',
+        braces: '<path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4c0 1.1.9 2 2 2h1"></path><path d="M16 21h1a2 2 0 0 0 2-2v-4c0-1.1.9-2 2-2a2 2 0 0 1-2-2V7c0-1.1-.9-2-2-2h-1"></path>',
+        check: '<path d="M20 6 9 17l-5-5"></path>',
+        clipboard: '<rect width="8" height="4" x="8" y="2" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>',
+        contrast: '<circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 0 0 20Z"></path>',
+        copy: '<rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>',
+        frame: '<line x1="22" x2="2" y1="6" y2="6"></line><line x1="22" x2="2" y1="18" y2="18"></line><line x1="6" x2="6" y1="2" y2="22"></line><line x1="18" x2="18" y1="2" y2="22"></line>',
+        minimize: '<path d="M8 3v3a2 2 0 0 1-2 2H3"></path><path d="M21 8h-3a2 2 0 0 1-2-2V3"></path><path d="M3 16h3a2 2 0 0 1 2 2v3"></path><path d="M16 21v-3a2 2 0 0 1 2-2h3"></path>',
+        moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>',
+        sliders: '<line x1="21" x2="14" y1="4" y2="4"></line><line x1="10" x2="3" y1="4" y2="4"></line><line x1="21" x2="12" y1="12" y2="12"></line><line x1="8" x2="3" y1="12" y2="12"></line><line x1="21" x2="16" y1="20" y2="20"></line><line x1="12" x2="3" y1="20" y2="20"></line><line x1="14" x2="14" y1="2" y2="6"></line><line x1="8" x2="8" y1="10" y2="14"></line><line x1="16" x2="16" y1="18" y2="22"></line>',
+        sparkles: '<path d="M9.94 14.94 9 18l-.94-3.06A4 4 0 0 0 5.06 12L2 11.06 5.06 10a4 4 0 0 0 3-3L9 4l.94 3.06a4 4 0 0 0 3 3L16 11.06 12.94 12a4 4 0 0 0-3 2.94Z"></path><path d="M20 3v4"></path><path d="M22 5h-4"></path><path d="M20 17v4"></path><path d="M22 19h-4"></path>',
+        sun: '<circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path>',
+        swatches: '<path d="M6 2v20"></path><path d="M18 2v20"></path><path d="M2 6h20"></path><path d="M2 18h20"></path><path d="M2 12h20"></path>',
+        tags: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"></path><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"></circle>',
+        type: '<path d="M4 7V4h16v3"></path><path d="M9 20h6"></path><path d="M12 4v16"></path>'
+      };
+
+      function icon(name, className = "") {
+        return `<svg class="icon ${className}" viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`;
+      }
+
+      function hydrateStaticIcons() {
+        document.querySelectorAll("[data-icon]").forEach((mount) => {
+          mount.innerHTML = icon(mount.dataset.icon, "lg");
+        });
+      }
+
+      const palettes = [
+        { name: "Neutral", key: "neutral" },
+        { name: "Ember", key: "ember" },
+        { name: "Oxblood", key: "oxblood" }
+      ];
+      const shades = ["50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950"];
+      const tokens = [
+        ["Canvas", "--dx-surface-canvas", "Primary page background"],
+        ["Panel", "--dx-surface-panel", "Tool panes, sidebars, and repeated items"],
+        ["Raised", "--dx-surface-raised", "Controls and elevated surfaces"],
+        ["Subtle", "--dx-surface-subtle", "Quiet fills and metric cells"],
+        ["Text Strong", "--dx-text-strong", "Headings and primary labels"],
+        ["Text", "--dx-text", "Default body copy"],
+        ["Text Muted", "--dx-text-muted", "Secondary labels and helper copy"],
+        ["Border", "--dx-border", "Default separators"],
+        ["Accent", "--dx-accent", "Primary action and selected state"],
+        ["Accent Subtle", "--dx-accent-subtle", "Badges and soft selected state"],
+        ["Danger", "--dx-danger", "Destructive or critical state"],
+        ["Success", "--dx-success", "Positive confirmation state"],
+        ["Info", "--dx-info", "Informational and mention-adjacent state"],
+        ["Focus", "--dx-focus", "Keyboard focus outline"],
+        ["Canvas Glow", "--dx-canvas-glow", "Broad ambient page highlight"],
+        ["Canvas Shade", "--dx-canvas-shade", "Broad ambient page shadow"],
+        ["Light Glow", "--dx-light-glow", "Ambient highlight field for cards"],
+        ["Light Shade", "--dx-light-shade", "Ambient shadow field for cards"]
+      ];
+
+      const root = document.documentElement;
+      const paletteMount = document.querySelector("[data-palettes]");
+      const tokenTable = document.querySelector("[data-token-table]");
+      const themeToggle = document.querySelector("[data-theme-toggle]");
+      const themeLabel = document.querySelector("[data-theme-label]");
+
+      function cssValue(name) {
+        return getComputedStyle(root).getPropertyValue(name).trim();
+      }
+
+      function renderPalettes() {
+        paletteMount.innerHTML = palettes.map((palette) => `
+          <article class="palette">
+            <div class="palette-title">
+              <h3>${palette.name}</h3>
+              <code>--dx-color-${palette.key}</code>
+            </div>
+            <div class="scale">
+              ${shades.map((shade) => {
+                const token = `--dx-color-${palette.key}-${shade}`;
+                const value = cssValue(token);
+                return `
+                  <div class="shade">
+                    <span class="chip" style="background:${value}"></span>
+                    <span class="meta"><b>${shade}</b><code>${value}</code></span>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </article>
+        `).join("");
+      }
+
+      function renderTokens() {
+        tokenTable.innerHTML = tokens.map(([label, token, role]) => {
+          const value = cssValue(token);
+          return `
+            <div class="token-row">
+              <strong>${label}</strong>
+              <code>${token}</code>
+              <span class="dx-tag value-pill"><code>${value}</code></span>
+              <button class="dx-button secondary token-copy" type="button" data-copy="${token}" aria-label="Copy ${token}">${icon("copy", "sm")}<span>Copy</span></button>
+            </div>
+          `;
+        }).join("");
+      }
+
+      function setTheme(theme) {
+        root.dataset.theme = theme;
+        themeToggle.setAttribute("aria-pressed", String(theme === "dark"));
+        themeLabel.textContent = theme === "dark" ? "Light" : "Dark";
+        document.querySelector("[data-theme-icon]").innerHTML = icon(theme === "dark" ? "sun" : "moon", "sm");
+        renderPalettes();
+        renderTokens();
+      }
+
+      themeToggle.addEventListener("click", () => {
+        setTheme(root.dataset.theme === "dark" ? "light" : "dark");
+      });
+
+      tokenTable.addEventListener("click", async (event) => {
+        const button = event.target.closest("[data-copy]");
+        if (!button) return;
+        const token = button.getAttribute("data-copy");
+        await navigator.clipboard?.writeText(token);
+        button.innerHTML = `${icon("check", "sm")}<span>Done</span>`;
+        window.setTimeout(() => {
+          button.innerHTML = `${icon("copy", "sm")}<span>Copy</span>`;
+        }, 900);
+      });
+
+      hydrateStaticIcons();
+      renderPalettes();
+      renderTokens();
+      setTheme(root.dataset.theme || "light");
+    </script>
+  </body>
+</html>
