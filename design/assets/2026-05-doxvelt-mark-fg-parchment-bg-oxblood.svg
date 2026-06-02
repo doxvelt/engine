@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
 <svg width="100%" height="100%" viewBox="0 0 589 589" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
-    <g transform="matrix(1,0,0,1,-2353.2,-1376.2)">
-        <g id="mark-ink-spark" transform="matrix(1.14869,0,0,1.148633,2353.2,1376.2)">
-            <rect x="0" y="0" width="512" height="512" style="fill:rgb(34,30,24);"/>
-            <g id="mark" transform="matrix(3.118972,0,0,0.8706,48.843871,33.187853)">
+    <g transform="matrix(1,0,0,1,-4706.4,-1376.2)">
+        <g id="mark-fg-parchment-bg-oxblood" transform="matrix(1.148633,0,0,1.148633,4706.4,1376.2)">
+            <rect x="0" y="0" width="512" height="512" style="fill:rgb(110,38,29);"/>
+            <g id="mark" transform="matrix(3.119126,0,0,0.8706,48.846282,33.187853)">
                 <g id="arms">
                     <g transform="matrix(7.338655,-26.292421,2.876417,10.305427,-6617.356281,17311.717573)">
                         <rect x="778.82" y="338.845" width="1.824" height="8.52" style="fill:rgb(248,243,232);fill-rule:nonzero;"/>
@@ -19,8 +19,8 @@
                         <rect x="778.82" y="338.845" width="1.824" height="8.52" style="fill:rgb(248,243,232);fill-rule:nonzero;"/>
                     </g>
                 </g>
-                <g id="spark" transform="matrix(1.645575,0,0,5.895652,-15.806655,-41.384232)">
-                    <path d="M50,38.5L53.25,46.75L61.5,50L53.25,53.25L50,61.5L46.75,53.25L38.5,50L46.75,46.75L50,38.5Z" style="fill:rgb(216,106,77);fill-rule:nonzero;"/>
+                <g id="spark" transform="matrix(1.563296,0,0,5.60087,-11.692717,-26.645102)">
+                    <path d="M50,38.5L53.25,46.75L61.5,50L53.25,53.25L50,61.5L46.75,53.25L38.5,50L46.75,46.75L50,38.5Z" style="fill:rgb(248,243,232);fill-rule:nonzero;"/>
                 </g>
             </g>
         </g>

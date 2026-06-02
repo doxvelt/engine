@@ -117,11 +117,52 @@
   --dx-light-field:
     radial-gradient(circle at 16% 0%, var(--dx-light-glow), transparent 42%),
     radial-gradient(circle at 92% 105%, var(--dx-light-shade), transparent 38%);
-  --dx-shadow-soft: 0 1px 1px rgba(34, 30, 24, 0.05), 0 16px 42px rgba(34, 30, 24, 0.08);
+  --dx-shadow-none: none;
+  --dx-shadow-hairline: 0 1px 1px rgba(34, 30, 24, 0.05);
+  --dx-shadow-raised: 0 1px 1px rgba(34, 30, 24, 0.05), 0 16px 42px rgba(34, 30, 24, 0.08);
+  --dx-shadow-floating: 0 2px 4px rgba(34, 30, 24, 0.08), 0 24px 64px rgba(34, 30, 24, 0.12);
+  --dx-shadow-soft: var(--dx-shadow-raised);
 
   --dx-radius-xs: 3px;
   --dx-radius-sm: 5px;
   --dx-radius-md: 8px;
+  --dx-radius-lg: 12px;
+  --dx-radius-pill: 999px;
+
+  --dx-type-display-size: clamp(2.25rem, 7vw, 5.75rem);
+  --dx-type-display-weight: 300;
+  --dx-type-display-line: 0.94;
+  --dx-type-display-tracking: 0;
+  --dx-type-title-size: clamp(1.5rem, 3vw, 2.25rem);
+  --dx-type-title-weight: 760;
+  --dx-type-title-line: 1.08;
+  --dx-type-heading-size: 1rem;
+  --dx-type-heading-weight: 760;
+  --dx-type-heading-line: 1.2;
+  --dx-type-body-size: 1rem;
+  --dx-type-body-weight: 400;
+  --dx-type-body-line: 1.6;
+  --dx-type-caption-size: 0.8125rem;
+  --dx-type-caption-weight: 400;
+  --dx-type-caption-line: 1.45;
+  --dx-type-label-size: 0.875rem;
+  --dx-type-label-weight: 650;
+  --dx-type-code-size: 0.8125rem;
+  --dx-type-code-line: 1.65;
+  --dx-type-eyebrow-size: 0.75rem;
+  --dx-type-eyebrow-weight: 600;
+  --dx-type-eyebrow-line: 1;
+  --dx-type-eyebrow-tracking: 0.04em;
+  --dx-type-metric-size: 2.25rem;
+  --dx-type-metric-weight: 650;
+  --dx-type-metric-line: 1;
+
+  --dx-state-hover-surface: var(--dx-surface-subtle);
+  --dx-state-selected-surface: var(--dx-accent-subtle);
+  --dx-state-focus-ring: 3px solid color-mix(in srgb, var(--dx-focus) 36%, transparent);
+  --dx-state-focus-offset: 2px;
+  --dx-state-disabled-opacity: 0.48;
+
   --dx-space-1: 0.25rem;
   --dx-space-2: 0.5rem;
   --dx-space-3: 0.75rem;
@@ -169,5 +210,8 @@
   --dx-light-field:
     radial-gradient(circle at 16% 0%, var(--dx-light-glow), transparent 44%),
     radial-gradient(circle at 94% 106%, var(--dx-light-shade), transparent 40%);
-  --dx-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.22), 0 18px 50px rgba(0, 0, 0, 0.24);
+  --dx-shadow-hairline: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --dx-shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.22), 0 18px 50px rgba(0, 0, 0, 0.24);
+  --dx-shadow-floating: 0 2px 6px rgba(0, 0, 0, 0.28), 0 28px 72px rgba(0, 0, 0, 0.34);
+  --dx-shadow-soft: var(--dx-shadow-raised);
 }

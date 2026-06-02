@@ -70,9 +70,9 @@
       }
 
       .brand-logo {
-        width: 148px;
+        width: auto;
         max-width: 42vw;
-        height: auto;
+        height: 24px;
         display: block;
       }
 
@@ -114,9 +114,10 @@
       h1 {
         max-width: 820px;
         color: var(--dx-text-strong);
-        font-size: clamp(2.25rem, 7vw, 5.75rem);
-        line-height: 0.94;
-        font-weight: 300;
+        font-size: var(--dx-type-display-size);
+        line-height: var(--dx-type-display-line);
+        font-weight: var(--dx-type-display-weight);
+        letter-spacing: var(--dx-type-display-tracking);
       }
 
       .lede {
@@ -124,7 +125,7 @@
         margin-top: var(--dx-space-5);
         color: var(--dx-text-muted);
         font-size: clamp(1rem, 2vw, 1.1875rem);
-        line-height: 1.6;
+        line-height: var(--dx-type-body-line);
       }
 
       .source-card {
@@ -133,7 +134,7 @@
         border: 1px solid var(--dx-border-subtle);
         border-radius: var(--dx-radius-md);
         background: var(--dx-surface-panel);
-        box-shadow: var(--dx-shadow-soft);
+        box-shadow: var(--dx-shadow-floating);
         padding: var(--dx-space-6);
         --dx-light-origin: 18% -8%;
         --dx-light-falloff: 48%;
@@ -173,9 +174,10 @@
       }
 
       .section-heading .icon-label .icon {
-        width: 0.78em;
-        height: 0.78em;
+        width: 0.72em;
+        height: 0.72em;
         color: var(--dx-text-subtle);
+        opacity: 0.55;
         transform: translateY(0.02em);
       }
 
@@ -195,12 +197,16 @@
       }
 
       [data-light-field] {
-        box-shadow: var(--dx-shadow-soft);
+        box-shadow: var(--dx-shadow-raised);
+      }
+
+      .source-card[data-light-field] {
+        box-shadow: var(--dx-shadow-floating);
       }
 
       .source-card h2 {
         color: var(--dx-text-strong);
-        font-size: 0.875rem;
+        font-size: var(--dx-type-label-size);
         text-transform: uppercase;
       }
 
@@ -226,36 +232,53 @@
       .source-row strong {
         display: block;
         color: var(--dx-text-strong);
-        font-size: 0.9375rem;
+        font-size: var(--dx-type-label-size);
       }
 
       code {
         font-family: var(--dx-font-mono);
         color: var(--dx-text-muted);
-        font-size: 0.8125rem;
+        font-size: var(--dx-type-code-size);
       }
 
       section {
-        padding: 3rem 0;
+        padding: 3.25rem 0;
       }
 
       .section-heading {
+        position: relative;
         display: flex;
         align-items: end;
         justify-content: space-between;
         gap: var(--dx-space-4);
         margin-bottom: var(--dx-space-6);
+        padding-top: var(--dx-space-3);
+      }
+
+      .section-heading::before {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 3rem;
+        height: 2px;
+        border-radius: var(--dx-radius-pill);
+        background: linear-gradient(90deg, var(--dx-danger), transparent);
+        content: "";
+      }
+
+      [data-theme="dark"] .section-heading::before {
+        background: linear-gradient(90deg, var(--dx-accent), transparent);
       }
 
       .section-heading h2 {
         color: var(--dx-text-strong);
-        font-size: clamp(1.5rem, 3vw, 2.25rem);
+        font-size: var(--dx-type-title-size);
       }
 
       .section-heading p {
         max-width: 560px;
         color: var(--dx-text-muted);
-        line-height: 1.55;
+        line-height: var(--dx-type-body-line);
       }
 
       .palette-grid {
@@ -278,11 +301,12 @@
         border-radius: var(--dx-radius-md);
         background: var(--dx-surface-panel);
         padding: var(--dx-space-4);
+        box-shadow: var(--dx-shadow-raised);
       }
 
       .support-color h3 {
         color: var(--dx-text-strong);
-        font-size: 0.875rem;
+        font-size: var(--dx-type-label-size);
       }
 
       .support-steps {
@@ -297,7 +321,7 @@
       }
 
       .support-color code {
-        font-size: 0.75rem;
+        font-size: var(--dx-type-eyebrow-size);
       }
 
       .palette {
@@ -305,6 +329,7 @@
         border: 1px solid var(--dx-border-subtle);
         border-radius: var(--dx-radius-md);
         background: var(--dx-surface-panel);
+        box-shadow: var(--dx-shadow-raised);
       }
 
       .palette-title {
@@ -318,7 +343,7 @@
 
       .palette-title h3 {
         color: var(--dx-text-strong);
-        font-size: 1rem;
+        font-size: var(--dx-type-heading-size);
       }
 
       .palette-title code {
@@ -355,7 +380,7 @@
 
       .shade b {
         color: var(--dx-text-strong);
-        font-size: 0.8125rem;
+        font-size: var(--dx-type-code-size);
       }
 
       .shade code {
@@ -382,6 +407,7 @@
         border: 1px solid var(--dx-border-subtle);
         border-radius: var(--dx-radius-md);
         background: var(--dx-surface-panel);
+        box-shadow: var(--dx-shadow-raised);
         padding: var(--dx-space-6);
         --dx-light-origin: 12% -6%;
         --dx-light-falloff: 46%;
@@ -425,9 +451,10 @@
       .eyebrow {
         color: var(--dx-danger);
         font-family: var(--dx-font-mono);
-        font-size: 0.75rem;
-        font-weight: 500;
-        line-height: 1;
+        font-size: var(--dx-type-eyebrow-size);
+        font-weight: var(--dx-type-eyebrow-weight);
+        letter-spacing: var(--dx-type-eyebrow-tracking);
+        line-height: var(--dx-type-eyebrow-line);
         text-transform: uppercase;
       }
 
@@ -439,24 +466,25 @@
       .display-sample {
         margin-top: var(--dx-space-4);
         color: var(--dx-text-strong);
-        font-size: clamp(3rem, 8vw, 5.75rem);
-        font-weight: 300;
-        line-height: 0.94;
+        font-size: clamp(3rem, 7vw, 5rem);
+        font-weight: var(--dx-type-display-weight);
+        letter-spacing: var(--dx-type-display-tracking);
+        line-height: 0.95;
       }
 
       .heading-sample {
         margin-top: var(--dx-space-4);
         color: var(--dx-text-strong);
         font-size: 2rem;
-        font-weight: 760;
-        line-height: 1.05;
+        font-weight: var(--dx-type-title-weight);
+        line-height: var(--dx-type-title-line);
       }
 
       .body-sample {
         margin-top: var(--dx-space-4);
         color: var(--dx-text-muted);
-        font-size: 1rem;
-        line-height: 1.65;
+        font-size: var(--dx-type-body-size);
+        line-height: var(--dx-type-body-line);
       }
 
       .quote-sample {
@@ -471,9 +499,9 @@
       .caption-sample {
         margin-top: var(--dx-space-4);
         color: var(--dx-text-subtle);
-        font-size: 0.8125rem;
-        font-weight: 400;
-        line-height: 1.45;
+        font-size: var(--dx-type-caption-size);
+        font-weight: var(--dx-type-caption-weight);
+        line-height: var(--dx-type-caption-line);
       }
 
       .source-sample {
@@ -482,8 +510,8 @@
         background: var(--dx-surface-raised);
         color: var(--dx-text);
         font-family: var(--dx-font-mono);
-        font-size: 0.875rem;
-        line-height: 1.65;
+        font-size: var(--dx-type-label-size);
+        line-height: var(--dx-type-code-line);
         overflow: auto;
         padding: var(--dx-space-4);
       }
@@ -516,9 +544,9 @@
         margin-top: var(--dx-space-4);
         color: var(--dx-text-strong);
         font-family: var(--dx-font-mono);
-        font-size: 2.25rem;
-        font-weight: 650;
-        line-height: 1;
+        font-size: var(--dx-type-metric-size);
+        font-weight: var(--dx-type-metric-weight);
+        line-height: var(--dx-type-metric-line);
       }
 
       .component-grid {
@@ -533,6 +561,7 @@
         border: 1px solid var(--dx-border-subtle);
         border-radius: var(--dx-radius-md);
         background: var(--dx-surface-panel);
+        box-shadow: var(--dx-shadow-raised);
         padding: var(--dx-space-6);
         --dx-light-origin: 20% -10%;
         --dx-light-falloff: 44%;
@@ -556,7 +585,7 @@
 
       .component-card h3 {
         color: var(--dx-text-strong);
-        font-size: 1rem;
+        font-size: var(--dx-type-heading-size);
       }
 
       .light-lab {
@@ -593,7 +622,7 @@
       .light-lab p {
         margin-top: var(--dx-space-4);
         color: var(--dx-text-muted);
-        line-height: 1.55;
+        line-height: var(--dx-type-body-line);
       }
 
       .light-lab .eyebrow {
@@ -628,7 +657,7 @@
         border: 1px solid transparent;
         border-radius: var(--dx-radius-sm);
         padding: 0 var(--dx-space-4);
-        font-weight: 500;
+        font-weight: var(--dx-type-eyebrow-weight);
         color: var(--dx-text);
         background: transparent;
       }
@@ -654,7 +683,7 @@
 
       .dx-button.is-hover,
       .dx-button:hover {
-        background: var(--dx-surface-subtle);
+        background: var(--dx-state-hover-surface);
       }
 
       .dx-button.primary.is-hover,
@@ -673,8 +702,8 @@
       .dx-field.is-focus,
       .dx-field:focus-visible,
       .dx-check.is-focus {
-        outline: 3px solid color-mix(in srgb, var(--dx-focus) 36%, transparent);
-        outline-offset: 2px;
+        outline: var(--dx-state-focus-ring);
+        outline-offset: var(--dx-state-focus-offset);
       }
 
       .dx-field.is-focus {
@@ -689,7 +718,7 @@
       .dx-button.is-disabled,
       .dx-field:disabled,
       .dx-field.is-disabled {
-        opacity: 0.48;
+        opacity: var(--dx-state-disabled-opacity);
       }
 
       .field-label {
@@ -697,8 +726,8 @@
         gap: var(--dx-space-2);
         color: var(--dx-text);
         font-family: var(--dx-font-mono);
-        font-size: 0.75rem;
-        font-weight: 700;
+        font-size: var(--dx-type-eyebrow-size);
+        font-weight: var(--dx-type-label-weight);
       }
 
       .dx-field {
@@ -709,8 +738,8 @@
         background: var(--dx-surface-canvas);
         color: var(--dx-text);
         font-family: var(--dx-font-sans);
-        font-size: 0.875rem;
-        font-weight: 400;
+        font-size: var(--dx-type-label-size);
+        font-weight: var(--dx-type-body-weight);
         padding: 0 var(--dx-space-3);
       }
 
@@ -723,8 +752,8 @@
       .field-hint {
         color: var(--dx-text-subtle);
         font-family: var(--dx-font-sans);
-        font-size: 0.8125rem;
-        font-weight: 400;
+        font-size: var(--dx-type-caption-size);
+        font-weight: var(--dx-type-caption-weight);
         line-height: 1.4;
       }
 
@@ -739,8 +768,8 @@
         align-items: center;
         gap: var(--dx-space-2);
         color: var(--dx-text);
-        font-size: 0.875rem;
-        font-weight: 400;
+        font-size: var(--dx-type-label-size);
+        font-weight: var(--dx-type-body-weight);
       }
 
       .dx-check input {
@@ -769,13 +798,13 @@
         gap: 0.35rem;
         min-height: 24px;
         border: 0;
-        border-radius: 999px;
+        border-radius: var(--dx-radius-pill);
         background: var(--dx-surface-raised);
         color: var(--dx-text-muted);
         font-family: var(--dx-font-mono);
-        font-size: 0.75rem;
-        font-weight: 500;
-        line-height: 1;
+        font-size: var(--dx-type-eyebrow-size);
+        font-weight: var(--dx-type-eyebrow-weight);
+        line-height: var(--dx-type-eyebrow-line);
         padding: 0 0.45rem;
       }
 
@@ -841,6 +870,7 @@
         border: 1px solid var(--dx-border-subtle);
         border-radius: var(--dx-radius-md);
         background: var(--dx-surface-panel);
+        box-shadow: var(--dx-shadow-raised);
         color: var(--dx-text);
         padding: var(--dx-space-6);
         --dx-light-origin: 18% -8%;
@@ -949,8 +979,8 @@
       .fabric-row p {
         margin-top: 0.25rem;
         color: var(--dx-text-muted);
-        font-size: 0.875rem;
-        line-height: 1.45;
+        font-size: var(--dx-type-label-size);
+        line-height: var(--dx-type-caption-line);
       }
 
       .token-table {
@@ -959,11 +989,12 @@
         border-radius: var(--dx-radius-md);
         overflow: hidden;
         background: var(--dx-surface-panel);
+        box-shadow: var(--dx-shadow-raised);
       }
 
       .token-row {
         display: grid;
-        grid-template-columns: minmax(180px, 0.8fr) minmax(180px, 1fr) minmax(0, 1.3fr) auto;
+        grid-template-columns: minmax(150px, 0.65fr) minmax(190px, 0.9fr) minmax(0, 1.15fr) minmax(160px, 0.9fr) auto;
         gap: var(--dx-space-3);
         align-items: center;
         padding: var(--dx-space-4);
@@ -976,6 +1007,12 @@
 
       .token-row strong {
         color: var(--dx-text-strong);
+      }
+
+      .token-role {
+        color: var(--dx-text-muted);
+        font-size: var(--dx-type-caption-size);
+        line-height: var(--dx-type-caption-line);
       }
 
       .value-pill {
@@ -1026,27 +1063,77 @@
       .icon-note {
         margin-top: var(--dx-space-4);
         color: var(--dx-text-muted);
-        line-height: 1.55;
+        line-height: var(--dx-type-body-line);
       }
 
-      .logo-grid {
+      .logo-table {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: var(--dx-space-5);
-      }
-
-      .logo-field {
-        display: grid;
-        gap: var(--dx-space-4);
-        min-height: 180px;
-        align-content: center;
+        overflow: hidden;
         border: 1px solid var(--dx-border-subtle);
         border-radius: var(--dx-radius-md);
         background: var(--dx-surface-panel);
-        padding: var(--dx-space-6);
+        box-shadow: var(--dx-shadow-raised);
       }
 
-      .logo-field.on-light {
+      .logo-row {
+        display: grid;
+        grid-template-columns: minmax(250px, 0.72fr) repeat(2, minmax(0, 1fr));
+        border-top: 1px solid var(--dx-border-subtle);
+      }
+
+      .logo-row:first-child {
+        border-top: 0;
+      }
+
+      .logo-row-head {
+        background: var(--dx-surface-raised);
+        color: var(--dx-text-muted);
+        font-family: var(--dx-font-mono);
+        font-size: var(--dx-type-eyebrow-size);
+        font-weight: var(--dx-type-label-weight);
+        text-transform: uppercase;
+      }
+
+      .logo-row-head > div,
+      .logo-case,
+      .logo-cell {
+        padding: var(--dx-space-4) var(--dx-space-5);
+      }
+
+      .logo-row-head > div + div,
+      .logo-cell {
+        border-left: 1px solid var(--dx-border-subtle);
+      }
+
+      .logo-case {
+        display: grid;
+        align-content: center;
+        gap: var(--dx-space-2);
+      }
+
+      .logo-case h3 {
+        color: var(--dx-text-strong);
+        font-size: var(--dx-type-heading-size);
+      }
+
+      .logo-case p {
+        color: var(--dx-text-muted);
+        font-size: var(--dx-type-label-size);
+        line-height: var(--dx-type-body-line);
+      }
+
+      .logo-case {
+        background: color-mix(in oklch, var(--dx-surface-panel) 72%, var(--dx-surface-canvas));
+      }
+
+      .logo-cell {
+        display: grid;
+        gap: var(--dx-space-3);
+        align-content: center;
+        min-height: 140px;
+      }
+
+      .logo-cell.on-light {
         --dx-field-label: var(--dx-color-neutral-600);
         --dx-field-caption: var(--dx-color-neutral-600);
         --dx-field-eyebrow: var(--dx-color-oxblood-600);
@@ -1054,42 +1141,41 @@
         color: var(--dx-color-neutral-900);
       }
 
-      .logo-field.on-dark {
+      .logo-cell.on-dark {
         --dx-field-label: var(--dx-color-neutral-300);
         --dx-field-caption: var(--dx-color-neutral-300);
         --dx-field-eyebrow: var(--dx-color-ember-400);
-        border-color: color-mix(in oklch, var(--dx-color-neutral-100) 16%, transparent);
         background: var(--dx-color-neutral-900);
         color: var(--dx-color-neutral-100);
       }
 
-      .logo-field img {
-        width: min(260px, 100%);
-        height: auto;
+      .logo-cell img {
+        width: auto;
+        max-width: 100%;
+        height: 52px;
       }
 
-      .logo-variant-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: var(--dx-space-4);
+      .logo-cell.mark img {
+        width: auto;
+        height: 44px;
       }
 
-      .logo-variant {
-        display: grid;
-        gap: var(--dx-space-3);
-        align-content: center;
-        min-height: 104px;
+      .logo-cell.small img {
+        width: auto;
+        max-height: none;
+        height: 36px;
       }
 
-      .logo-variant img {
-        width: min(220px, 100%);
+      .logo-cell.mark.small img {
+        width: auto;
+        height: 28px;
       }
 
-      .logo-variant.mark img {
-        width: 48px;
+      .logo-cell.clearspace img {
+        height: 66px;
       }
 
-      .logo-variant code {
+      .logo-cell code {
         display: block;
         color: var(--dx-field-caption);
         overflow: hidden;
@@ -1097,61 +1183,14 @@
         white-space: nowrap;
       }
 
-      .component-card h3 + .logo-field,
-      .logo-field + .logo-field {
-        margin-top: var(--dx-space-5);
-      }
-
       .logo-group-title {
         margin: 0;
-        font-size: 0.8125rem;
-        font-weight: 500;
+        color: var(--dx-field-eyebrow);
+        font-size: var(--dx-type-caption-size);
+        font-weight: var(--dx-type-eyebrow-weight);
         text-transform: uppercase;
       }
 
-      .logo-group-title.eyebrow {
-        color: var(--dx-field-eyebrow);
-      }
-
-      .logo-mark-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--dx-space-4);
-        align-items: center;
-      }
-
-      .logo-mark-row img {
-        width: 42px;
-        height: 42px;
-      }
-
-      .logo-mark-row.compact img {
-        width: 32px;
-        height: 32px;
-      }
-
-      .guideline-list {
-        display: grid;
-        gap: var(--dx-space-4);
-        max-width: 820px;
-        margin-top: var(--dx-space-6);
-      }
-
-      .guideline {
-        display: grid;
-        grid-template-columns: minmax(120px, 0.4fr) minmax(0, 1fr);
-        gap: var(--dx-space-3);
-        align-items: start;
-      }
-
-      .guideline strong {
-        color: var(--dx-text-strong);
-        font-size: 0.9375rem;
-      }
-
-      .guideline .icon-note {
-        margin-top: 0;
-      }
 
       .site-footer {
         position: relative;
@@ -1177,16 +1216,32 @@
       }
 
       .footer-divider img {
-        width: 28px;
-        height: 28px;
+        width: auto;
+        height: 16px;
       }
 
       .site-footer p {
         margin-top: var(--dx-space-4);
         color: var(--dx-text-subtle);
-        font-size: 0.8125rem;
-        line-height: 1.5;
+        font-size: var(--dx-type-caption-size);
+        line-height: var(--dx-type-caption-line);
         text-align: center;
+      }
+
+      @media (min-width: 1240px) {
+        .section-heading h2.icon-label {
+          position: relative;
+          gap: 0;
+        }
+
+        .section-heading h2.icon-label .icon {
+          position: absolute;
+          top: 0.28em;
+          left: -2.15rem;
+          width: 0.64em;
+          height: 0.64em;
+          opacity: 0.42;
+        }
       }
 
       @media (max-width: 980px) {
@@ -1195,11 +1250,20 @@
         .palette-grid,
         .specimen-grid,
         .icon-grid,
-        .logo-grid,
+        .logo-row,
         .support-grid,
         .light-lab,
         .component-grid {
           grid-template-columns: 1fr;
+        }
+
+        .logo-row-head {
+          display: none;
+        }
+
+        .logo-cell {
+          border-left: 0;
+          border-top: 1px solid var(--dx-border-subtle);
         }
 
         .specimen-card.wide {
@@ -1232,10 +1296,6 @@
         .token-copy {
           justify-self: start;
         }
-
-        .logo-variant-grid {
-          grid-template-columns: 1fr;
-        }
       }
     </style>
   </head>
@@ -1243,8 +1303,8 @@
     <div class="shell">
       <header class="topbar">
         <div class="brand">
-          <img class="brand-logo brand-logo-light" src="./assets/2026-05-doxvelt-wordmark-fg-ink-raw.svg" alt="Doxvelt">
-          <img class="brand-logo brand-logo-dark" src="./assets/2026-05-doxvelt-wordmark-fg-parchment-raw.svg" alt="Doxvelt">
+          <img class="brand-logo brand-logo-light" src="./assets/2026-05-doxvelt-wordmark-fg-ink-raw-solid.svg" alt="Doxvelt">
+          <img class="brand-logo brand-logo-dark" src="./assets/2026-05-doxvelt-wordmark-fg-parchment-raw-solid.svg" alt="Doxvelt">
         </div>
         <button class="dx-button ghost" type="button" aria-pressed="false" data-theme-toggle>
           <span data-theme-icon></span>
@@ -1340,158 +1400,154 @@
           <div class="section-heading">
             <div>
               <h2 id="logo-title" class="icon-label"><span data-icon="badge"></span>Logo</h2>
-              <p>Use the wordmark when the product needs to be named, and the mark when the surface is already branded or too small for legible type.</p>
+              <p>Use sparked logos by default while the spark stays cleanly separated from the arms. Switch to solid when the spark collapses, bleeds, or distracts at the rendered size.</p>
             </div>
           </div>
 
-          <div class="logo-grid">
-            <article class="component-card">
-              <h3>Wordmark</h3>
-              <div class="logo-field on-light">
-                <h4 class="eyebrow logo-group-title">Light Theme</h4>
-                <div class="logo-variant-grid">
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-raw.svg" alt="Doxvelt ink foreground raw wordmark">
-                    <code>fg ink raw</code>
-                  </div>
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-raw-spark-oxblood.svg" alt="Doxvelt ink foreground raw wordmark with oxblood spark">
-                    <code>fg ink raw / oxblood spark</code>
-                  </div>
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-bg-parchment-spark-oxblood.svg" alt="Doxvelt ink foreground on parchment with oxblood spark wordmark">
-                    <code>fg ink / bg parchment / oxblood spark</code>
-                  </div>
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-bg-parchment-solid.svg" alt="Doxvelt ink foreground on parchment solid wordmark">
-                    <code>fg ink / bg parchment solid</code>
-                  </div>
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-clearspace.svg" alt="Doxvelt ink foreground clearspace wordmark">
-                    <code>fg ink clearspace</code>
-                  </div>
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-bg-oxblood-solid.svg" alt="Doxvelt parchment foreground on oxblood solid wordmark">
-                    <code>fg parchment / bg oxblood solid</code>
-                  </div>
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-bg-oxblood-spark.svg" alt="Doxvelt parchment foreground on oxblood with spark wordmark">
-                    <code>fg parchment / bg oxblood spark</code>
-                  </div>
-                </div>
+          <div class="logo-table" role="table" aria-label="Doxvelt logo usage by theme">
+            <div class="logo-row logo-row-head" role="row">
+              <div role="columnheader">Case and description</div>
+              <div role="columnheader">Light theme</div>
+              <div role="columnheader">Dark theme</div>
+            </div>
+
+            <article class="logo-row" role="row">
+              <div class="logo-case" role="cell">
+                <h3>Default wordmark</h3>
+                <p>Sparked raw wordmark for branded surfaces where the spark remains distinct from the mark geometry.</p>
               </div>
-              <div class="logo-field on-dark">
-                <h4 class="eyebrow logo-group-title">Dark Theme</h4>
-                <div class="logo-variant-grid">
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-raw.svg" alt="Doxvelt parchment foreground raw wordmark">
-                    <code>fg parchment raw</code>
-                  </div>
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-raw-spark-ember.svg" alt="Doxvelt parchment foreground raw wordmark with ember spark">
-                    <code>fg parchment raw / ember spark</code>
-                  </div>
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-bg-ink-spark-ember.svg" alt="Doxvelt parchment foreground on ink with ember spark wordmark">
-                    <code>fg parchment / bg ink / ember spark</code>
-                  </div>
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-bg-ink-solid.svg" alt="Doxvelt parchment foreground on ink solid wordmark">
-                    <code>fg parchment / bg ink solid</code>
-                  </div>
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-clearspace.svg" alt="Doxvelt parchment foreground clearspace wordmark">
-                    <code>fg parchment clearspace</code>
-                  </div>
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-bg-ember-solid.svg" alt="Doxvelt ink foreground on ember solid wordmark">
-                    <code>fg ink / bg ember solid</code>
-                  </div>
-                  <div class="logo-variant">
-                    <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-bg-ember-spark.svg" alt="Doxvelt ink foreground on ember with spark wordmark">
-                    <code>fg ink / bg ember spark</code>
-                  </div>
-                </div>
+              <div class="logo-cell on-light" role="cell">
+                <p class="eyebrow logo-group-title">Spark default</p>
+                <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-raw.svg" alt="Doxvelt ink wordmark with oxblood spark">
+                <code>wordmark-fg-ink-raw.svg</code>
+              </div>
+              <div class="logo-cell on-dark" role="cell">
+                <p class="eyebrow logo-group-title">Spark default</p>
+                <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-raw.svg" alt="Doxvelt parchment wordmark with ember spark">
+                <code>wordmark-fg-parchment-raw.svg</code>
               </div>
             </article>
 
-            <article class="component-card">
-              <h3>Marks</h3>
-              <div class="logo-field on-light">
-                <h4 class="eyebrow logo-group-title">Light Theme</h4>
-                <div class="logo-variant-grid">
-                  <div class="logo-variant mark">
-                    <img src="./assets/2026-05-doxvelt-mark-fg-ink-raw.svg" alt="Ink foreground raw mark">
-                    <code>fg ink raw</code>
-                  </div>
-                  <div class="logo-variant mark">
-                    <img src="./assets/2026-05-doxvelt-mark-fg-ink-raw-spark-oxblood.svg" alt="Ink foreground raw mark with oxblood spark">
-                    <code>fg ink raw / oxblood spark</code>
-                  </div>
-                  <div class="logo-variant mark">
-                    <img src="./assets/2026-05-doxvelt-mark-fg-ink-bg-parchment-spark-oxblood.svg" alt="Ink foreground on parchment with oxblood spark mark">
-                    <code>fg ink / bg parchment / oxblood spark</code>
-                  </div>
-                  <div class="logo-variant mark">
-                    <img src="./assets/2026-05-doxvelt-mark-fg-ink-bg-parchment-solid.svg" alt="Ink foreground on parchment solid mark">
-                    <code>fg ink / bg parchment solid</code>
-                  </div>
-                  <div class="logo-variant mark">
-                    <img src="./assets/2026-05-doxvelt-mark-fg-parchment-bg-oxblood-spark.svg" alt="Parchment foreground on oxblood with spark mark">
-                    <code>fg parchment / bg oxblood spark</code>
-                  </div>
-                  <div class="logo-variant mark">
-                    <img src="./assets/2026-05-doxvelt-mark-fg-parchment-bg-oxblood-solid.svg" alt="Parchment foreground on oxblood solid mark">
-                    <code>fg parchment / bg oxblood solid</code>
-                  </div>
-                </div>
+            <article class="logo-row" role="row">
+              <div class="logo-case" role="cell">
+                <h3>Default mark</h3>
+                <p>Sparked raw mark when the surrounding UI already names Doxvelt, provided the spark still reads as intentional detail.</p>
               </div>
-              <div class="logo-field on-dark">
-                <h4 class="eyebrow logo-group-title">Dark Theme</h4>
-                <div class="logo-variant-grid">
-                  <div class="logo-variant mark">
-                    <img src="./assets/2026-05-doxvelt-mark-fg-parchment-raw.svg" alt="Parchment foreground raw mark">
-                    <code>fg parchment raw</code>
-                  </div>
-                  <div class="logo-variant mark">
-                    <img src="./assets/2026-05-doxvelt-mark-fg-parchment-raw-spark-ember.svg" alt="Parchment foreground raw mark with ember spark">
-                    <code>fg parchment raw / ember spark</code>
-                  </div>
-                  <div class="logo-variant mark">
-                    <img src="./assets/2026-05-doxvelt-mark-fg-parchment-bg-ink-spark-ember.svg" alt="Parchment foreground on ink with ember spark mark">
-                    <code>fg parchment / bg ink / ember spark</code>
-                  </div>
-                  <div class="logo-variant mark">
-                    <img src="./assets/2026-05-doxvelt-mark-fg-parchment-bg-ink-solid.svg" alt="Parchment foreground on ink solid mark">
-                    <code>fg parchment / bg ink solid</code>
-                  </div>
-                  <div class="logo-variant mark">
-                    <img src="./assets/2026-05-doxvelt-mark-fg-ink-bg-ember-spark.svg" alt="Ink foreground on ember with spark mark">
-                    <code>fg ink / bg ember spark</code>
-                  </div>
-                  <div class="logo-variant mark">
-                    <img src="./assets/2026-05-doxvelt-mark-fg-ink-bg-ember-solid.svg" alt="Ink foreground on ember solid mark">
-                    <code>fg ink / bg ember solid</code>
-                  </div>
-                </div>
+              <div class="logo-cell on-light mark" role="cell">
+                <p class="eyebrow logo-group-title">Spark default</p>
+                <img src="./assets/2026-05-doxvelt-mark-fg-ink-raw.svg" alt="Doxvelt ink mark with oxblood spark">
+                <code>mark-fg-ink-raw.svg</code>
+              </div>
+              <div class="logo-cell on-dark mark" role="cell">
+                <p class="eyebrow logo-group-title">Spark default</p>
+                <img src="./assets/2026-05-doxvelt-mark-fg-parchment-raw.svg" alt="Doxvelt parchment mark with ember spark">
+                <code>mark-fg-parchment-raw.svg</code>
+              </div>
+            </article>
+
+            <article class="logo-row" role="row">
+              <div class="logo-case" role="cell">
+                <h3>Default on built-in field</h3>
+                <p>Sparked assets with their own neutral field. Size them by visible mark, not by the total SVG artboard.</p>
+              </div>
+              <div class="logo-cell on-light" role="cell">
+                <p class="eyebrow logo-group-title">Neutral field</p>
+                <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-bg-parchment.svg" alt="Doxvelt ink wordmark on parchment with oxblood spark">
+                <code>wordmark-fg-ink-bg-parchment.svg</code>
+              </div>
+              <div class="logo-cell on-dark" role="cell">
+                <p class="eyebrow logo-group-title">Neutral field</p>
+                <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-bg-ink.svg" alt="Doxvelt parchment wordmark on ink with ember spark">
+                <code>wordmark-fg-parchment-bg-ink.svg</code>
+              </div>
+            </article>
+
+            <article class="logo-row" role="row">
+              <div class="logo-case" role="cell">
+                <h3>Accent field</h3>
+                <p>Sparked high-contrast field for cover pages, splash moments, or dramatic emphasis. It is not default app chrome.</p>
+              </div>
+              <div class="logo-cell on-light" role="cell">
+                <p class="eyebrow logo-group-title">Oxblood field</p>
+                <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-bg-oxblood.svg" alt="Doxvelt parchment wordmark on oxblood with spark">
+                <code>wordmark-fg-parchment-bg-oxblood.svg</code>
+              </div>
+              <div class="logo-cell on-dark" role="cell">
+                <p class="eyebrow logo-group-title">Ember field</p>
+                <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-bg-ember.svg" alt="Doxvelt ink wordmark on ember with spark">
+                <code>wordmark-fg-ink-bg-ember.svg</code>
+              </div>
+            </article>
+
+            <article class="logo-row" role="row">
+              <div class="logo-case" role="cell">
+                <h3>Solid wordmark fallback</h3>
+                <p>No-spark raw wordmark for compact navigation, dense toolbars, or any placement where the spark loses separation from the arms.</p>
+              </div>
+              <div class="logo-cell on-light small" role="cell">
+                <p class="eyebrow logo-group-title">No-spark fallback</p>
+                <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-raw-solid.svg" alt="Doxvelt solid ink wordmark">
+                <code>wordmark-fg-ink-raw-solid.svg</code>
+              </div>
+              <div class="logo-cell on-dark small" role="cell">
+                <p class="eyebrow logo-group-title">No-spark fallback</p>
+                <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-raw-solid.svg" alt="Doxvelt solid parchment wordmark">
+                <code>wordmark-fg-parchment-raw-solid.svg</code>
+              </div>
+            </article>
+
+            <article class="logo-row" role="row">
+              <div class="logo-case" role="cell">
+                <h3>Solid mark fallback</h3>
+                <p>No-spark mark for favicons, app icons, compact sidebars, and other tight placements where the spark turns into visual noise.</p>
+              </div>
+              <div class="logo-cell on-light mark small" role="cell">
+                <p class="eyebrow logo-group-title">No-spark fallback</p>
+                <img src="./assets/2026-05-doxvelt-mark-fg-ink-raw-solid.svg" alt="Doxvelt solid ink mark">
+                <code>mark-fg-ink-raw-solid.svg</code>
+              </div>
+              <div class="logo-cell on-dark mark small" role="cell">
+                <p class="eyebrow logo-group-title">No-spark fallback</p>
+                <img src="./assets/2026-05-doxvelt-mark-fg-parchment-raw-solid.svg" alt="Doxvelt solid parchment mark">
+                <code>mark-fg-parchment-raw-solid.svg</code>
+              </div>
+            </article>
+
+            <article class="logo-row" role="row">
+              <div class="logo-case" role="cell">
+                <h3>Solid on built-in field</h3>
+                <p>No-spark field assets for small exported badges, low-resolution displays, and placements where the field must travel with the mark.</p>
+              </div>
+              <div class="logo-cell on-light mark small" role="cell">
+                <p class="eyebrow logo-group-title">Small field</p>
+                <img src="./assets/2026-05-doxvelt-mark-fg-ink-bg-parchment-solid.svg" alt="Doxvelt solid ink mark on parchment">
+                <code>mark-fg-ink-bg-parchment-solid.svg</code>
+              </div>
+              <div class="logo-cell on-dark mark small" role="cell">
+                <p class="eyebrow logo-group-title">Small field</p>
+                <img src="./assets/2026-05-doxvelt-mark-fg-parchment-bg-ink-solid.svg" alt="Doxvelt solid parchment mark on ink">
+                <code>mark-fg-parchment-bg-ink-solid.svg</code>
+              </div>
+            </article>
+
+            <article class="logo-row" role="row">
+              <div class="logo-case" role="cell">
+                <h3>Clearspace solid wordmark</h3>
+                <p>No-spark wordmark with fixed safe area. The artboard is taller than the visible logo, so size it by optical mark height.</p>
+              </div>
+              <div class="logo-cell on-light small clearspace" role="cell">
+                <p class="eyebrow logo-group-title">Fixed safe area</p>
+                <img src="./assets/2026-05-doxvelt-wordmark-fg-ink-clearspace-solid.svg" alt="Doxvelt solid ink wordmark with clearspace">
+                <code>wordmark-fg-ink-clearspace-solid.svg</code>
+              </div>
+              <div class="logo-cell on-dark small clearspace" role="cell">
+                <p class="eyebrow logo-group-title">Fixed safe area</p>
+                <img src="./assets/2026-05-doxvelt-wordmark-fg-parchment-clearspace-solid.svg" alt="Doxvelt solid parchment wordmark with clearspace">
+                <code>wordmark-fg-parchment-clearspace-solid.svg</code>
               </div>
             </article>
           </div>
 
-          <div class="guideline-list">
-            <div class="guideline">
-              <strong class="icon-label"><span data-icon="contrast"></span>Theme</strong>
-              <p class="icon-note">Ink on light fields, parchment on dark fields. Accented variants are for emphasis, not default branding.</p>
-            </div>
-            <div class="guideline">
-              <strong class="icon-label"><span data-icon="minimize"></span>Small Sizes</strong>
-              <p class="icon-note">Use no-spark marks below 48px square, including favicons, app icons, tight navigation, and any surface where the spark loses detail.</p>
-            </div>
-            <div class="guideline">
-              <strong class="icon-label"><span data-icon="frame"></span>Clean Space</strong>
-              <p class="icon-note">Use raw unboxed assets when UI layout and CSS already control spacing. Use clearspace assets for documents and exports, and solid assets when the mark needs its own contrast field.</p>
-            </div>
-          </div>
         </section>
 
         <section aria-labelledby="type-title">
@@ -1774,7 +1830,7 @@
           <div class="section-heading">
             <div>
               <h2 id="tokens-title" class="icon-label"><span data-icon="braces"></span>Core Tokens</h2>
-              <p>The next steps can extend this table with typography, spacing, form controls, transcript turns, editor states, and navigation patterns.</p>
+              <p>Core system decisions now include color, surfaces, typography roles, shape, elevation, and interaction states.</p>
             </div>
           </div>
           <div class="token-table" data-token-table></div>
@@ -1783,8 +1839,8 @@
 
       <footer class="site-footer">
         <div class="footer-divider" aria-hidden="true">
-          <img class="brand-logo-light" src="./assets/2026-05-doxvelt-mark-fg-ink-raw.svg" alt="">
-          <img class="brand-logo-dark" src="./assets/2026-05-doxvelt-mark-fg-parchment-raw.svg" alt="">
+          <img class="brand-logo-light" src="./assets/2026-05-doxvelt-mark-fg-ink-raw-solid.svg" alt="">
+          <img class="brand-logo-dark" src="./assets/2026-05-doxvelt-mark-fg-parchment-raw-solid.svg" alt="">
         </div>
         <p>Copyright © 2026 Michael Schmidle. Doxvelt, the Doxvelt name, wordmarks, and marks are trademarks of Michael Schmidle.</p>
       </footer>
@@ -1839,9 +1895,27 @@
         ["Danger", "--dx-danger", "Destructive or critical state"],
         ["Success", "--dx-success", "Positive confirmation state"],
         ["Info", "--dx-info", "Informational and mention-adjacent state"],
-        ["Focus", "--dx-focus", "Keyboard focus outline"],
+        ["Focus", "--dx-focus", "Keyboard focus source color"],
+        ["Display Type", "--dx-type-display-size", "Hero and major product identity"],
+        ["Title Type", "--dx-type-title-size", "Section headings"],
+        ["Body Line", "--dx-type-body-line", "Readable prose rhythm"],
+        ["Caption Type", "--dx-type-caption-size", "Helper copy and secondary metadata"],
+        ["Code Type", "--dx-type-code-size", "Source spans and token values"],
+        ["Eyebrow Type", "--dx-type-eyebrow-size", "Operational labels and modes"],
+        ["Radius XS", "--dx-radius-xs", "Inline chips and tight source tags"],
+        ["Radius SM", "--dx-radius-sm", "Controls and compact tiles"],
+        ["Radius MD", "--dx-radius-md", "Cards, panels, and tables"],
+        ["Radius LG", "--dx-radius-lg", "Future large feature panels"],
+        ["Radius Pill", "--dx-radius-pill", "Badges and rounded status chips"],
+        ["Shadow None", "--dx-shadow-none", "Flat structured fields"],
+        ["Shadow Hairline", "--dx-shadow-hairline", "One-pixel optical lift"],
+        ["Shadow Raised", "--dx-shadow-raised", "Default card elevation"],
+        ["Shadow Floating", "--dx-shadow-floating", "Hero or transient emphasis"],
+        ["Hover Surface", "--dx-state-hover-surface", "Hover fill for quiet controls"],
+        ["Selected Surface", "--dx-state-selected-surface", "Soft selected or active fill"],
+        ["Focus Ring", "--dx-state-focus-ring", "Keyboard focus outline"],
+        ["Disabled Opacity", "--dx-state-disabled-opacity", "Unavailable controls"],
         ["Canvas Glow", "--dx-canvas-glow", "Broad ambient page highlight"],
-        ["Canvas Shade", "--dx-canvas-shade", "Broad ambient page shadow"],
         ["Light Glow", "--dx-light-glow", "Ambient highlight field for cards"],
         ["Light Shade", "--dx-light-shade", "Ambient shadow field for cards"]
       ];
@@ -1886,6 +1960,7 @@
             <div class="token-row">
               <strong>${label}</strong>
               <code>${token}</code>
+              <span class="token-role">${role}</span>
               <span class="dx-tag value-pill"><code>${value}</code></span>
               <button class="dx-button secondary token-copy" type="button" data-copy="${token}" aria-label="Copy ${token}">${icon("copy", "sm")}<span>Copy</span></button>
             </div>
