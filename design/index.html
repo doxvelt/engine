@@ -540,6 +540,125 @@
         padding: 0.05rem 0.25rem;
       }
 
+      [data-paper-field] {
+        position: relative;
+        isolation: isolate;
+        --dx-source-rule-step: 1.65rem;
+        --dx-source-rule-baseline: 1.22rem;
+      }
+
+      [data-paper-field]::after {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        border-radius: inherit;
+        background:
+          linear-gradient(color-mix(in oklch, var(--dx-text) 4%, transparent) 1px, transparent 1px) 0 var(--dx-source-rule-baseline) / 100% var(--dx-source-rule-step),
+          radial-gradient(circle at 18% 12%, color-mix(in oklch, var(--dx-text) 7%, transparent), transparent 18%);
+        content: "";
+        opacity: 0.42;
+        pointer-events: none;
+      }
+
+      [data-paper-field] > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .source-span-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+        gap: var(--dx-space-5);
+        align-items: start;
+      }
+
+      .source-span {
+        overflow: hidden;
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-md);
+        background: var(--dx-surface-panel);
+        box-shadow: var(--dx-shadow-raised);
+      }
+
+      .source-span-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--dx-space-3);
+        padding: var(--dx-space-4) var(--dx-space-5);
+        border-bottom: 1px solid var(--dx-border-subtle);
+        background: color-mix(in oklch, var(--dx-surface-panel) 72%, var(--dx-surface-canvas));
+      }
+
+      .source-span-header strong {
+        color: var(--dx-text-strong);
+        font-size: var(--dx-type-label-size);
+      }
+
+      .source-span-header code {
+        color: var(--dx-text-subtle);
+      }
+
+      .source-span-body {
+        display: grid;
+        grid-auto-rows: var(--dx-source-rule-step);
+        gap: 0;
+        padding: var(--dx-space-5);
+        font-family: var(--dx-font-mono);
+        font-size: var(--dx-type-label-size);
+        line-height: var(--dx-source-rule-step);
+      }
+
+      .source-span-row {
+        display: grid;
+        grid-template-columns: 2rem minmax(0, 1fr);
+        gap: var(--dx-space-3);
+        align-items: baseline;
+        min-height: var(--dx-source-rule-step);
+      }
+
+      .source-line-number {
+        color: var(--dx-text-subtle);
+        font-size: var(--dx-type-eyebrow-size);
+        text-align: right;
+        user-select: none;
+      }
+
+      .source-span-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--dx-space-2);
+        padding: 0 var(--dx-space-5) var(--dx-space-5);
+      }
+
+      .rule-panel {
+        display: grid;
+        align-content: start;
+        gap: var(--dx-space-4);
+        padding: var(--dx-space-2) 0;
+      }
+
+      .rule-panel p:not(.eyebrow) {
+        color: var(--dx-text-muted);
+        line-height: var(--dx-type-body-line);
+      }
+
+      .note-strip {
+        display: grid;
+        gap: var(--dx-space-2);
+        padding: var(--dx-space-4);
+        background:
+          linear-gradient(90deg, color-mix(in oklch, var(--dx-border) 78%, transparent) 2px, transparent 2px),
+          color-mix(in oklch, var(--dx-surface-panel) 58%, transparent);
+      }
+
+      .marginalia {
+        color: var(--dx-text-subtle);
+        font-family: var(--dx-font-mono);
+        font-size: var(--dx-type-eyebrow-size);
+        line-height: var(--dx-type-caption-line);
+      }
+
       .metric-sample {
         margin-top: var(--dx-space-4);
         color: var(--dx-text-strong);
@@ -567,6 +686,10 @@
         --dx-light-falloff: 44%;
         --dx-shadow-origin: 96% 108%;
         --dx-shadow-falloff: 42%;
+      }
+
+      .component-card.wide {
+        grid-column: span 2;
       }
 
       .component-card:nth-child(2n) {
@@ -653,6 +776,10 @@
       }
 
       .dx-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--dx-space-2);
         min-height: 38px;
         border: 1px solid transparent;
         border-radius: var(--dx-radius-sm);
@@ -711,7 +838,11 @@
       }
 
       .dx-check.is-focus {
-        border-radius: var(--dx-radius-xs);
+        border-color: var(--dx-focus);
+      }
+
+      .dx-field.is-invalid {
+        border-color: var(--dx-danger);
       }
 
       .dx-button:disabled,
@@ -725,9 +856,31 @@
         display: grid;
         gap: var(--dx-space-2);
         color: var(--dx-text);
+      }
+
+      .field-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--dx-space-3);
+        color: var(--dx-text);
         font-family: var(--dx-font-mono);
         font-size: var(--dx-type-eyebrow-size);
         font-weight: var(--dx-type-label-weight);
+        letter-spacing: var(--dx-type-eyebrow-tracking);
+        text-transform: uppercase;
+      }
+
+      .field-meta {
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-pill);
+        color: var(--dx-text-subtle);
+        font-family: var(--dx-font-mono);
+        font-size: var(--dx-type-eyebrow-size);
+        font-weight: var(--dx-type-eyebrow-weight);
+        line-height: var(--dx-type-eyebrow-line);
+        padding: 0.2rem 0.45rem;
+        text-transform: none;
       }
 
       .dx-field {
@@ -735,7 +888,8 @@
         min-height: 40px;
         border: 1px solid var(--dx-border);
         border-radius: var(--dx-radius-sm);
-        background: var(--dx-surface-canvas);
+        background: color-mix(in oklch, var(--dx-surface-canvas) 84%, var(--dx-surface-panel));
+        box-shadow: inset 0 1px 1px color-mix(in oklch, var(--dx-text) 6%, transparent);
         color: var(--dx-text);
         font-family: var(--dx-font-sans);
         font-size: var(--dx-type-label-size);
@@ -744,8 +898,9 @@
       }
 
       textarea.dx-field {
-        min-height: 88px;
+        min-height: 96px;
         padding-top: var(--dx-space-3);
+        line-height: var(--dx-type-body-line);
         resize: vertical;
       }
 
@@ -757,22 +912,41 @@
         line-height: 1.4;
       }
 
+      .field-hint.danger {
+        color: var(--dx-danger);
+      }
+
       .choice-row {
         display: flex;
         flex-wrap: wrap;
-        gap: var(--dx-space-4);
+        gap: var(--dx-space-2);
       }
 
       .dx-check {
         display: inline-flex;
         align-items: center;
         gap: var(--dx-space-2);
+        min-height: 36px;
+        border: 1px solid var(--dx-border-subtle);
+        border-radius: var(--dx-radius-sm);
+        background: color-mix(in oklch, var(--dx-surface-panel) 74%, var(--dx-surface-canvas));
         color: var(--dx-text);
         font-size: var(--dx-type-label-size);
         font-weight: var(--dx-type-body-weight);
+        padding: 0 var(--dx-space-3);
+      }
+
+      .dx-check:has(input:checked) {
+        border-color: color-mix(in oklch, var(--dx-accent) 48%, var(--dx-border));
+        background: var(--dx-state-selected-surface);
+      }
+
+      .dx-check:has(input:disabled) {
+        opacity: var(--dx-state-disabled-opacity);
       }
 
       .dx-check input {
+        margin: 0;
         accent-color: var(--dx-accent);
       }
 
@@ -817,8 +991,8 @@
       }
 
       .dx-badge.positive {
-        background: var(--dx-success-subtle);
-        color: var(--dx-success-text);
+        background: var(--dx-surface-raised);
+        color: var(--dx-text-muted);
       }
 
       .dx-badge.suspect {
@@ -1005,6 +1179,28 @@
         background: var(--dx-surface-panel);
       }
 
+      .token-group-header {
+        display: grid;
+        gap: var(--dx-space-1);
+        padding: var(--dx-space-4);
+        border-top: 1px solid var(--dx-border-subtle);
+        background: color-mix(in oklch, var(--dx-surface-panel) 64%, var(--dx-surface-raised));
+      }
+
+      .token-group-header:first-child {
+        border-top: 0;
+      }
+
+      .token-group-header strong {
+        color: var(--dx-text-strong);
+      }
+
+      .token-group-header span {
+        color: var(--dx-text-muted);
+        font-size: var(--dx-type-caption-size);
+        line-height: var(--dx-type-caption-line);
+      }
+
       .token-row strong {
         color: var(--dx-text-strong);
       }
@@ -1048,12 +1244,6 @@
         fill: none;
       }
 
-      .dx-button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: var(--dx-space-2);
-      }
 
       .icon-note {
         margin-top: var(--dx-space-4);
@@ -1104,6 +1294,7 @@
         display: grid;
         align-content: center;
         gap: var(--dx-space-2);
+        background: color-mix(in oklch, var(--dx-surface-panel) 72%, var(--dx-surface-canvas));
       }
 
       .logo-case h3 {
@@ -1117,9 +1308,6 @@
         line-height: var(--dx-type-body-line);
       }
 
-      .logo-case {
-        background: color-mix(in oklch, var(--dx-surface-panel) 72%, var(--dx-surface-canvas));
-      }
 
       .logo-cell {
         display: grid;
@@ -1248,6 +1436,7 @@
         .logo-row,
         .support-grid,
         .light-lab,
+        .source-span-grid,
         .component-grid {
           grid-template-columns: 1fr;
         }
@@ -1261,7 +1450,8 @@
           border-top: 1px solid var(--dx-border-subtle);
         }
 
-        .specimen-card.wide {
+        .specimen-card.wide,
+        .component-card.wide {
           grid-column: auto;
         }
 
@@ -1607,6 +1797,57 @@
           </div>
         </section>
 
+
+        <section aria-labelledby="source-spans-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="source-spans-title" class="icon-label"><span data-icon="clipboard"></span>Source Spans</h2>
+              <p>Source spans are first-class provenance components: they preserve authored prose, line ranges, tags, and marginalia without turning every reference into a heavy card.</p>
+            </div>
+          </div>
+
+          <div class="source-span-grid">
+            <article class="source-span" data-paper-field>
+              <div class="source-span-header">
+                <strong>Belief source</strong>
+                <code>entities/jade/BELIEFS.md:12-14</code>
+              </div>
+              <div class="source-span-body">
+                <div class="source-span-row">
+                  <span class="source-line-number">12</span>
+                  <span><span class="source-mention">@jade</span> believes the mayor owes <span class="source-mention">@mafia</span> a favor. <span class="source-tag">:+1</span></span>
+                </div>
+                <div class="source-span-row">
+                  <span class="source-line-number">13</span>
+                  <span>The belief was learned while she had live membership access. <span class="source-tag">:access:member</span></span>
+                </div>
+                <div class="source-span-row">
+                  <span class="source-line-number">14</span>
+                  <span>After access loss, retain the direction but weaken confidence.</span>
+                </div>
+              </div>
+              <div class="source-span-meta">
+                <span class="dx-badge neutral">+1 suspects</span>
+                <span class="dx-badge access">retained after access loss</span>
+                <span class="dx-badge hidden">not live access</span>
+              </div>
+            </article>
+
+            <aside class="rule-panel">
+              <p class="eyebrow">Marginalia</p>
+              <p>Use marginalia for quiet provenance, access, and editorial notes that should guide interpretation without competing with the authored line.</p>
+              <div class="note-strip">
+                <span class="marginalia">source span · line tags preserved</span>
+                <span class="field-hint">Annotations should clarify where knowledge came from, not encode truth by themselves.</span>
+              </div>
+              <div class="note-strip">
+                <span class="marginalia">runtime note · episode closure</span>
+                <span class="field-hint">Retained beliefs should point back to the remembered source or episode that produced them.</span>
+              </div>
+            </aside>
+          </div>
+        </section>
+
         <section aria-labelledby="components-title">
           <div class="section-heading">
             <div>
@@ -1635,30 +1876,60 @@
             </article>
 
             <article class="component-card">
-              <h3>Forms</h3>
+              <h3>Authoring Fields</h3>
+              <p class="icon-note">Forms should feel like controlled source editors: labels name the artifact, meta pills explain scope, and hint rows reserve room for validation without shifting the layout.</p>
               <div class="field-stack">
                 <label class="field-label">
-                  Workspace
+                  <span class="field-heading">Workspace <span class="field-meta">source path</span></span>
                   <input class="dx-field" value="workspaces/demo">
                   <span class="field-hint">Plain text input with visible but quiet boundaries.</span>
                 </label>
                 <label class="field-label">
-                  Actor kind
+                  <span class="field-heading">Actor kind <span class="field-meta">compiled</span></span>
                   <select class="dx-field">
                     <option>Agent</option>
                     <option>Affiliation</option>
                     <option>Artifact</option>
                     <option>Stateless</option>
                   </select>
+                  <span class="field-hint">Selects use the same field shell as text input.</span>
                 </label>
                 <label class="field-label">
-                  Stage whisper
-                  <textarea class="dx-field is-focus">Do not reveal the access path yet.</textarea>
+                  <span class="field-heading">Stage whisper <span class="field-meta">runtime</span></span>
+                  <textarea class="dx-field">Do not reveal the access path yet.</textarea>
+                  <span class="field-hint">Private player context for the selected actor's next turn.</span>
+                </label>
+                <label class="field-label">
+                  <span class="field-heading">Mention <span class="field-meta">validation</span></span>
+                  <input class="dx-field" value="@lukes-phone">
+                  <span class="field-hint danger">Unknown mention @lukes-phone. Add the entity or correct the source line.</span>
                 </label>
                 <div class="choice-row">
                   <label class="dx-check"><input type="checkbox" checked> Active audience</label>
-                  <label class="dx-check is-focus"><input type="radio" name="visibility" checked> Private turn</label>
+                  <label class="dx-check"><input type="radio" name="visibility" checked> Private turn</label>
                   <label class="dx-check"><input type="checkbox" disabled> Locked</label>
+                </div>
+              </div>
+            </article>
+
+            <article class="component-card wide" data-light-field>
+              <h3>Interaction States</h3>
+              <p class="icon-note">State specimens are separated from normal forms so focus does not read as error and selected does not read as keyboard position.</p>
+              <div class="field-stack">
+                <label class="field-label">
+                  <span class="field-heading">Keyboard focus <span class="field-meta">focus</span></span>
+                  <input class="dx-field is-focus" value="@jade">
+                  <span class="field-hint">Focus uses the ember ring and border only while the control has keyboard focus.</span>
+                </label>
+                <label class="field-label">
+                  <span class="field-heading">Invalid source <span class="field-meta">error</span></span>
+                  <input class="dx-field is-invalid" value="@lukes-phone">
+                  <span class="field-hint danger">Unknown mention @lukes-phone. Add the entity or correct the source line.</span>
+                </label>
+                <div class="choice-row">
+                  <label class="dx-check"><input type="checkbox" checked> Selected</label>
+                  <label class="dx-check is-focus"><input type="checkbox"> Keyboard focus</label>
+                  <label class="dx-check"><input type="checkbox" disabled> Disabled</label>
                 </div>
               </div>
             </article>
@@ -1718,6 +1989,7 @@
           <div class="component-grid">
             <article class="component-card" data-light-field>
               <h3>Belief Strength</h3>
+              <p class="icon-note">Belief strength badges stay chromatically quiet on purpose. Doxvelt screens can show many beliefs at once; if every confidence value gets its own color, dense context views turn into confetti and make provenance/access harder to scan. Taxonomy: belief strength = quiet numeric markers; access/provenance = informational emphasis; hidden/private = low-contrast or dashed; danger/blocking = operational state, not disbelief.</p>
               <div class="badge-lab">
                 <div class="badge-group">
                   <span class="dx-badge positive">+3 true</span>
@@ -1758,6 +2030,33 @@
           </div>
         </section>
 
+
+        <section aria-labelledby="separation-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="separation-title" class="icon-label"><span data-icon="minimize"></span>Separation</h2>
+              <p>Prefer spacing, grouping, and tonal shifts before adding new borders. Use subtle borders for reusable containers, controls, tables, focus/validation states, and dense structures where the edge must remain legible. Avoid stacking borders when spacing or surface tone already separates the content.</p>
+            </div>
+          </div>
+
+          <div class="light-lab">
+            <article class="component-card" data-light-field>
+              <p class="eyebrow">Spacing First</p>
+              <h3>Let distance separate ideas.</h3>
+              <p>Use gap, padding, and alignment before adding another edge. If the eye can already parse the grouping, do not add a border just to decorate it.</p>
+            </article>
+            <article class="component-card">
+              <p class="eyebrow">Tone Second</p>
+              <h3>Use surface shifts quietly.</h3>
+              <p>Raised panels, inset source fields, and soft note strips can separate content without drawing a hard box around every object.</p>
+            </article>
+            <article class="component-card">
+              <p class="eyebrow">Borders Last</p>
+              <h3>Keep edges accountable.</h3>
+              <p>Card borders can frame isolated showcase specimens, but product surfaces should avoid stacking borders when spacing, tone, or elevation already separates the content.</p>
+            </article>
+          </div>
+        </section>
         <section aria-labelledby="light-title">
           <div class="section-heading">
             <div>
@@ -1893,44 +2192,74 @@
         { name: "Oxblood", key: "oxblood" }
       ];
       const shades = ["50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950"];
-      const tokens = [
-        ["Canvas", "--dx-surface-canvas", "Primary page background"],
-        ["Panel", "--dx-surface-panel", "Tool panes, sidebars, and repeated items"],
-        ["Raised", "--dx-surface-raised", "Controls and elevated surfaces"],
-        ["Subtle", "--dx-surface-subtle", "Quiet fills and metric cells"],
-        ["Text Strong", "--dx-text-strong", "Headings and primary labels"],
-        ["Text", "--dx-text", "Default body copy"],
-        ["Text Muted", "--dx-text-muted", "Secondary labels and helper copy"],
-        ["Border", "--dx-border", "Default separators"],
-        ["Accent", "--dx-accent", "Primary action and selected state"],
-        ["Accent Subtle", "--dx-accent-subtle", "Badges and soft selected state"],
-        ["Danger", "--dx-danger", "Destructive or critical state"],
-        ["Success", "--dx-success", "Positive confirmation state"],
-        ["Info", "--dx-info", "Informational and mention-adjacent state"],
-        ["Focus", "--dx-focus", "Keyboard focus source color"],
-        ["Display Type", "--dx-type-display-size", "Hero and major product identity"],
-        ["Title Type", "--dx-type-title-size", "Section headings"],
-        ["Body Line", "--dx-type-body-line", "Readable prose rhythm"],
-        ["Caption Type", "--dx-type-caption-size", "Helper copy and secondary metadata"],
-        ["Code Type", "--dx-type-code-size", "Source spans and token values"],
-        ["Eyebrow Type", "--dx-type-eyebrow-size", "Operational labels and modes"],
-        ["Control Type", "--dx-type-control-weight", "Button and form control labels"],
-        ["Radius XS", "--dx-radius-xs", "Inline chips and tight source tags"],
-        ["Radius SM", "--dx-radius-sm", "Controls and compact tiles"],
-        ["Radius MD", "--dx-radius-md", "Cards, panels, and tables"],
-        ["Radius LG", "--dx-radius-lg", "Future large feature panels"],
-        ["Radius Pill", "--dx-radius-pill", "Badges and rounded status chips"],
-        ["Shadow None", "--dx-shadow-none", "Flat structured fields"],
-        ["Shadow Hairline", "--dx-shadow-hairline", "One-pixel optical lift"],
-        ["Shadow Raised", "--dx-shadow-raised", "Default card elevation"],
-        ["Shadow Floating", "--dx-shadow-floating", "Hero or transient emphasis"],
-        ["Hover Surface", "--dx-state-hover-surface", "Hover fill for quiet controls"],
-        ["Selected Surface", "--dx-state-selected-surface", "Soft selected or active fill"],
-        ["Focus Ring", "--dx-state-focus-ring", "Keyboard focus outline"],
-        ["Disabled Opacity", "--dx-state-disabled-opacity", "Unavailable controls"],
-        ["Canvas Glow", "--dx-canvas-glow", "Broad ambient page highlight"],
-        ["Light Glow", "--dx-light-glow", "Ambient highlight field for cards"],
-        ["Light Shade", "--dx-light-shade", "Ambient shadow field for cards"]
+      const tokenGroups = [
+        {
+          name: "Color semantics",
+          description: "Theme-aware roles for surfaces, text, actions, feedback, and focus.",
+          tokens: [
+            ["Canvas", "--dx-surface-canvas", "Primary page background"],
+            ["Panel", "--dx-surface-panel", "Tool panes, sidebars, and repeated items"],
+            ["Raised", "--dx-surface-raised", "Controls and elevated surfaces"],
+            ["Subtle", "--dx-surface-subtle", "Quiet fills and metric cells"],
+            ["Text Strong", "--dx-text-strong", "Headings and primary labels"],
+            ["Text", "--dx-text", "Default body copy"],
+            ["Text Muted", "--dx-text-muted", "Secondary labels and helper copy"],
+            ["Border", "--dx-border", "Default separators"],
+            ["Accent", "--dx-accent", "Primary action and selected state"],
+            ["Accent Subtle", "--dx-accent-subtle", "Badges and soft selected state"],
+            ["Danger", "--dx-danger", "Destructive or critical state"],
+            ["Success", "--dx-success", "Positive confirmation state"],
+            ["Info", "--dx-info", "Informational and mention-adjacent state"],
+            ["Focus", "--dx-focus", "Keyboard focus source color"]
+          ]
+        },
+        {
+          name: "Typography",
+          description: "Reusable type roles for product voice, source material, metadata, and controls.",
+          tokens: [
+            ["Display Type", "--dx-type-display-size", "Hero and major product identity"],
+            ["Title Type", "--dx-type-title-size", "Section headings"],
+            ["Body Line", "--dx-type-body-line", "Readable prose rhythm"],
+            ["Caption Type", "--dx-type-caption-size", "Helper copy and secondary metadata"],
+            ["Code Type", "--dx-type-code-size", "Source spans and token values"],
+            ["Eyebrow Type", "--dx-type-eyebrow-size", "Operational labels and modes"],
+            ["Control Type", "--dx-type-control-weight", "Button and form control labels"]
+          ]
+        },
+        {
+          name: "Shape and elevation",
+          description: "Radius and shadow decisions for chips, controls, cards, panels, and transient emphasis.",
+          tokens: [
+            ["Radius XS", "--dx-radius-xs", "Inline chips and tight source tags"],
+            ["Radius SM", "--dx-radius-sm", "Controls and compact tiles"],
+            ["Radius MD", "--dx-radius-md", "Cards, panels, and tables"],
+            ["Radius LG", "--dx-radius-lg", "Future large feature panels"],
+            ["Radius Pill", "--dx-radius-pill", "Badges and rounded status chips"],
+            ["Shadow None", "--dx-shadow-none", "Flat structured fields"],
+            ["Shadow Hairline", "--dx-shadow-hairline", "One-pixel optical lift"],
+            ["Shadow Raised", "--dx-shadow-raised", "Default card elevation"],
+            ["Shadow Floating", "--dx-shadow-floating", "Hero or transient emphasis"]
+          ]
+        },
+        {
+          name: "Interaction states",
+          description: "State roles that should remain distinct from validation and semantic content.",
+          tokens: [
+            ["Hover Surface", "--dx-state-hover-surface", "Hover fill for quiet controls"],
+            ["Selected Surface", "--dx-state-selected-surface", "Soft selected or active fill"],
+            ["Focus Ring", "--dx-state-focus-ring", "Keyboard focus outline"],
+            ["Disabled Opacity", "--dx-state-disabled-opacity", "Unavailable controls"]
+          ]
+        },
+        {
+          name: "Light fields",
+          description: "Ambient depth tokens for situated panels; never encode truth, secrecy, or access by themselves.",
+          tokens: [
+            ["Canvas Glow", "--dx-canvas-glow", "Broad ambient page highlight"],
+            ["Light Glow", "--dx-light-glow", "Ambient highlight field for cards"],
+            ["Light Shade", "--dx-light-shade", "Ambient shadow field for cards"]
+          ]
+        }
       ];
 
       const root = document.documentElement;
@@ -1967,18 +2296,24 @@
       }
 
       function renderTokens() {
-        tokenTable.innerHTML = tokens.map(([label, token, role]) => {
-          const value = cssValue(token);
-          return `
-            <div class="token-row">
-              <strong>${label}</strong>
-              <code>${token}</code>
-              <span class="token-role">${role}</span>
-              <code>${value}</code>
-              <button class="dx-button secondary token-copy" type="button" data-copy="${token}" aria-label="Copy ${token}">${icon("copy", "sm")}<span>Copy</span></button>
-            </div>
-          `;
-        }).join("");
+        tokenTable.innerHTML = tokenGroups.map((group) => `
+          <div class="token-group-header">
+            <strong>${group.name}</strong>
+            <span>${group.description}</span>
+          </div>
+          ${group.tokens.map(([label, token, role]) => {
+            const value = cssValue(token);
+            return `
+              <div class="token-row">
+                <strong>${label}</strong>
+                <code>${token}</code>
+                <span class="token-role">${role}</span>
+                <code>${value}</code>
+                <button class="dx-button secondary token-copy" type="button" data-copy="${token}" aria-label="Copy ${token}">${icon("copy", "sm")}<span>Copy</span></button>
+              </div>
+            `;
+          }).join("")}
+        `).join("");
       }
 
       function setTheme(theme) {
