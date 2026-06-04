@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const designHtml = await readFile("design/index.html", "utf8");
+const designHtml = await readFile("design-system/index.html", "utf8");
 
 test("design system documents intentionally quiet belief strength badges", () => {
   assert.match(

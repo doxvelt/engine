@@ -16,6 +16,14 @@ The first product target is a local single-user app with import/export for simul
 
 The current implementation is a local CLI/runtime slice over the core engine. Keep new behavior in the core library first, then expose it through the CLI as a wrapper.
 
+## Design System
+
+The product design system lives in `design-system/`. It contains the static specimen page, canonical visual tokens, fonts, and brand assets for Doxvelt's local workbench UI.
+
+Use the design system when changing UI surfaces. Preserve its Doxvelt-specific semantics for source spans, dossiers, beliefs, access paths, transcript turns, tags, badges, authoring fields, and restrained operational states. Do not invent parallel palettes, badge semantics, typography scales, or component treatments without updating the design system first.
+
+Keep `docs/design/` for product/domain design documents and `design-system/` for visual/product UI language.
+
 ## Core Product Shape
 
 The engine is a turn-based RPG in the form of a chat.

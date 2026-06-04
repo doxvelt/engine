@@ -22,6 +22,12 @@ The design is documented in:
 - [System Loop](docs/design/SYSTEM_LOOP.md)
 - [MVP Architecture](docs/design/MVP_ARCHITECTURE.md)
 
+## Design System
+
+The product design system lives in [`design-system/`](design-system/). It contains the static specimen page, visual tokens, fonts, and brand assets for Doxvelt's local workbench UI: dossiers, source spans, beliefs, access paths, transcript turns, and authoring controls.
+
+Keep this design system in this repository while the engine, local API, and local UI are still evolving together. Treat `design-system/tokens.css` as the canonical visual token source before inventing parallel UI styling.
+
 ## Example Uses
 
 - Chat RPGs with player-directed turns and subjective character knowledge.
