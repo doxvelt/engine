@@ -13,7 +13,7 @@
       html {
         font-family: var(--dx-font-sans);
         background: var(--dx-surface-canvas);
-        color: var(--dx-text);
+        color: var(--dx-type-field-label-color);
       }
 
       body {
@@ -449,18 +449,13 @@
 
       .specimen-label,
       .eyebrow {
-        color: var(--dx-danger);
+        color: var(--dx-type-eyebrow-color);
         font-family: var(--dx-font-mono);
         font-size: var(--dx-type-eyebrow-size);
         font-weight: var(--dx-type-eyebrow-weight);
         letter-spacing: var(--dx-type-eyebrow-tracking);
         line-height: var(--dx-type-eyebrow-line);
         text-transform: uppercase;
-      }
-
-      [data-theme="dark"] .specimen-label,
-      [data-theme="dark"] .eyebrow {
-        color: var(--dx-accent);
       }
 
       .display-sample {
@@ -489,7 +484,7 @@
 
       .quote-sample {
         margin-top: var(--dx-space-4);
-        color: var(--dx-text);
+        color: var(--dx-type-field-label-color);
         font-size: 1.45rem;
         font-style: italic;
         font-weight: 360;
@@ -750,11 +745,7 @@
 
       .light-lab .eyebrow {
         margin-top: 0;
-        color: var(--dx-danger);
-      }
-
-      [data-theme="dark"] .light-lab .eyebrow {
-        color: var(--dx-accent);
+        color: var(--dx-type-eyebrow-color);
       }
 
       .light-lab h3 {
@@ -888,7 +879,7 @@
         min-height: 40px;
         border: 1px solid var(--dx-border);
         border-radius: var(--dx-radius-sm);
-        background: color-mix(in oklch, var(--dx-surface-canvas) 84%, var(--dx-surface-panel));
+        background: var(--dx-field-background);
         box-shadow: inset 0 1px 1px color-mix(in oklch, var(--dx-text) 6%, transparent);
         color: var(--dx-text);
         font-family: var(--dx-font-sans);
@@ -2202,6 +2193,7 @@
             ["Raised", "--dx-surface-raised", "Controls and elevated surfaces"],
             ["Subtle", "--dx-surface-subtle", "Quiet fills and metric cells"],
             ["Inverse Surface", "--dx-surface-inverse", "High-contrast opposing surface"],
+            ["Field Background", "--dx-field-background", "Quiet fill for text inputs, selects, and textareas"],
             ["Text Strong", "--dx-text-strong", "Headings and primary labels"],
             ["Text", "--dx-text", "Default body copy"],
             ["Text Muted", "--dx-text-muted", "Secondary labels and helper copy"],
@@ -2252,10 +2244,12 @@
             ["Label Weight", "--dx-type-label-weight", "Weight for compact labels"],
             ["Code Type", "--dx-type-code-size", "Source spans and token values"],
             ["Code Line", "--dx-type-code-line", "Line height for source spans"],
+            ["Field Label Color", "--dx-type-field-label-color", "Ink color for form field labels"],
             ["Eyebrow Type", "--dx-type-eyebrow-size", "Operational labels and modes"],
             ["Eyebrow Weight", "--dx-type-eyebrow-weight", "Weight for operational labels"],
             ["Eyebrow Line", "--dx-type-eyebrow-line", "Line height for operational labels"],
             ["Eyebrow Tracking", "--dx-type-eyebrow-tracking", "Tracking for operational labels"],
+            ["Eyebrow Color", "--dx-type-eyebrow-color", "Accent color for operational labels"],
             ["Metric Type", "--dx-type-metric-size", "Prominent numeric or compact status values"],
             ["Metric Weight", "--dx-type-metric-weight", "Weight for metric values"],
             ["Metric Line", "--dx-type-metric-line", "Line height for metric values"],

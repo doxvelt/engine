@@ -88,6 +88,7 @@
   --dx-surface-raised: var(--dx-color-neutral-200);
   --dx-surface-subtle: var(--dx-color-neutral-300);
   --dx-surface-inverse: var(--dx-color-neutral-900);
+  --dx-field-background: var(--dx-surface-canvas);
   --dx-text-strong: var(--dx-color-neutral-950);
   --dx-text: var(--dx-color-neutral-900);
   --dx-text-muted: var(--dx-color-neutral-600);
@@ -150,10 +151,12 @@
   --dx-type-control-weight: 500;
   --dx-type-code-size: 0.8125rem;
   --dx-type-code-line: 1.65;
+  --dx-type-field-label-color: var(--dx-text);
   --dx-type-eyebrow-size: 0.75rem;
-  --dx-type-eyebrow-weight: 600;
+  --dx-type-eyebrow-weight: 500;
   --dx-type-eyebrow-line: 1;
   --dx-type-eyebrow-tracking: 0.04em;
+  --dx-type-eyebrow-color: var(--dx-accent);
   --dx-type-metric-size: 2.25rem;
   --dx-type-metric-weight: 650;
   --dx-type-metric-line: 1;
@@ -174,7 +177,8 @@
   --dx-space-10: 2.5rem;
 }
 
-[data-theme="dark"] {
+[data-theme="dark"],
+.dark {
   color-scheme: dark;
 
   --dx-surface-canvas: var(--dx-color-neutral-950);
@@ -182,6 +186,7 @@
   --dx-surface-raised: var(--dx-color-neutral-800);
   --dx-surface-subtle: var(--dx-color-neutral-700);
   --dx-surface-inverse: var(--dx-color-neutral-100);
+  --dx-field-background: var(--dx-surface-canvas);
   --dx-text-strong: var(--dx-color-neutral-50);
   --dx-text: var(--dx-color-neutral-100);
   --dx-text-muted: var(--dx-color-neutral-300);

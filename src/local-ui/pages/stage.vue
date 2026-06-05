@@ -1,15 +1,15 @@
 <template>
   <div class="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)] gap-0">
-    <aside class="min-h-0 overflow-y-auto border-r border-slate-200 bg-white/85 p-3">
-      <div class="space-y-3">
-        <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-2 p-3 sm:p-3' }">
+    <aside class="dx-left-panel min-h-0 overflow-y-auto border-r p-4">
+      <div class="space-y-5">
+        <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-2 p-0 sm:p-0' }">
           <div class="flex items-center justify-between gap-2">
-            <h2 class="text-xs font-semibold uppercase text-slate-500">Workspace</h2>
+            <h2 class="dx-label">Workspace</h2>
             <UBadge :color="simulationStarted ? 'success' : compiledOnce ? 'warning' : 'neutral'" variant="subtle" size="sm">
               {{ workspaceStatus }}
             </UBadge>
           </div>
-          <div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 rounded-md bg-slate-50 p-2 text-xs text-slate-600 ring-1 ring-slate-200">
+          <div class="dx-tile grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 rounded-sm p-2 text-xs">
             <UIcon :name="compiledOnce ? 'i-lucide-check-circle-2' : 'i-lucide-circle'" class="mt-0.5" />
             <span>Validate source</span>
             <UIcon :name="simulationStarted ? 'i-lucide-check-circle-2' : 'i-lucide-circle'" class="mt-0.5" />
@@ -17,7 +17,7 @@
             <UIcon :name="selectedActorId ? 'i-lucide-check-circle-2' : 'i-lucide-circle'" class="mt-0.5" />
             <span>{{ selectedActorId ? `Actor selected: ${actorName(selectedActorId)}` : "Choose next actor" }}</span>
           </div>
-          <UButton icon="i-lucide-play" color="neutral" variant="solid" size="sm" block :loading="loading" @click="startSimulation">
+          <UButton icon="i-lucide-play" color="primary" variant="solid" size="sm" block :loading="loading" @click="startSimulation">
             {{ simulationStarted ? "Restart" : "Start" }}
           </UButton>
           <UButton icon="i-lucide-file-check-2" color="neutral" variant="subtle" size="sm" block :loading="loading" @click="validateWorkspace">
@@ -30,33 +30,33 @@
             <UInput v-model="workspacePath" icon="i-lucide-folder" size="sm" class="w-full" @change="updateRoute" />
           </UFormField>
           <UFormField label="Scenario" size="xs">
-            <USelect v-model="scenarioId" :items="scenarioItems" icon="i-lucide-map" size="sm" class="w-full" placeholder="Select scenario" />
+            <USelect v-model="scenarioId" :items="scenarioItems" icon="i-lucide-map" size="sm" class="w-full" placeholder="Select scenario" :disabled="scenarioItems.length === 0" />
           </UFormField>
         </UCard>
 
-        <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-2 p-3 sm:p-3' }">
+        <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-2 p-0 sm:p-0' }">
           <div class="flex items-center justify-between gap-2">
-            <h2 class="text-xs font-semibold uppercase text-slate-500">Actors</h2>
+            <h2 class="dx-label">Actors</h2>
             <UBadge color="neutral" variant="soft" size="sm">{{ actors.length }}</UBadge>
           </div>
           <div v-if="actors.length > 0" class="space-y-1">
             <button
               v-for="actor in actors"
               :key="actor.id"
-              class="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-slate-100"
-              :class="actor.id === selectedActorId ? 'bg-slate-100 text-slate-950 ring-1 ring-slate-200 hover:bg-slate-100' : 'text-slate-700'"
+              class="dx-tile flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition"
+              :class="actor.id === selectedActorId ? 'is-selected' : ''"
               @click="selectActor(actor.id)"
             >
               <span class="truncate">{{ actor.name || actor.id }}</span>
               <span class="shrink-0 text-xs opacity-70">@{{ actor.id }}</span>
             </button>
           </div>
-          <p v-else class="text-sm text-slate-500">Start a simulation to load actors.</p>
+          <p v-else class="text-sm text-muted">Start a simulation to load actors.</p>
         </UCard>
 
-        <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-2 p-3 sm:p-3' }">
+        <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-2 p-0 sm:p-0' }">
           <div class="flex items-center justify-between gap-2">
-            <h2 class="text-xs font-semibold uppercase text-slate-500">Audience</h2>
+            <h2 class="dx-label">Audience</h2>
             <div class="flex items-center gap-1">
               <UButton icon="i-lucide-user-plus" color="neutral" variant="ghost" size="xs" :disabled="!selectedActorId" @click="addAudience">
                 Add selected
@@ -86,15 +86,15 @@
               />
               <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="xs" square @click="removeAudience(member.actorId)" />
             </UBadge>
-            <span v-if="audienceMembers.length === 0" class="text-sm text-slate-500">None. Add observers before turns that should be heard by others.</span>
+            <span v-if="audienceMembers.length === 0" class="text-sm text-muted">None. Add observers before turns that should be heard by others.</span>
           </div>
         </UCard>
 
-        <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-2 p-3 sm:p-3' }">
+        <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-2 p-0 sm:p-0' }">
           <UTabs v-model="inspectorTab" :items="inspectorTabs" size="sm" />
           <div v-if="inspectorTab === 'beliefs'" class="max-h-52 space-y-2 overflow-auto pr-1">
-            <div v-for="belief in beliefs" :key="beliefKey(belief)" class="rounded-md border border-slate-200 bg-white p-2">
-              <p class="text-xs leading-5 text-slate-800">{{ belief.belief.propositionText }}</p>
+            <div v-for="belief in beliefs" :key="beliefKey(belief)" class="dx-card-soft rounded-sm border p-2">
+              <p class="text-xs leading-5 text-default">{{ belief.belief.propositionText }}</p>
               <div class="mt-2 flex flex-wrap items-center gap-1.5">
                 <UBadge :color="beliefStrengthColor(belief.belief.strength)" variant="subtle" size="sm">
                   {{ beliefStrengthLabel(belief.belief.strength) }}
@@ -102,54 +102,54 @@
                 <UBadge color="neutral" variant="soft" size="sm">{{ provenanceLabel(belief) }}</UBadge>
               </div>
             </div>
-            <p v-if="beliefs.length === 0" class="text-sm text-slate-500">No beliefs loaded.</p>
+            <p v-if="beliefs.length === 0" class="text-sm text-muted">No beliefs loaded.</p>
           </div>
           <div v-else class="max-h-52 space-y-2 overflow-auto pr-1">
-            <div v-for="memory in memories" :key="memory.id" class="rounded-md border border-slate-200 bg-white p-2">
-              <p class="mb-1 text-xs font-medium uppercase text-slate-500">{{ actorName(memory.actorId) }}</p>
-              <p class="text-xs leading-5 text-slate-700">{{ memory.text }}</p>
+            <div v-for="memory in memories" :key="memory.id" class="dx-card-soft rounded-sm border p-2">
+              <p class="dx-label mb-1">{{ actorName(memory.actorId) }}</p>
+              <p class="text-xs leading-5 text-default">{{ memory.text }}</p>
             </div>
-            <p v-if="memories.length === 0" class="text-sm text-slate-500">No memories yet.</p>
+            <p v-if="memories.length === 0" class="text-sm text-muted">No memories yet.</p>
           </div>
         </UCard>
       </div>
     </aside>
 
-    <section class="flex min-h-0 flex-col bg-white">
-      <div class="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 px-3 sm:px-4">
+    <section class="dx-workspace flex min-h-0 flex-col">
+      <div class="dx-plain-panel flex h-14 shrink-0 items-center justify-between border-b border-default px-3 sm:px-4">
         <div>
           <h2 class="text-base font-semibold">Transcript</h2>
-          <p class="text-sm text-slate-500">{{ selectedActorId ? `Next actor: ${actorName(selectedActorId)}` : "No actor selected" }}</p>
+          <p class="text-sm text-muted">{{ selectedActorId ? `Next actor: ${actorName(selectedActorId)}` : "No actor selected" }}</p>
         </div>
         <UButton icon="i-lucide-door-closed" color="neutral" variant="soft" size="sm" :disabled="!canCloseEpisode" :loading="closingEpisode" @click="closeEpisode">
           Close
         </UButton>
       </div>
 
-      <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-3 py-3 sm:px-4">
+      <div class="dx-canvas min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
         <div v-if="transcript.length > 0" class="mx-auto max-w-3xl space-y-3">
-          <article v-for="turn in transcript" :key="turn.id" class="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <article v-for="turn in transcript" :key="turn.id" class="dx-card-soft rounded-md border p-3">
             <div class="mb-2 flex items-center justify-between gap-2">
-              <span class="text-sm font-semibold text-slate-800">{{ actorName(turn.actorId) }}</span>
+              <span class="text-sm font-semibold text-highlighted">{{ actorName(turn.actorId) }}</span>
               <UBadge color="neutral" variant="soft" size="sm">{{ audienceLabel(turn) }}</UBadge>
             </div>
-            <p class="mt-0 whitespace-pre-wrap text-sm leading-6 text-slate-800">{{ turn.text }}</p>
+            <p class="mt-0 whitespace-pre-wrap text-sm leading-6 text-default">{{ turn.text }}</p>
           </article>
         </div>
         <div v-else class="flex h-full items-center justify-center">
           <div class="max-w-sm text-center">
-            <p class="text-sm font-medium text-slate-700">No turns yet.</p>
-            <p class="mt-1 text-sm text-slate-500">Start a simulation, add observers if needed, choose an actor, and write the next turn.</p>
+            <p class="text-sm font-medium text-default">No turns yet.</p>
+            <p class="mt-1 text-sm text-muted">Start a simulation, add observers if needed, choose an actor, and write the next turn.</p>
           </div>
         </div>
       </div>
 
-      <div class="shrink-0 border-t border-slate-200 bg-white p-3">
+      <div class="dx-plain-panel shrink-0 border-t border-default p-3">
         <div class="grid gap-2" data-testid="composer">
           <div class="flex items-center justify-between gap-2">
             <div class="flex min-w-0 items-center gap-2">
-              <UIcon :name="composerMode === 'send' ? 'i-lucide-send' : 'i-lucide-wand-sparkles'" class="shrink-0 text-slate-500" />
-              <span class="truncate text-sm font-medium text-slate-700">{{ composerModeLabel }}</span>
+              <UIcon :name="composerMode === 'send' ? 'i-lucide-send' : 'i-lucide-wand-sparkles'" class="shrink-0 text-muted" />
+              <span class="truncate text-sm font-medium text-default">{{ composerModeLabel }}</span>
             </div>
             <USwitch
               v-model="sendModeEnabled"
@@ -245,7 +245,7 @@ const modelItems = computed(() => {
 });
 const scenarioItems = computed(() => {
   const items = sourceFiles.value.filter((file) => file.kind === "scenario").map((file) => ({ label: file.id, value: file.id }));
-  return items.length > 0 ? items : [{ label: "No scenarios loaded", value: "" }];
+  return items;
 });
 
 onMounted(async () => {

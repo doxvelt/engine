@@ -6,7 +6,7 @@ export default defineNuxtConfig({
   css: ["~/assets/css/main.css"],
   devtools: { enabled: true },
   ui: {
-    colorMode: false,
+    colorMode: true,
     theme: {
       defaultVariants: {
         color: "neutral",

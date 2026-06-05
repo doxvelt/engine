@@ -1,9 +1,9 @@
 <template>
   <div class="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)] gap-0">
-    <aside class="flex min-h-0 flex-col gap-3 overflow-hidden border-r border-slate-200 bg-white/85 p-3">
-      <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-3 p-3 sm:p-3' }">
+    <aside class="dx-left-panel flex min-h-0 flex-col gap-5 overflow-visible border-r p-4">
+      <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-3 p-0 sm:p-0' }">
         <div class="flex items-center justify-between gap-2">
-          <h2 class="text-xs font-semibold uppercase text-slate-500">Source Workspace</h2>
+          <h2 class="dx-label">Source Workspace</h2>
           <UBadge color="neutral" variant="soft" size="sm">{{ sourceFiles.length }}</UBadge>
         </div>
         <UFormField label="Workspace" size="xs">
@@ -19,62 +19,62 @@
         </div>
       </UCard>
 
-      <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-3 p-3 sm:p-3' }">
+      <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-3 p-0 sm:p-0' }">
         <div class="flex items-center justify-between gap-2">
-          <h2 class="text-xs font-semibold uppercase text-slate-500">Create</h2>
+          <h2 class="dx-label">Create</h2>
           <UBadge color="neutral" variant="soft" size="sm">{{ newAssetKindLabel }}</UBadge>
         </div>
         <USelect v-model="newAssetKind" :items="newAssetKindItems" icon="i-lucide-layers" size="sm" class="w-full" />
         <UInput v-model="newAssetId" icon="i-lucide-at-sign" size="sm" placeholder="stable-id" class="w-full" />
         <UInput v-model="newAssetName" icon="i-lucide-type" size="sm" placeholder="Display name" class="w-full" />
-        <UButton icon="i-lucide-plus" color="neutral" variant="solid" size="sm" block :disabled="!canCreateSourceAsset" @click="createSourceAsset">
+        <UButton icon="i-lucide-plus" color="primary" variant="solid" size="sm" block :disabled="!canCreateSourceAsset" @click="createSourceAsset">
           Create source file
         </UButton>
       </UCard>
 
-      <UCard :ui="{ root: 'flex min-h-0 flex-1 flex-col rounded-lg border border-slate-200 shadow-none', body: 'flex min-h-0 flex-1 flex-col space-y-2 p-3 sm:p-3' }">
+      <UCard :ui="{ root: 'dx-tool-panel flex min-h-0 flex-1 flex-col rounded-none', body: 'flex min-h-0 flex-1 flex-col space-y-2 p-0 sm:p-0' }">
         <div class="flex items-center justify-between gap-2">
-          <h2 class="text-xs font-semibold uppercase text-slate-500">Files</h2>
+          <h2 class="dx-label">Files</h2>
           <UInput v-model="sourceFilter" icon="i-lucide-search" size="xs" placeholder="Filter" class="w-full max-w-36" />
         </div>
         <div class="min-h-0 flex-1 space-y-3 overflow-auto pr-1">
           <section v-for="group in groupedSourceFiles" :key="group.label" class="space-y-1">
             <div class="flex items-center justify-between px-1">
-              <h3 class="text-[11px] font-semibold uppercase text-slate-500">{{ group.label }}</h3>
+              <h3 class="dx-label text-[11px]">{{ group.label }}</h3>
               <UBadge color="neutral" variant="soft" size="sm">{{ group.files.length }}</UBadge>
             </div>
             <button
               v-for="file in group.files"
               :key="file.path"
-              class="grid w-full grid-cols-[1fr_auto] gap-2 rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-slate-100"
-              :class="file.path === selectedSourcePath ? 'bg-slate-100 text-slate-950 ring-1 ring-slate-200 hover:bg-slate-100' : 'text-slate-700'"
+              class="dx-tile grid w-full grid-cols-[1fr_auto] gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition"
+              :class="file.path === selectedSourcePath ? 'is-selected' : ''"
               @click="openSourceFile(file.path, { clearCue: true })"
             >
               <span class="min-w-0 truncate">{{ sourceFileLabel(file) }}</span>
-              <span class="text-xs text-slate-500">{{ sourceKindLabel(file) }}</span>
-              <span class="col-span-2 min-w-0 truncate text-xs text-slate-500">{{ file.path }}</span>
+              <span class="dx-subtle text-xs">{{ sourceKindLabel(file) }}</span>
+              <span class="dx-subtle col-span-2 min-w-0 truncate text-xs">{{ file.path }}</span>
             </button>
           </section>
-          <div v-if="filteredSourceFiles.length === 0" class="rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-500">
+          <div v-if="filteredSourceFiles.length === 0" class="rounded-sm bg-muted p-3 text-sm text-muted">
             No source files found. Go home to create a blank workspace or initialize the demo.
           </div>
         </div>
       </UCard>
     </aside>
 
-    <section class="flex min-h-0 flex-col bg-white">
-      <div class="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 px-3 sm:px-4">
+    <section class="dx-workspace flex min-h-0 flex-col">
+      <div class="flex h-14 shrink-0 items-center justify-between px-3 sm:px-4">
         <div class="min-w-0">
           <h2 class="truncate text-base font-semibold">{{ selectedSourcePath || "Studio" }}</h2>
-          <p class="text-sm text-slate-500">{{ sourceEditorState }}</p>
+          <p class="text-sm text-muted">{{ sourceEditorState }}</p>
         </div>
-        <UButton icon="i-lucide-save" color="neutral" variant="solid" size="sm" :disabled="!canSaveSourceFile" :loading="savingSource" @click="saveSourceFile">
+        <UButton icon="i-lucide-save" color="primary" variant="solid" size="sm" :disabled="!canSaveSourceFile" :loading="savingSource" @click="saveSourceFile">
           Save
         </UButton>
       </div>
       <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_320px] gap-0">
-        <div ref="sourceEditorContainer" class="min-h-0 bg-slate-50 p-3">
-          <div v-if="targetSourceSpan" class="mb-2 rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-950">
+        <div ref="sourceEditorContainer" class="dx-canvas min-h-0 p-3">
+          <div v-if="targetSourceSpan" class="dx-source-note mb-2 rounded-sm border p-2 text-xs">
             <div class="mb-1 flex items-center justify-between gap-2">
               <span class="font-semibold">Line {{ targetSourceSpan.line }}</span>
               <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="xs" square @click="clearSourceLineCue" />
@@ -90,26 +90,26 @@
             :ui="{ root: 'h-full w-full', base: 'h-full min-h-[calc(100dvh-9.5rem)] w-full font-mono text-[13px] leading-5' }"
           />
         </div>
-        <aside class="min-h-0 overflow-y-auto border-l border-slate-200 bg-white p-3">
+        <aside class="dx-plain-panel min-h-0 overflow-y-auto border-l p-4">
           <UTabs v-model="inspectorTab" :items="inspectorTabs" size="sm" class="mb-3" />
           <div v-if="inspectorTab === 'guide'" class="space-y-3">
-            <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-2 p-3 sm:p-3' }">
-              <h3 class="text-xs font-semibold uppercase text-slate-500">{{ selectedSourceHelp.title }}</h3>
-              <div class="space-y-2 text-sm text-slate-700">
+            <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-2 p-0 sm:p-0' }">
+              <h3 class="dx-label">{{ selectedSourceHelp.title }}</h3>
+              <div class="space-y-2 text-sm text-default">
                 <p v-for="line in selectedSourceHelp.lines" :key="line">{{ line }}</p>
               </div>
             </UCard>
-            <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-2 p-3 sm:p-3' }">
-              <h3 class="text-xs font-semibold uppercase text-slate-500">Line Tags</h3>
+            <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-2 p-0 sm:p-0' }">
+              <h3 class="dx-label">Line Tags</h3>
               <div class="flex flex-wrap gap-1.5">
                 <UBadge v-for="tag in studioTags" :key="tag" color="neutral" variant="soft" size="sm">{{ tag }}</UBadge>
               </div>
             </UCard>
           </div>
           <div v-else class="space-y-3">
-            <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-3 p-3 sm:p-3' }">
+            <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-3 p-0 sm:p-0' }">
               <div class="flex items-center justify-between gap-2">
-                <h3 class="text-xs font-semibold uppercase text-slate-500">Source Health</h3>
+                <h3 class="dx-label">Source Health</h3>
                 <UBadge :color="validationBadgeColor" variant="subtle" size="sm">{{ validationStatus }}</UBadge>
               </div>
               <USelect v-model="fabricScope" :items="fabricScopeItems" icon="i-lucide-filter" size="sm" class="w-full" />
@@ -123,20 +123,20 @@
                 placeholder="Select entity"
               />
               <div class="grid grid-cols-3 gap-2 text-sm">
-                <div v-for="metric in fabricMetrics" :key="metric.label" class="rounded-md bg-slate-50 p-2 ring-1 ring-slate-200">
-                  <p class="text-[10px] uppercase text-slate-500">{{ metric.label }}</p>
+                <div v-for="metric in fabricMetrics" :key="metric.label" class="dx-tile rounded-sm p-2">
+                  <p class="dx-label text-[10px]">{{ metric.label }}</p>
                   <p class="font-medium">{{ metric.value }}</p>
                 </div>
               </div>
-              <p v-if="validationStale" class="rounded-md bg-amber-50 p-2 text-xs leading-5 text-amber-900 ring-1 ring-amber-200">
+              <p v-if="validationStale" class="dx-warning-note rounded-sm p-2 text-xs leading-5">
                 Source changed since the last validation. Validate again to refresh the compiled fabric.
               </p>
               <div class="max-h-56 space-y-2 overflow-auto pr-1">
                 <button
                   v-for="diagnostic in scopedDiagnostics"
                   :key="diagnosticKey(diagnostic)"
-                  class="w-full rounded-md border p-2 text-left text-xs transition hover:bg-white"
-                  :class="diagnostic.severity === 'error' ? 'border-red-200 bg-red-50 text-red-900' : 'border-amber-200 bg-amber-50 text-amber-900'"
+                  class="w-full rounded-sm border p-2 text-left text-xs transition"
+                  :class="diagnostic.severity === 'error' ? 'dx-error-note' : 'dx-warning-note'"
                   @click="openFirstSourceSpan(diagnostic.sourceSpans)"
                 >
                   <div class="mb-1 flex items-center justify-between gap-2">
@@ -151,107 +151,107 @@
                     {{ diagnostic.sourceSpans[0]?.file }}:{{ diagnostic.sourceSpans[0]?.line }}
                   </p>
                 </button>
-                <p v-if="scopedDiagnostics.length === 0" class="text-sm text-slate-500">{{ validationEmptyText }}</p>
+                <p v-if="scopedDiagnostics.length === 0" class="text-sm text-muted">{{ validationEmptyText }}</p>
               </div>
             </UCard>
 
-            <UCard :ui="{ root: 'rounded-lg border border-slate-200 shadow-none', body: 'space-y-3 p-3 sm:p-3' }">
+            <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-3 p-0 sm:p-0' }">
               <div class="flex items-center justify-between gap-2">
-                <h3 class="text-xs font-semibold uppercase text-slate-500">Compiled Fabric</h3>
+                <h3 class="dx-label">Compiled Fabric</h3>
                 <UButton icon="i-lucide-file-check-2" color="neutral" variant="ghost" size="xs" :loading="loading" @click="validateWorkspace">
                   Validate
                 </UButton>
               </div>
-              <p v-if="compiledWorkspace && fabricScopeSummary" class="rounded-md bg-slate-50 p-2 text-xs leading-5 text-slate-600 ring-1 ring-slate-200">
+              <p v-if="compiledWorkspace && fabricScopeSummary" class="dx-tile rounded-sm p-2 text-xs leading-5">
                 {{ fabricScopeSummary }}
               </p>
-              <p v-if="!compiledWorkspace" class="text-sm leading-6 text-slate-500">
+              <p v-if="!compiledWorkspace" class="text-sm leading-6 text-muted">
                 Validate the workspace to inspect what Doxvelt compiled from the source prose.
               </p>
               <div v-else class="space-y-3">
                 <section class="space-y-2">
                   <div class="flex items-center justify-between gap-2">
-                    <h4 class="text-xs font-semibold uppercase text-slate-500">Entities</h4>
+                    <h4 class="dx-label">Entities</h4>
                     <UBadge color="neutral" variant="soft" size="sm">{{ scopedEntities.length }}</UBadge>
                   </div>
                   <div class="max-h-48 space-y-1 overflow-auto pr-1">
                     <button
                       v-for="entity in scopedEntities"
                       :key="entity.id"
-                      class="grid w-full grid-cols-[1fr_auto] gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-left text-sm ring-1 ring-slate-200 transition hover:bg-slate-100"
+                      class="dx-tile grid w-full grid-cols-[1fr_auto] gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition"
                       @click="openSourceFile(entity.files[0] || '', { clearCue: true })"
                     >
                       <span class="truncate font-medium">{{ entity.name || entity.id }}</span>
                       <UBadge color="neutral" variant="soft" size="sm">{{ entity.kind }}</UBadge>
-                      <span class="col-span-2 truncate text-xs text-slate-500">@{{ entity.id }}</span>
+                      <span class="dx-subtle col-span-2 truncate text-xs">@{{ entity.id }}</span>
                     </button>
-                    <p v-if="scopedEntities.length === 0" class="text-sm text-slate-500">No entities in this scope.</p>
+                    <p v-if="scopedEntities.length === 0" class="text-sm text-muted">No entities in this scope.</p>
                   </div>
                 </section>
 
                 <section class="space-y-2">
                   <div class="flex items-center justify-between gap-2">
-                    <h4 class="text-xs font-semibold uppercase text-slate-500">Beliefs</h4>
+                    <h4 class="dx-label">Beliefs</h4>
                     <UBadge color="neutral" variant="soft" size="sm">{{ scopedBeliefs.length }}</UBadge>
                   </div>
                   <div class="max-h-56 space-y-1 overflow-auto pr-1">
                     <button
                       v-for="belief in scopedBeliefs"
                       :key="beliefKey(belief)"
-                      class="w-full rounded-md bg-slate-50 p-2 text-left text-xs ring-1 ring-slate-200 transition hover:bg-slate-100"
+                      class="dx-tile w-full rounded-sm p-2 text-left text-xs transition"
                       @click="openSourceSpan(belief.sourceSpan)"
                     >
                       <div class="mb-1 flex items-center justify-between gap-2">
                         <span class="font-semibold">@{{ belief.holder }}</span>
                         <UBadge :color="strengthColor(belief.strength)" variant="subtle" size="sm">{{ strengthLabel(belief.strength) }}</UBadge>
                       </div>
-                      <p class="leading-5 text-slate-700">{{ belief.propositionText }}</p>
-                      <p class="mt-1 truncate text-[11px] text-slate-500">{{ belief.sourceSpan.file }}:{{ belief.sourceSpan.line }}</p>
+                      <p class="leading-5 text-default">{{ belief.propositionText }}</p>
+                      <p class="dx-subtle mt-1 truncate text-[11px]">{{ belief.sourceSpan.file }}:{{ belief.sourceSpan.line }}</p>
                     </button>
-                    <p v-if="scopedBeliefs.length === 0" class="text-sm text-slate-500">No tagged beliefs in this scope.</p>
+                    <p v-if="scopedBeliefs.length === 0" class="text-sm text-muted">No tagged beliefs in this scope.</p>
                   </div>
                 </section>
 
                 <section class="space-y-2">
                   <div class="flex items-center justify-between gap-2">
-                    <h4 class="text-xs font-semibold uppercase text-slate-500">Access Links</h4>
+                    <h4 class="dx-label">Access Links</h4>
                     <UBadge color="neutral" variant="soft" size="sm">{{ scopedAccessLinks.length }}</UBadge>
                   </div>
                   <div class="max-h-40 space-y-1 overflow-auto pr-1">
                     <button
                       v-for="link in scopedAccessLinks"
                       :key="accessLinkKey(link)"
-                      class="w-full rounded-md bg-slate-50 p-2 text-left text-xs ring-1 ring-slate-200 transition hover:bg-slate-100"
+                      class="dx-tile w-full rounded-sm p-2 text-left text-xs transition"
                       @click="openSourceSpan(link.sourceSpan)"
                     >
                       <span class="font-medium">@{{ link.member }}</span>
-                      <span class="text-slate-500"> has member access to </span>
+                      <span class="text-muted"> has member access to </span>
                       <span class="font-medium">@{{ link.container }}</span>
-                      <p class="mt-1 truncate text-[11px] text-slate-500">{{ link.sourceSpan.file }}:{{ link.sourceSpan.line }}</p>
+                      <p class="dx-subtle mt-1 truncate text-[11px]">{{ link.sourceSpan.file }}:{{ link.sourceSpan.line }}</p>
                     </button>
-                    <p v-if="scopedAccessLinks.length === 0" class="text-sm text-slate-500">No membership access links in this scope.</p>
+                    <p v-if="scopedAccessLinks.length === 0" class="text-sm text-muted">No membership access links in this scope.</p>
                   </div>
                 </section>
 
                 <section class="space-y-2">
                   <div class="flex items-center justify-between gap-2">
-                    <h4 class="text-xs font-semibold uppercase text-slate-500">Surfaces</h4>
+                    <h4 class="dx-label">Surfaces</h4>
                     <UBadge color="neutral" variant="soft" size="sm">{{ scopedSurfaces.length }}</UBadge>
                   </div>
                   <div class="max-h-40 space-y-1 overflow-auto pr-1">
                     <button
                       v-for="surface in scopedSurfaces"
                       :key="surfaceKey(surface)"
-                      class="w-full rounded-md bg-slate-50 p-2 text-left text-xs ring-1 ring-slate-200 transition hover:bg-slate-100"
+                      class="dx-tile w-full rounded-sm p-2 text-left text-xs transition"
                       @click="openSourceSpan(surface.sourceSpan)"
                     >
                       <div class="mb-1 flex flex-wrap items-center gap-1.5">
                         <span class="font-semibold">@{{ surface.entity }}</span>
                         <UBadge v-for="channel in surface.channels" :key="channel" color="neutral" variant="soft" size="sm">{{ channel }}</UBadge>
                       </div>
-                      <p class="leading-5 text-slate-700">{{ surface.text }}</p>
+                      <p class="leading-5 text-default">{{ surface.text }}</p>
                     </button>
-                    <p v-if="scopedSurfaces.length === 0" class="text-sm text-slate-500">No projected surfaces in this scope.</p>
+                    <p v-if="scopedSurfaces.length === 0" class="text-sm text-muted">No projected surfaces in this scope.</p>
                   </div>
                 </section>
               </div>
