@@ -2201,15 +2201,28 @@
             ["Panel", "--dx-surface-panel", "Tool panes, sidebars, and repeated items"],
             ["Raised", "--dx-surface-raised", "Controls and elevated surfaces"],
             ["Subtle", "--dx-surface-subtle", "Quiet fills and metric cells"],
+            ["Inverse Surface", "--dx-surface-inverse", "High-contrast opposing surface"],
             ["Text Strong", "--dx-text-strong", "Headings and primary labels"],
             ["Text", "--dx-text", "Default body copy"],
             ["Text Muted", "--dx-text-muted", "Secondary labels and helper copy"],
+            ["Text Subtle", "--dx-text-subtle", "Tertiary metadata and quiet chrome"],
+            ["Text Inverse", "--dx-text-inverse", "Text on accent or inverse fills"],
+            ["Border Subtle", "--dx-border-subtle", "Quiet separators and panel edges"],
             ["Border", "--dx-border", "Default separators"],
+            ["Border Strong", "--dx-border-strong", "Emphasized separators"],
             ["Accent", "--dx-accent", "Primary action and selected state"],
+            ["Accent Hover", "--dx-accent-hover", "Primary action hover fill"],
             ["Accent Subtle", "--dx-accent-subtle", "Badges and soft selected state"],
+            ["Accent Text", "--dx-accent-text", "Accent copy on subtle fills"],
             ["Danger", "--dx-danger", "Destructive or critical state"],
+            ["Danger Hover", "--dx-danger-hover", "Destructive hover fill"],
+            ["Danger Text", "--dx-danger-text", "Text on danger fills"],
             ["Success", "--dx-success", "Positive confirmation state"],
+            ["Success Subtle", "--dx-success-subtle", "Soft positive fill"],
+            ["Success Text", "--dx-success-text", "Positive copy on subtle fills"],
             ["Info", "--dx-info", "Informational and mention-adjacent state"],
+            ["Info Subtle", "--dx-info-subtle", "Soft informational fill"],
+            ["Info Text", "--dx-info-text", "Informational copy on subtle fills"],
             ["Focus", "--dx-focus", "Keyboard focus source color"]
           ]
         },
@@ -2217,13 +2230,50 @@
           name: "Typography",
           description: "Reusable type roles for product voice, source material, metadata, and controls.",
           tokens: [
+            ["Sans Font", "--dx-font-sans", "Primary interface type family"],
+            ["Mono Font", "--dx-font-mono", "Source spans, token values, and operational labels"],
             ["Display Type", "--dx-type-display-size", "Hero and major product identity"],
+            ["Display Weight", "--dx-type-display-weight", "Weight for display type"],
+            ["Display Line", "--dx-type-display-line", "Line height for display type"],
+            ["Display Tracking", "--dx-type-display-tracking", "Tracking for display type"],
             ["Title Type", "--dx-type-title-size", "Section headings"],
+            ["Title Weight", "--dx-type-title-weight", "Weight for title text"],
+            ["Title Line", "--dx-type-title-line", "Line height for title text"],
+            ["Heading Type", "--dx-type-heading-size", "Compact panel headings"],
+            ["Heading Weight", "--dx-type-heading-weight", "Weight for compact headings"],
+            ["Heading Line", "--dx-type-heading-line", "Line height for compact headings"],
+            ["Body Type", "--dx-type-body-size", "Default prose size"],
+            ["Body Weight", "--dx-type-body-weight", "Default prose weight"],
             ["Body Line", "--dx-type-body-line", "Readable prose rhythm"],
             ["Caption Type", "--dx-type-caption-size", "Helper copy and secondary metadata"],
+            ["Caption Weight", "--dx-type-caption-weight", "Weight for helper copy"],
+            ["Caption Line", "--dx-type-caption-line", "Line height for helper copy"],
+            ["Label Type", "--dx-type-label-size", "Compact labels and dense controls"],
+            ["Label Weight", "--dx-type-label-weight", "Weight for compact labels"],
             ["Code Type", "--dx-type-code-size", "Source spans and token values"],
+            ["Code Line", "--dx-type-code-line", "Line height for source spans"],
             ["Eyebrow Type", "--dx-type-eyebrow-size", "Operational labels and modes"],
+            ["Eyebrow Weight", "--dx-type-eyebrow-weight", "Weight for operational labels"],
+            ["Eyebrow Line", "--dx-type-eyebrow-line", "Line height for operational labels"],
+            ["Eyebrow Tracking", "--dx-type-eyebrow-tracking", "Tracking for operational labels"],
+            ["Metric Type", "--dx-type-metric-size", "Prominent numeric or compact status values"],
+            ["Metric Weight", "--dx-type-metric-weight", "Weight for metric values"],
+            ["Metric Line", "--dx-type-metric-line", "Line height for metric values"],
             ["Control Type", "--dx-type-control-weight", "Button and form control labels"]
+          ]
+        },
+        {
+          name: "Spacing",
+          description: "Compact rhythm for dense local workbench layouts.",
+          tokens: [
+            ["Space 1", "--dx-space-1", "Extra-tight internal gaps"],
+            ["Space 2", "--dx-space-2", "Tight control and badge gaps"],
+            ["Space 3", "--dx-space-3", "Compact rows and toolbar gaps"],
+            ["Space 4", "--dx-space-4", "Default component padding"],
+            ["Space 5", "--dx-space-5", "Panel and grid spacing"],
+            ["Space 6", "--dx-space-6", "Card padding"],
+            ["Space 8", "--dx-space-8", "Large section rhythm"],
+            ["Space 10", "--dx-space-10", "Major layout gaps"]
           ]
         },
         {
@@ -2248,6 +2298,7 @@
             ["Hover Surface", "--dx-state-hover-surface", "Hover fill for quiet controls"],
             ["Selected Surface", "--dx-state-selected-surface", "Soft selected or active fill"],
             ["Focus Ring", "--dx-state-focus-ring", "Keyboard focus outline"],
+            ["Focus Offset", "--dx-state-focus-offset", "Keyboard focus outline offset"],
             ["Disabled Opacity", "--dx-state-disabled-opacity", "Unavailable controls"]
           ]
         },
@@ -2256,8 +2307,10 @@
           description: "Ambient depth tokens for situated panels; never encode truth, secrecy, or access by themselves.",
           tokens: [
             ["Canvas Glow", "--dx-canvas-glow", "Broad ambient page highlight"],
+            ["Canvas Shade", "--dx-canvas-shade", "Broad ambient page shadow"],
             ["Light Glow", "--dx-light-glow", "Ambient highlight field for cards"],
-            ["Light Shade", "--dx-light-shade", "Ambient shadow field for cards"]
+            ["Light Shade", "--dx-light-shade", "Ambient shadow field for cards"],
+            ["Light Field", "--dx-light-field", "Reusable paired highlight and shade field"]
           ]
         }
       ];

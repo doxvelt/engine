@@ -192,7 +192,7 @@
   --dx-border-strong: color-mix(in oklch, var(--dx-text) 28%, transparent);
   --dx-accent: var(--dx-color-ember-400);
   --dx-accent-hover: var(--dx-color-ember-300);
-  --dx-accent-subtle: rgba(216, 106, 77, 0.14);
+  --dx-accent-subtle: color-mix(in oklch, var(--dx-color-ember-700) 42%, transparent);
   --dx-accent-text: var(--dx-color-ember-100);
   --dx-danger: var(--dx-color-oxblood-300);
   --dx-danger-hover: var(--dx-color-oxblood-400);
