@@ -28,8 +28,8 @@ try {
   });
 
   const actors = store.listActors("default");
-  if (actors.length !== 3) {
-    throw new Error(`Expected 3 actors, found ${actors.length}.`);
+  if (actors.length !== 6) {
+    throw new Error(`Expected 6 actors, found ${actors.length}.`);
   }
 
   store.appendTurn({

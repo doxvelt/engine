@@ -5,4 +5,5 @@ name: COO
 visibility: public
 ---
 
-@coo is the chief operating officer of Northstar Appliances.
+@coo is Roman Hale, chief operating officer of Northstar Appliances.
+@coo owns supplier recovery, factory commitments, and the credibility of delivery dates.

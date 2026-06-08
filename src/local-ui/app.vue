@@ -5,7 +5,8 @@
         <header class="dx-topbar flex h-16 shrink-0 items-center justify-between border-b px-4 sm:px-8">
           <div class="flex min-w-0 items-center gap-3">
             <NuxtLink to="/" class="flex min-w-0 items-center" aria-label="Doxvelt home">
-              <img :src="wordmark" alt="Doxvelt" class="dx-wordmark" />
+              <img :src="wordmarkInk" alt="Doxvelt" class="dx-wordmark dx-wordmark-light" />
+              <img :src="wordmarkParchment" alt="Doxvelt" class="dx-wordmark dx-wordmark-dark" />
             </NuxtLink>
             <UTabs
               v-if="currentPath !== '/'"
@@ -33,9 +34,6 @@ import wordmarkParchment from "../../design-system/assets/2026-05-doxvelt-wordma
 const route = useRoute();
 const router = useRouter();
 const currentPath = ref(route.path);
-const colorMode = useColorMode();
-
-const wordmark = computed(() => colorMode.value === "dark" ? wordmarkParchment : wordmarkInk);
 
 const sectionTabs = [
   { label: "Studio", value: "studio", icon: "i-lucide-pencil-ruler" },

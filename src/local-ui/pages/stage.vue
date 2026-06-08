@@ -1,24 +1,24 @@
 <template>
-  <div class="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)] gap-0">
+  <div class="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)_360px] gap-0">
     <aside class="dx-left-panel min-h-0 overflow-y-auto border-r p-4">
       <div class="space-y-5">
         <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-2 p-0 sm:p-0' }">
           <div class="flex items-center justify-between gap-2">
             <h2 class="dx-label">Workspace</h2>
-            <UBadge :color="simulationStarted ? 'success' : compiledOnce ? 'warning' : 'neutral'" variant="subtle" size="sm">
+            <UBadge :color="simulationStarted ? 'success' : isBootstrapping ? 'neutral' : compiledOnce ? 'warning' : 'neutral'" variant="subtle" size="sm">
               {{ workspaceStatus }}
             </UBadge>
           </div>
-          <div class="dx-tile grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 rounded-sm p-2 text-xs">
-            <UIcon :name="compiledOnce ? 'i-lucide-check-circle-2' : 'i-lucide-circle'" class="mt-0.5" />
-            <span>Validate source</span>
+          <div class="dx-static-tile grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 rounded-sm p-2 text-xs">
+            <UIcon :name="sourceReady || compiledOnce ? 'i-lucide-check-circle-2' : 'i-lucide-circle'" class="mt-0.5" />
+            <span>{{ sourceReady ? "Source loaded" : sourceLoadAttempted ? "Choose workspace" : "Loading source" }}</span>
             <UIcon :name="simulationStarted ? 'i-lucide-check-circle-2' : 'i-lucide-circle'" class="mt-0.5" />
-            <span>{{ simulationStarted ? "Simulation running" : "Start simulation" }}</span>
+            <span>{{ simulationStarted ? "Run loaded" : isBootstrapping ? "Loading run" : "Start run" }}</span>
             <UIcon :name="selectedActorId ? 'i-lucide-check-circle-2' : 'i-lucide-circle'" class="mt-0.5" />
-            <span>{{ selectedActorId ? `Actor selected: ${actorName(selectedActorId)}` : "Choose next actor" }}</span>
+            <span>{{ selectedActorId ? `Actor selected: ${actorName(selectedActorId)}` : isBootstrapping ? "Loading actors" : "Choose next actor" }}</span>
           </div>
-          <UButton icon="i-lucide-play" color="primary" variant="solid" size="sm" block :loading="loading" @click="startSimulation">
-            {{ simulationStarted ? "Restart" : "Start" }}
+          <UButton :icon="simulationStarted ? 'i-lucide-rotate-ccw' : 'i-lucide-play'" :color="simulationStarted ? 'neutral' : 'primary'" :variant="simulationStarted ? 'subtle' : 'solid'" size="sm" block :disabled="!canStartOrResetRun" :loading="loading || isBootstrapping" @click="startOrResetSimulation">
+            {{ simulationStarted ? "Reset run" : isBootstrapping ? "Loading run" : sourceReady ? "Start run" : sourceLoadAttempted ? "Choose workspace" : "Loading source" }}
           </UButton>
           <UButton icon="i-lucide-file-check-2" color="neutral" variant="subtle" size="sm" block :loading="loading" @click="validateWorkspace">
             Validate
@@ -41,7 +41,7 @@
           </div>
           <div v-if="actors.length > 0" class="space-y-1">
             <button
-              v-for="actor in actors"
+              v-for="actor in orderedActors"
               :key="actor.id"
               class="dx-tile flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition"
               :class="actor.id === selectedActorId ? 'is-selected' : ''"
@@ -51,7 +51,7 @@
               <span class="shrink-0 text-xs opacity-70">@{{ actor.id }}</span>
             </button>
           </div>
-          <p v-else class="text-sm text-muted">Start a simulation to load actors.</p>
+          <p v-else class="text-sm text-muted">{{ isBootstrapping ? "Loading actors..." : "Start a run to load actors." }}</p>
         </UCard>
 
         <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-2 p-0 sm:p-0' }">
@@ -82,17 +82,19 @@
                 variant="ghost"
                 size="xs"
                 square
+                :aria-label="member.status === 'active' ? `Deactivate ${actorName(member.actorId)}` : `Reactivate ${actorName(member.actorId)}`"
                 @click="setAudienceStatus(member)"
               />
-              <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="xs" square @click="removeAudience(member.actorId)" />
+              <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="xs" square :aria-label="`Remove ${actorName(member.actorId)} from audience`" @click="removeAudience(member.actorId)" />
             </UBadge>
             <span v-if="audienceMembers.length === 0" class="text-sm text-muted">None. Add observers before turns that should be heard by others.</span>
           </div>
         </UCard>
 
-        <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-2 p-0 sm:p-0' }">
-          <UTabs v-model="inspectorTab" :items="inspectorTabs" size="sm" />
+          <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-2 p-0 sm:p-0' }">
+            <UTabs v-model="inspectorTab" :items="inspectorTabs" size="sm" />
           <div v-if="inspectorTab === 'beliefs'" class="max-h-52 space-y-2 overflow-auto pr-1">
+            <p v-if="loadingBeliefs" class="text-sm text-muted">Loading beliefs...</p>
             <div v-for="belief in beliefs" :key="beliefKey(belief)" class="dx-card-soft rounded-sm border p-2">
               <p class="text-xs leading-5 text-default">{{ belief.belief.propositionText }}</p>
               <div class="mt-2 flex flex-wrap items-center gap-1.5">
@@ -102,7 +104,7 @@
                 <UBadge color="neutral" variant="soft" size="sm">{{ provenanceLabel(belief) }}</UBadge>
               </div>
             </div>
-            <p v-if="beliefs.length === 0" class="text-sm text-muted">No beliefs loaded.</p>
+            <p v-if="!loadingBeliefs && beliefs.length === 0" class="text-sm text-muted">{{ isBootstrapping ? "Loading beliefs..." : "No beliefs loaded." }}</p>
           </div>
           <div v-else class="max-h-52 space-y-2 overflow-auto pr-1">
             <div v-for="memory in memories" :key="memory.id" class="dx-card-soft rounded-sm border p-2">
@@ -119,7 +121,7 @@
       <div class="dx-plain-panel flex h-14 shrink-0 items-center justify-between border-b border-default px-3 sm:px-4">
         <div>
           <h2 class="text-base font-semibold">Transcript</h2>
-          <p class="text-sm text-muted">{{ selectedActorId ? `Next actor: ${actorName(selectedActorId)}` : "No actor selected" }}</p>
+          <p class="text-sm text-muted">{{ selectedActorId ? `Next actor: ${actorName(selectedActorId)}` : isBootstrapping ? "Loading run" : "No actor selected" }}</p>
         </div>
         <UButton icon="i-lucide-door-closed" color="neutral" variant="soft" size="sm" :disabled="!canCloseEpisode" :loading="closingEpisode" @click="closeEpisode">
           Close
@@ -139,7 +141,7 @@
         <div v-else class="flex h-full items-center justify-center">
           <div class="max-w-sm text-center">
             <p class="text-sm font-medium text-default">No turns yet.</p>
-            <p class="mt-1 text-sm text-muted">Start a simulation, add observers if needed, choose an actor, and write the next turn.</p>
+            <p class="mt-1 text-sm text-muted">{{ simulationStarted ? "Add observers if needed, choose an actor, and write the next turn." : isBootstrapping ? "Loading the current run..." : "Start a run to load actors and begin the transcript." }}</p>
           </div>
         </div>
       </div>
@@ -181,6 +183,130 @@
         </div>
       </div>
     </section>
+
+    <aside class="dx-context-panel min-h-0 overflow-y-auto border-l p-4">
+      <div class="space-y-4">
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <h2 class="dx-label">Subjective Context</h2>
+            <p class="mt-1 truncate text-sm text-muted">{{ contextActorLabel }}</p>
+          </div>
+          <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="xs" square :disabled="!canInspectContext" :loading="loadingContext" aria-label="Refresh context" @click="refreshContext" />
+        </div>
+
+        <div v-if="!selectedActorContext" class="dx-tile rounded-sm p-3 text-sm text-muted">
+          {{ isBootstrapping || (selectedActorId && loadingContext) ? "Loading subjective context..." : "Select an actor and start a run to inspect what Doxvelt will put in that actor's head." }}
+        </div>
+
+        <template v-else>
+          <div class="grid grid-cols-4 gap-2">
+            <div v-for="metric in contextMetrics" :key="metric.label" class="dx-static-tile rounded-sm p-2">
+              <p class="dx-label text-[10px]">{{ metric.label }}</p>
+              <p class="mt-1 text-sm font-semibold text-highlighted">{{ metric.value }}</p>
+            </div>
+          </div>
+
+          <UTabs v-model="contextTab" :items="contextTabs" size="sm" />
+
+          <div v-if="contextTab === 'brief'" class="space-y-3">
+            <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-2 p-0 sm:p-0' }">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="dx-label">Audience</h3>
+                <UBadge color="neutral" variant="soft" size="sm">{{ contextAudience.length }}</UBadge>
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                <UBadge v-for="actorId in contextAudience" :key="actorId" :color="actorId === selectedActorId ? 'primary' : 'neutral'" variant="soft" size="sm">
+                  {{ actorName(actorId) }}
+                </UBadge>
+              </div>
+            </UCard>
+
+            <UCard v-if="selectedActorContext.subjective.stageWhispers.length > 0" :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-2 p-0 sm:p-0' }">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="dx-label">Private Stage Whispers</h3>
+                <UBadge color="warning" variant="soft" size="sm">{{ selectedActorContext.subjective.stageWhispers.length }}</UBadge>
+              </div>
+              <div v-for="whisper in selectedActorContext.subjective.stageWhispers" :key="String(whisper.id)" class="dx-warning-note rounded-sm p-2 text-xs leading-5">
+                {{ whisper.text }}
+              </div>
+            </UCard>
+
+            <UCard :ui="{ root: 'dx-tool-panel rounded-none', body: 'space-y-2 p-0 sm:p-0' }">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="dx-label">Context Shape</h3>
+                <UBadge color="neutral" variant="soft" size="sm">{{ promptLineCount }}</UBadge>
+              </div>
+              <p class="text-sm leading-6 text-muted">{{ contextCounts }}</p>
+            </UCard>
+          </div>
+
+          <div v-else-if="contextTab === 'beliefs'" class="space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="dx-label">Belief Access</h3>
+              <UBadge color="neutral" variant="soft" size="sm">{{ contextBeliefs.length }}</UBadge>
+            </div>
+            <div class="max-h-[calc(100dvh-15rem)] space-y-2 overflow-auto pr-1">
+              <div v-for="access in contextBeliefs" :key="contextBeliefKey(access)" class="dx-card-soft rounded-sm border p-2">
+                <div class="mb-1 flex flex-wrap items-center gap-1.5">
+                  <UBadge :color="beliefStrengthColor(access.belief.strength)" variant="subtle" size="sm">
+                    {{ beliefStrengthLabel(access.belief.strength) }}
+                  </UBadge>
+                  <UBadge color="neutral" variant="soft" size="sm">{{ provenanceLabel(access) }}</UBadge>
+                </div>
+                <p class="text-xs leading-5 text-default">{{ access.belief.propositionText }}</p>
+                <p v-if="sourceSpanLabel(access.belief)" class="dx-subtle mt-1 truncate text-[11px]">{{ sourceSpanLabel(access.belief) }}</p>
+              </div>
+              <p v-if="contextBeliefs.length === 0" class="text-sm text-muted">No current beliefs resolved for this actor.</p>
+            </div>
+          </div>
+
+          <div v-else-if="contextTab === 'scene'" class="space-y-4">
+            <section class="space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="dx-label">Projected Surfaces</h3>
+                <UBadge color="neutral" variant="soft" size="sm">{{ selectedActorContext.subjective.surfaces.length }}</UBadge>
+              </div>
+              <div class="max-h-48 space-y-2 overflow-auto pr-1">
+                <div v-for="surface in selectedActorContext.subjective.surfaces" :key="surfaceKey(surface)" class="dx-tile rounded-sm p-2 text-xs">
+                  <div class="mb-1 flex flex-wrap items-center gap-1.5">
+                    <span class="font-semibold">@{{ surface.entity }}</span>
+                    <UBadge v-for="channel in surface.channels" :key="channel" color="neutral" variant="soft" size="sm">{{ channel }}</UBadge>
+                  </div>
+                  <p class="leading-5 text-default">{{ surface.text }}</p>
+                  <p class="dx-subtle mt-1 truncate text-[11px]">{{ sourceSpanLabel(surface) }}</p>
+                </div>
+                <p v-if="selectedActorContext.subjective.surfaces.length === 0" class="text-sm text-muted">No projected surfaces in current view.</p>
+              </div>
+            </section>
+
+            <section class="space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="dx-label">Accessible Transcript</h3>
+                <UBadge color="neutral" variant="soft" size="sm">{{ selectedActorContext.subjective.transcript.length }}</UBadge>
+              </div>
+              <div class="max-h-56 space-y-2 overflow-auto pr-1">
+                <div v-for="turn in selectedActorContext.subjective.transcript" :key="String(turn.id)" class="dx-card-soft rounded-sm border p-2">
+                  <div class="mb-1 flex items-center justify-between gap-2">
+                    <span class="text-xs font-semibold text-highlighted">{{ actorName(turn.actorId) }}</span>
+                    <span class="dx-subtle shrink-0 text-[11px]">#{{ turn.id }}</span>
+                  </div>
+                  <p class="line-clamp-3 text-xs leading-5 text-default">{{ turn.text }}</p>
+                </div>
+                <p v-if="selectedActorContext.subjective.transcript.length === 0" class="text-sm text-muted">No transcript turns are accessible yet.</p>
+              </div>
+            </section>
+          </div>
+
+          <div v-else class="space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="dx-label">Prompt Preview</h3>
+              <UBadge color="neutral" variant="soft" size="sm">{{ promptLineCount }}</UBadge>
+            </div>
+            <pre class="dx-prompt-preview max-h-[calc(100dvh-14rem)] overflow-auto rounded-sm p-3 text-xs leading-5">{{ selectedActorContext.promptPreview }}</pre>
+          </div>
+        </template>
+      </div>
+    </aside>
   </div>
 </template>
 
@@ -193,6 +319,27 @@ type AudienceMember = { actorId: string; status: "active" | "inactive" };
 type Belief = { holder?: string; strength: number; propositionText: string };
 type BeliefAccess = { belief: Belief; provenance: { mode: string; holder: string; sourceHolder: string; accessPath: string[] } };
 type Memory = { id: number; actorId: string; text: string };
+type SourceSpan = { file: string; line: number; quote: string };
+type Surface = { entity: string; channels: string[]; text: string; sourceSpan: SourceSpan };
+type StageWhisper = { id: number; targetActorId: string; text: string; consumedTurnId: number | null };
+type LongTermMemory = { id: number; actorId: string; text: string };
+type ContextBelief = Belief & {
+  sourceSpan?: SourceSpan;
+  surfaceSourceSpan?: SourceSpan;
+  sourceBelief?: { sourceSpan?: SourceSpan; surfaceSourceSpan?: SourceSpan };
+};
+type ContextBeliefAccess = { belief: ContextBelief; provenance: BeliefAccess["provenance"] };
+type ActorContext = {
+  subjective: {
+    beliefResolution: { current: ContextBeliefAccess[] };
+    currentAudience: string[];
+    longTermMemories: LongTermMemory[];
+    stageWhispers: StageWhisper[];
+    surfaces: Surface[];
+    transcript: TranscriptTurn[];
+  };
+  promptPreview: string;
+};
 type ComposerMode = "generate" | "send";
 
 const route = useRoute();
@@ -211,27 +358,72 @@ const transcript = ref<TranscriptTurn[]>([]);
 const audienceMembers = ref<AudienceMember[]>([]);
 const beliefs = ref<BeliefAccess[]>([]);
 const memories = ref<Memory[]>([]);
+const selectedActorContext = ref<ActorContext | null>(null);
 const manualText = ref("");
 const whisperText = ref("");
 const modelId = ref("local-openai-compatible");
 const composerMode = ref<ComposerMode>("send");
 const inspectorTab = ref("beliefs");
+const contextTab = ref("brief");
 const loading = ref(false);
 const sendingTurn = ref(false);
 const generatingTurn = ref(false);
 const closingEpisode = ref(false);
+const initializingStage = ref(true);
+const loadingContext = ref(false);
+const loadingBeliefs = ref(false);
+const loadingSource = ref(false);
+const loadingRun = ref(false);
+const sourceLoadAttempted = ref(false);
 const compiledOnce = ref(false);
 
 const simulationStarted = computed(() => actors.value.length > 0);
-const workspaceStatus = computed(() => simulationStarted.value ? "Running" : compiledOnce.value ? "Ready" : "Setup");
+const orderedActors = computed(() => [...actors.value].sort(compareActorsForStage));
+const sourceReady = computed(() => scenarioItems.value.length > 0);
+const isBootstrapping = computed(() => initializingStage.value || loadingSource.value || loadingRun.value);
+const workspaceStatus = computed(() => simulationStarted.value ? "Running" : isBootstrapping.value ? "Loading" : compiledOnce.value ? "Ready" : "Setup");
 const hasUnclosedTurns = computed(() => transcript.value.some((turn) => turn.episodeId === null));
+const canStartOrResetRun = computed(() => Boolean(!isBootstrapping.value && workspacePath.value.trim() && (simulationStarted.value || sourceReady.value)));
 const canCloseEpisode = computed(() => simulationStarted.value && hasUnclosedTurns.value);
 const canSendManualTurn = computed(() => Boolean(simulationStarted.value && selectedActorId.value && manualText.value.trim()));
 const canGenerateTurn = computed(() => Boolean(simulationStarted.value && selectedActorId.value && modelId.value.trim()));
+const canInspectContext = computed(() => Boolean(simulationStarted.value && selectedActorId.value));
 const composerModeLabel = computed(() => composerMode.value === "send" ? "Send turn" : "Generate draft");
+const contextActorLabel = computed(() => selectedActorId.value ? `@${selectedActorId.value} / ${actorName(selectedActorId.value)}` : "No actor selected");
+const contextAudience = computed(() => [...new Set(selectedActorContext.value?.subjective.currentAudience || [])]);
+const contextBeliefs = computed(() => selectedActorContext.value?.subjective.beliefResolution.current || []);
+const contextCounts = computed(() => {
+  const context = selectedActorContext.value;
+  if (!context) return "";
+  return [
+    countPhrase(context.subjective.transcript.length, "turn"),
+    countPhrase(context.subjective.surfaces.length, "surface"),
+    countPhrase(contextBeliefs.value.length, "belief"),
+    countPhrase(context.subjective.longTermMemories.length, "long-term memory")
+  ].join(" / ");
+});
+const promptLineCount = computed(() => {
+  const count = selectedActorContext.value?.promptPreview.split("\n").length || 0;
+  return countPhrase(count, "line");
+});
+const contextMetrics = computed(() => {
+  const context = selectedActorContext.value;
+  return [
+    { label: "Audience", value: contextAudience.value.length },
+    { label: "Turns", value: context?.subjective.transcript.length || 0 },
+    { label: "Beliefs", value: contextBeliefs.value.length },
+    { label: "Surfaces", value: context?.subjective.surfaces.length || 0 }
+  ];
+});
 const inspectorTabs = [
   { label: "Beliefs", value: "beliefs", icon: "i-lucide-brain" },
   { label: "Memories", value: "memories", icon: "i-lucide-book-open" }
+];
+const contextTabs = [
+  { label: "Brief", value: "brief", icon: "i-lucide-gauge" },
+  { label: "Beliefs", value: "beliefs", icon: "i-lucide-brain" },
+  { label: "Scene", value: "scene", icon: "i-lucide-eye" },
+  { label: "Prompt", value: "prompt", icon: "i-lucide-file-text" }
 ];
 const sendModeEnabled = computed({
   get: () => composerMode.value === "send",
@@ -249,8 +441,13 @@ const scenarioItems = computed(() => {
 });
 
 onMounted(async () => {
-  rememberWorkspace(workspacePath.value);
-  await refreshSourceFiles();
+  try {
+    rememberWorkspace(workspacePath.value);
+    await refreshSourceFiles();
+    await loadExistingSimulation();
+  } finally {
+    initializingStage.value = false;
+  }
 });
 
 async function api<TValue>(path: string, options: { method?: string; body?: Record<string, unknown> } = {}): Promise<TValue> {
@@ -263,6 +460,7 @@ function updateRoute(): void {
 }
 
 async function refreshSourceFiles(): Promise<void> {
+  loadingSource.value = true;
   try {
     const result = await api<{ files: SourceFileSummary[] }>(`/source?workspacePath=${encodeURIComponent(workspacePath.value)}`);
     sourceFiles.value = result.files;
@@ -272,6 +470,9 @@ async function refreshSourceFiles(): Promise<void> {
     }
   } catch (error) {
     showError(error);
+  } finally {
+    loadingSource.value = false;
+    sourceLoadAttempted.value = true;
   }
 }
 
@@ -289,8 +490,27 @@ async function validateWorkspace(): Promise<void> {
   });
 }
 
-async function startSimulation(): Promise<void> {
+async function loadExistingSimulation(): Promise<void> {
+  loadingRun.value = true;
+  try {
+    await refreshAll();
+    compiledOnce.value = true;
+  } catch (error) {
+    clearRuntimeState();
+  } finally {
+    loadingRun.value = false;
+  }
+}
+
+async function startOrResetSimulation(): Promise<void> {
+  const resetting = simulationStarted.value;
+  if (resetting && !confirmResetRun()) return;
+  await startSimulation({ resetting });
+}
+
+async function startSimulation({ resetting = false }: { resetting?: boolean } = {}): Promise<void> {
   await runBusy(async () => {
+    if (sourceFiles.value.length === 0) await refreshSourceFiles();
     const result = await api<{ actors: Actor[]; models: ModelRecord[] }>("/simulations/start", {
       method: "POST",
       body: {
@@ -302,9 +522,9 @@ async function startSimulation(): Promise<void> {
     actors.value = result.actors;
     models.value = result.models || [];
     compiledOnce.value = true;
-    selectedActorId.value = actors.value.at(0)?.id || "";
+    selectedActorId.value = defaultActorId();
     await refreshAll();
-    toast.add({ title: "Simulation started", color: "success" });
+    toast.add({ title: resetting ? "Run reset" : "Run started", color: "success" });
   });
 }
 
@@ -312,16 +532,19 @@ async function addAudience(): Promise<void> {
   if (!selectedActorId.value) return;
   await api(`/simulations/${simulationId.value}/audience`, { method: "POST", body: { actorId: selectedActorId.value, action: "add" } });
   await refreshAudience();
+  await refreshContext();
 }
 
 async function addAllAudience(): Promise<void> {
   await Promise.all(actors.value.map((actor) => api(`/simulations/${simulationId.value}/audience`, { method: "POST", body: { actorId: actor.id, action: "add" } })));
   await refreshAudience();
+  await refreshContext();
 }
 
 async function removeAudience(actorId: string): Promise<void> {
   await api(`/simulations/${simulationId.value}/audience`, { method: "POST", body: { actorId, action: "remove" } });
   await refreshAudience();
+  await refreshContext();
 }
 
 async function setAudienceStatus(member: AudienceMember): Promise<void> {
@@ -330,11 +553,12 @@ async function setAudienceStatus(member: AudienceMember): Promise<void> {
     body: { actorId: member.actorId, action: member.status === "active" ? "deactivate" : "reactivate" }
   });
   await refreshAudience();
+  await refreshContext();
 }
 
 async function selectActor(actorId: string): Promise<void> {
   selectedActorId.value = actorId;
-  await refreshBeliefs();
+  await Promise.all([refreshBeliefs(), refreshContext()]);
 }
 
 async function sendTurn(): Promise<void> {
@@ -355,11 +579,12 @@ async function generateTurn(): Promise<void> {
   if (!canGenerateTurn.value) return;
   generatingTurn.value = true;
   try {
-    const draft = await api<{ text: string }>(`/simulations/${simulationId.value}/turn-draft`, {
+    const draft = await api<{ text: string; context: ActorContext }>(`/simulations/${simulationId.value}/turn-draft`, {
       method: "POST",
       body: { actorId: selectedActorId.value, modelId: modelId.value.trim(), ...(whisperText.value.trim() ? { whisperText: whisperText.value.trim() } : {}) }
     });
     manualText.value = draft.text;
+    selectedActorContext.value = draft.context;
     whisperText.value = "";
     composerMode.value = "send";
     toast.add({ title: "Draft generated", color: "success" });
@@ -385,14 +610,15 @@ async function closeEpisode(): Promise<void> {
 }
 
 async function refreshAll(): Promise<void> {
-  await Promise.all([refreshActors(), refreshAudience(), refreshTranscript(), refreshMemories()]);
-  await refreshBeliefs();
+  await refreshActors();
+  await Promise.all([refreshAudience(), refreshTranscript(), refreshMemories()]);
+  await Promise.all([refreshBeliefs(), refreshContext()]);
 }
 
 async function refreshActors(): Promise<void> {
   const result = await api<{ actors: Actor[] }>(`/simulations/${simulationId.value}/actors`);
   actors.value = result.actors;
-  if (!selectedActorId.value) selectedActorId.value = actors.value.at(0)?.id || "";
+  if (!selectedActorId.value) selectedActorId.value = defaultActorId();
 }
 async function refreshAudience(): Promise<void> {
   const result = await api<{ audienceMembers: AudienceMember[] }>(`/simulations/${simulationId.value}/audience`);
@@ -403,9 +629,32 @@ async function refreshTranscript(): Promise<void> {
   transcript.value = result.transcript;
 }
 async function refreshBeliefs(): Promise<void> {
-  if (!selectedActorId.value) return;
-  const result = await api<{ currentBeliefs: BeliefAccess[] }>(`/simulations/${simulationId.value}/beliefs?actorId=${selectedActorId.value}`);
-  beliefs.value = result.currentBeliefs;
+  if (!selectedActorId.value) {
+    beliefs.value = [];
+    return;
+  }
+  loadingBeliefs.value = true;
+  try {
+    const result = await api<{ currentBeliefs: BeliefAccess[] }>(`/simulations/${simulationId.value}/beliefs?actorId=${selectedActorId.value}`);
+    beliefs.value = result.currentBeliefs;
+  } finally {
+    loadingBeliefs.value = false;
+  }
+}
+async function refreshContext(): Promise<void> {
+  if (!canInspectContext.value) {
+    selectedActorContext.value = null;
+    return;
+  }
+  loadingContext.value = true;
+  try {
+    selectedActorContext.value = await api<ActorContext>(`/simulations/${simulationId.value}/context/${selectedActorId.value}`);
+  } catch (error) {
+    selectedActorContext.value = null;
+    showError(error);
+  } finally {
+    loadingContext.value = false;
+  }
 }
 async function refreshMemories(): Promise<void> {
   const result = await api<{ memories: Memory[] }>(`/simulations/${simulationId.value}/memories`);
@@ -425,6 +674,26 @@ async function runBusy(callback: () => Promise<void>): Promise<void> {
 function actorName(actorId: string): string {
   return actors.value.find((actor) => actor.id === actorId)?.name || actorId;
 }
+function clearRuntimeState(): void {
+  actors.value = [];
+  transcript.value = [];
+  audienceMembers.value = [];
+  beliefs.value = [];
+  memories.value = [];
+  selectedActorContext.value = null;
+  selectedActorId.value = "";
+}
+function confirmResetRun(): boolean {
+  if (!import.meta.client) return true;
+  return window.confirm("Reset this run? This clears its transcript, audience, access changes, whispers, memories, and runtime beliefs.");
+}
+function defaultActorId(): string {
+  return orderedActors.value.find((actor) => actor.kind === "agent")?.id || orderedActors.value.at(0)?.id || "";
+}
+function compareActorsForStage(a: Actor, b: Actor): number {
+  const kindRank = (actor: Actor) => actor.kind === "agent" ? 0 : actor.kind === "affiliation" ? 1 : actor.kind === "stateless" ? 2 : 3;
+  return kindRank(a) - kindRank(b) || (a.name || a.id).localeCompare(b.name || b.id);
+}
 function audienceLabel(turn: TranscriptTurn): string {
   const listeners = turn.audience.filter((actorId) => actorId !== turn.actorId).map(actorName);
   if (listeners.length === 0) return `Private to ${actorName(turn.actorId)}`;
@@ -432,6 +701,12 @@ function audienceLabel(turn: TranscriptTurn): string {
 }
 function beliefKey(belief: BeliefAccess): string {
   return `${belief.provenance.mode}:${belief.provenance.sourceHolder}:${belief.belief.strength}:${belief.belief.propositionText}`;
+}
+function contextBeliefKey(access: ContextBeliefAccess): string {
+  return `${access.provenance.mode}:${access.provenance.sourceHolder}:${access.belief.strength}:${access.belief.propositionText}:${sourceSpanLabel(access.belief)}`;
+}
+function surfaceKey(surface: Surface): string {
+  return `${surface.entity}:${surface.sourceSpan.file}:${surface.sourceSpan.line}:${surface.text}`;
 }
 function beliefStrengthLabel(strength: number): string {
   if (strength >= 3) return "Treats as true";
@@ -452,6 +727,15 @@ function provenanceLabel(access: BeliefAccess): string {
   if (access.provenance.mode === "observed") return `Observed ${actorName(access.provenance.sourceHolder)}`;
   if (access.provenance.mode === "retained_after_access_loss") return `Retained from ${actorName(access.provenance.sourceHolder)}`;
   return access.provenance.mode.replaceAll("_", " ");
+}
+function sourceSpanLabel(record: { sourceSpan?: SourceSpan; surfaceSourceSpan?: SourceSpan; sourceBelief?: { sourceSpan?: SourceSpan; surfaceSourceSpan?: SourceSpan } }): string {
+  const span = record.sourceSpan || record.surfaceSourceSpan || record.sourceBelief?.sourceSpan || record.sourceBelief?.surfaceSourceSpan;
+  return span ? `${span.file}:${span.line}` : "";
+}
+function countPhrase(count: number, singular: string): string {
+  if (count === 1) return `${count} ${singular}`;
+  if (singular.endsWith("y")) return `${count} ${singular.slice(0, -1)}ies`;
+  return `${count} ${singular}s`;
 }
 function rememberWorkspace(path: string): void {
   if (!path || !import.meta.client) return;

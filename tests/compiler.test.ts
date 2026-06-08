@@ -41,10 +41,11 @@ test("initWorkspace can seed the executive interviews example", async (context) 
   await initWorkspace(workspacePath, { template: "executive-interviews" });
   const compiled = await compileWorkspace(workspacePath);
 
-  assert.equal(compiled.entities.length, 3);
+  assert.equal(compiled.entities.length, 7);
   assert.equal(compiled.scenarios.at(0)?.id, "executive-interviews");
   assert.ok(compiled.models.some((model) => model.id === "local-openai-compatible"));
-  assert.ok(compiled.beliefs.length >= 5);
+  assert.ok(compiled.beliefs.length >= 30);
+  assert.ok(compiled.surfaces.length >= 8);
   assert.ok(compiled.beliefs.at(0)?.sourceSpan.file);
 });
 
@@ -61,7 +62,7 @@ test("initWorkspace template lookup works outside the repository root", async (c
   }
 
   const compiled = await compileWorkspace(workspacePath);
-  assert.equal(compiled.entities.length, 3);
+  assert.equal(compiled.entities.length, 7);
 });
 
 test("initWorkspace rejects unknown templates", async (context) => {
@@ -77,7 +78,7 @@ test("initWorkspace rejects unknown templates", async (context) => {
 test("compiled example source is inspectable without running init", async () => {
   const compiled = await compileWorkspace("examples/executive-interviews");
 
-  assert.equal(compiled.entities.length, 3);
+  assert.equal(compiled.entities.length, 7);
   assert.equal(compiled.scenarios.at(0)?.id, "executive-interviews");
 });
 
@@ -297,7 +298,7 @@ test("runtime store saves compiled actors and manual turns", async (context) => 
     const actors = store.listActors("default");
     assert.deepEqual(
       actors.map((actor) => actor.id),
-      ["ceo", "coo", "student-team"]
+      ["board", "ceo", "cfo", "coo", "product-lead", "student-team"]
     );
     assert.deepEqual(store.listCompiledRecords<AssetRecord>("default", "model"), []);
 
@@ -335,7 +336,7 @@ test("core engine starts simulations and advances turns without CLI parsing", as
 
     assert.deepEqual(
       started.actors.map((actor) => actor.id),
-      ["ceo", "coo", "student-team"]
+      ["board", "ceo", "cfo", "coo", "product-lead", "student-team"]
     );
 
     const advanced = await advanceTurn({
@@ -408,7 +409,7 @@ test("local API exposes the core play loop without shelling out to the CLI", asy
     method: "POST",
     body: { workspacePath }
   });
-  assert.equal(compiled.entities.length, 3);
+  assert.equal(compiled.entities.length, 7);
 
   const sourceList = await apiJson(`${baseUrl}/source?workspacePath=${encodeURIComponent(workspacePath)}`);
   assert.ok(sourceList.files.some((file: { path: string }) => file.path === "entities/ceo/IDENTITY.md"));
@@ -440,13 +441,13 @@ test("local API exposes the core play loop without shelling out to the CLI", asy
 
   assert.deepEqual(
     started.actors.map((actor: EntityRecord) => actor.id),
-    ["ceo", "coo", "student-team"]
+    ["board", "ceo", "cfo", "coo", "product-lead", "student-team"]
   );
 
   const actors = await apiJson(`${baseUrl}/simulations/default/actors`);
   assert.deepEqual(
     actors.actors.map((actor: EntityRecord) => actor.id),
-    ["ceo", "coo", "student-team"]
+    ["board", "ceo", "cfo", "coo", "product-lead", "student-team"]
   );
 
   const audience = await apiJson(`${baseUrl}/simulations/default/audience`, {
@@ -1511,7 +1512,7 @@ test("CLI export and import round trip source and runtime state", async (context
   }
 
   const importedCompiled = await compileWorkspace(importedWorldPath);
-  assert.equal(importedCompiled.entities.length, 3);
+  assert.equal(importedCompiled.entities.length, 7);
 });
 
 test("CLI export sanitizes source secrets", async (context) => {
@@ -1787,7 +1788,8 @@ test("episode closure can use injected AI-style generation", async (context) => 
     assert.ok(closure.memories.every((memory) => memory.text.includes("board pressure matters")));
     assert.equal(store.listLongTermMemories("default", "ceo").length, 1);
     assert.ok(closure.extractedBeliefs.every((belief) => belief.strength === 3));
-    assert.equal(store.listBeliefHistory("default").length, compiled.beliefs.length + 2);
+    assert.equal(store.listFirstImpressions("default").length, 1);
+    assert.equal(store.listBeliefHistory("default").length, compiled.beliefs.length + closure.extractedBeliefs.length + 1);
 
     const simulation = store.getSimulation("default");
     const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "ceo");
