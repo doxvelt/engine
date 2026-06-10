@@ -169,6 +169,8 @@ Exported local packages are plain directories containing source material, runtim
 
 Prefer making design decisions explicit in `docs/design/` before coding large mechanics.
 
+During fast iteration, prefer focused checks over production builds. Do not run `bun run ui:build` or other full builds after every small UI/runtime tweak. Reserve builds for pre-commit verification, release/package checks, or changes that directly affect build configuration.
+
 Doxvelt owns simulation semantics. Use a mature AI substrate for provider mechanics. The preferred MVP substrate is Vercel AI SDK behind a thin Doxvelt generation boundary; do not build a custom provider matrix, streaming protocol, model gateway, inference runtime, or authentication framework.
 
 Treat the core engine as a library, not as the CLI. The CLI is a first-class wrapper for users, tests, automations, coding agents, and future LLM tools. A future local API server should be a sibling wrapper over the same core engine, not an HTTP wrapper around the CLI.

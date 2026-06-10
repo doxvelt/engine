@@ -30,10 +30,19 @@
 <script setup lang="ts">
 import wordmarkInk from "../../design-system/assets/2026-05-doxvelt-wordmark-fg-ink-raw.svg";
 import wordmarkParchment from "../../design-system/assets/2026-05-doxvelt-wordmark-fg-parchment-raw.svg";
+import markInk from "../../design-system/assets/2026-05-doxvelt-mark-fg-ink-raw-solid.svg";
+import markParchment from "../../design-system/assets/2026-05-doxvelt-mark-fg-parchment-raw-solid.svg";
 
 const route = useRoute();
 const router = useRouter();
 const currentPath = ref(route.path);
+
+useHead({
+  link: [
+    { rel: "icon", type: "image/svg+xml", href: markInk, media: "(prefers-color-scheme: light)" },
+    { rel: "icon", type: "image/svg+xml", href: markParchment, media: "(prefers-color-scheme: dark)" }
+  ]
+});
 
 const sectionTabs = [
   { label: "Studio", value: "studio", icon: "i-lucide-pencil-ruler" },

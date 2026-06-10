@@ -431,6 +431,35 @@ test("local API exposes the core play loop without shelling out to the CLI", asy
   assert.equal(writtenFile.path, "worlds/studio-note.md");
   assert.equal(await readFile(path.join(workspacePath, "worlds", "studio-note.md"), "utf8"), studioNote);
 
+  const nonWorkspacePath = path.join(root, "not-a-workspace");
+  await mkdir(nonWorkspacePath, { recursive: true });
+  await assert.rejects(
+    () =>
+      apiJson(`${baseUrl}/source/delete`, {
+        method: "POST",
+        body: { workspacePath: nonWorkspacePath }
+      }),
+    /does not look like a Doxvelt workspace/
+  );
+
+  await assert.rejects(
+    () =>
+      apiJson(`${baseUrl}/source/delete`, {
+        method: "POST",
+        body: { workspacePath: path.join(process.cwd(), "examples", "executive-interviews") }
+      }),
+    /Refusing to delete protected repository folder: examples/
+  );
+
+  const deleteWorkspacePath = path.join(root, "delete-workspace");
+  await initWorkspace(deleteWorkspacePath);
+  const deleted = await apiJson(`${baseUrl}/source/delete`, {
+    method: "POST",
+    body: { workspacePath: deleteWorkspacePath }
+  });
+  assert.equal(deleted.deleted, true);
+  await assert.rejects(() => readFile(path.join(deleteWorkspacePath, "worlds", "world.md"), "utf8"), /ENOENT/);
+
   const started = await apiJson(`${baseUrl}/simulations/start`, {
     method: "POST",
     body: {

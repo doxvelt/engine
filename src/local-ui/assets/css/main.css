@@ -142,8 +142,7 @@ select:focus {
 
 .dx-topbar {
   border-color: var(--dx-border-subtle);
-  background: color-mix(in oklch, var(--dx-surface-panel) 92%, transparent);
-  backdrop-filter: blur(14px);
+  background: var(--dx-surface-canvas);
 }
 
 .dx-wordmark {
@@ -365,6 +364,13 @@ select:focus {
 .dx-field-input:focus,
 .dx-field-input:focus-visible {
   outline: 0 !important;
+}
+
+.dx-source-editor-input {
+  display: block !important;
+  padding: 0.875rem 1rem !important;
+  font-variant-ligatures: none;
+  tab-size: 2;
 }
 
 .dx-control,

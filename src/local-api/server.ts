@@ -10,7 +10,7 @@ import { closeEpisode } from "../core/episode.ts";
 import { initWorkspace } from "../core/init.ts";
 import { loadModelRecord } from "../core/models.ts";
 import { exportSimulationPackage, importSimulationPackage } from "../core/portable.ts";
-import { listWorkspaceSourceFiles, readSourceText, writeSourceText } from "../core/source.ts";
+import { deleteWorkspaceSource, listWorkspaceSourceFiles, readSourceText, writeSourceText } from "../core/source.ts";
 import type { EntityRecord } from "../core/types.ts";
 import { openRuntimeStore, type RuntimeStore } from "../store/sqlite.ts";
 
@@ -87,6 +87,13 @@ export async function handleLocalApiRequest(
     }
 
     sendJson(response, 200, await initWorkspace(workspacePath, { template }));
+    return;
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "source" && parts[1] === "delete") {
+    const body = await readJsonBody(request);
+    const workspacePath = requireWorkspacePath(body);
+    sendJson(response, 200, await deleteWorkspaceSource(workspacePath));
     return;
   }
 

@@ -87,7 +87,7 @@
             autoresize
             class="h-full w-full"
             placeholder="Select or create a source file to author natural-language Doxvelt material."
-            :ui="{ root: 'h-full w-full', base: 'h-full min-h-[calc(100dvh-9.5rem)] w-full font-mono text-[13px] leading-5' }"
+            :ui="{ root: 'h-full w-full', base: 'dx-source-editor-input h-full min-h-[calc(100dvh-9.5rem)] w-full font-mono text-[13px] leading-5' }"
           />
         </div>
         <aside class="dx-plain-panel min-h-0 overflow-y-auto border-l p-4">

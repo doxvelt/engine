@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "./frontmatter.ts";
@@ -12,6 +12,16 @@ export const SOURCE_FOLDERS = [
   "entities",
   "connections"
 ];
+
+const PROTECTED_REPOSITORY_FOLDERS = new Set([
+  ".git",
+  "design-system",
+  "docs",
+  "examples",
+  "scripts",
+  "src",
+  "tests"
+]);
 
 export type SourceFileSummary = {
   id: string;
@@ -92,6 +102,46 @@ export async function writeSourceText(
     path: path.relative(root, absolutePath).replaceAll("\\", "/"),
     text
   };
+}
+
+export async function deleteWorkspaceSource(workspacePath: string): Promise<{ root: string; deleted: true }> {
+  const root = path.resolve(workspacePath);
+  const rootStats = await stat(root);
+  if (!rootStats.isDirectory()) {
+    throw new Error("Workspace path must be a directory.");
+  }
+
+  const missingFolders = [];
+  for (const folder of SOURCE_FOLDERS) {
+    try {
+      const folderStats = await stat(path.join(root, folder));
+      if (!folderStats.isDirectory()) missingFolders.push(folder);
+    } catch (error) {
+      if (isNodeError(error) && error.code === "ENOENT") {
+        missingFolders.push(folder);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  if (missingFolders.length > 0) {
+    throw new Error(`Path does not look like a Doxvelt workspace. Missing folders: ${missingFolders.join(", ")}.`);
+  }
+
+  if (root === path.parse(root).root || root === process.cwd()) {
+    throw new Error("Refusing to delete this workspace path.");
+  }
+
+  const relativeToRepository = path.relative(process.cwd(), root);
+  const isInsideRepository = relativeToRepository && !relativeToRepository.startsWith("..") && !path.isAbsolute(relativeToRepository);
+  const repositoryTopLevelFolder = relativeToRepository.split(path.sep).at(0);
+  if (isInsideRepository && repositoryTopLevelFolder && PROTECTED_REPOSITORY_FOLDERS.has(repositoryTopLevelFolder)) {
+    throw new Error(`Refusing to delete protected repository folder: ${repositoryTopLevelFolder}.`);
+  }
+
+  await rm(root, { recursive: true, force: false });
+  return { root, deleted: true };
 }
 
 async function readFlatMarkdownLike(root: string, folder: string): Promise<SourceFile[]> {

@@ -4,6 +4,12 @@ export default defineNuxtConfig({
   compatibilityDate: "2026-05-27",
   modules: ["@nuxt/ui"],
   css: ["~/assets/css/main.css"],
+  app: {
+    head: {
+      title: "Doxvelt",
+      titleTemplate: "%s"
+    }
+  },
   devtools: { enabled: true },
   ui: {
     colorMode: true,
