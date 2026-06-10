@@ -10,6 +10,7 @@
   "scripts": {
     "check": "node ./scripts/lint.ts && tsc --noEmit && node --test tests/*.test.ts && node ./scripts/smoke.ts",
     "api": "node ./src/local-api/index.ts",
+    "dev": "bun ./scripts/dev.js",
     "doxvelt": "node ./src/cli/index.ts",
     "lint": "node ./scripts/lint.ts",
     "smoke": "node ./scripts/smoke.ts",

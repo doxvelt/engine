@@ -1,54 +1,54 @@
 # Doxvelt
 
-Doxvelt is an early-stage design for a turn-based chat RPG and role-play simulation engine where every actor receives subjective context.
+Doxvelt is a local-first workbench for building and running turn-based chat RPGs and role-play simulations.
 
-The goal is not a normal group chatbot. The goal is an engine where agents, affiliations, artifacts, memories, secrets, mistaken beliefs, and player direction can produce emerging social dynamics for games, education, strategy work, and training simulations.
+You author a simulation as plain Markdown dossiers and scenario files. Doxvelt compiles that source into a runtime with actors, beliefs, memories, affiliations, artifacts, access paths, stage whispers, and a transcript where exactly one actor acts per turn.
 
-The first product target is a local single-user app. Simulations and games should be portable through import/export before Doxvelt grows hosted collaboration or publishing features.
+The useful trick: every actor receives subjective context. A character can believe something false, miss a private conversation, remember a stale affiliation secret, or form a first impression from another actor's projected surface.
 
-## Core Idea
+## Quick Start
 
-Canonical reality is singular, but access to it is subjective.
+Requirements:
 
-Jade can know she is undercover. Mike can wrongly believe Luke is loyal. Pete can suspect Mike loves Jade. The Mafia can trust Jade while Jade is loyal to the police. Each actor's turn is generated from the context available to that actor, not from omniscient world state.
+- Node.js 24 or newer.
+- Bun 1.3.13 or compatible.
 
-## Current Design
+Install dependencies:
 
-The design is documented in:
+```sh
+bun install
+```
 
-- [Ubiquitous Language](docs/design/UBIQUITOUS_LANGUAGE.md)
-- [Subjective Context Model](docs/design/SUBJECTIVE_CONTEXT_MODEL.md)
-- [Entity Dossier Format](docs/design/ENTITY_DOSSIER_FORMAT.md)
-- [System Loop](docs/design/SYSTEM_LOOP.md)
-- [MVP Architecture](docs/design/MVP_ARCHITECTURE.md)
+Start the local API and UI:
 
-## Design System
+```sh
+bun run dev
+```
 
-The product design system lives in [`design-system/`](design-system/). It contains the static specimen page, visual tokens, fonts, and brand assets for Doxvelt's local workbench UI: dossiers, source spans, beliefs, access paths, transcript turns, and authoring controls.
+The API listens on `http://127.0.0.1:8787`. Nuxt prints the UI URL, usually `http://localhost:3000`.
 
-Keep this design system in this repository while the engine, local API, and local UI are still evolving together. Treat `design-system/tokens.css` as the canonical visual token source before inventing parallel UI styling.
+From the UI, create a blank workspace or initialize the `executive-interviews` demo. Then:
 
-## Example Uses
+- Use **Studio** to edit source files, create assets, validate compilation, and inspect compiled source spans.
+- Use **Stage** to start a run, choose the next actor, manage the audience, send turns, generate drafts, inspect subjective context, and close episodes.
 
-- Chat RPGs with player-directed turns and subjective character knowledge.
-- Strategy education where students interview modeled executives, stakeholders, competitors, or regulators to understand what is going on.
-- Training simulations such as supply-chain coordination games, crisis-response exercises, negotiation rooms, and mission reenactments.
-- Scenario planning where different actors hold partial, stale, or conflicting beliefs.
+## What You Can Do Today
 
-## MVP Shape
+- Create or seed a local simulation workspace.
+- Author worlds, scenarios, formats, models, entities, and connections as files.
+- Compile Markdown source into inspectable runtime fabric.
+- Run hard-turn scenes through the UI or CLI.
+- Control who is in the audience for each turn.
+- Add private stage whispers for one actor's next turn.
+- Grant and revoke runtime access without editing source files.
+- Close episodes to write memories and extract beliefs.
+- Export and import local simulation packages.
 
-- Turn-based RPG in chat form.
-- Exactly one actor acts per turn.
-- The player chooses who acts next.
-- Actors can be agents, affiliations, stateless generators, or player characters.
-- The engine assembles subjective context for the selected actor.
-- A shared transcript grows over time, but access is filtered by audience membership.
-- Episode closure generates memories and extracts beliefs.
-- Closed episodes are immutable.
+This is still an early MVP slice. Doxvelt is local single-user software right now; hosted accounts, collaboration, publishing, and marketplaces are intentionally out of scope.
 
-## Source Assets
+## Workspace Shape
 
-A Doxvelt simulation is assembled from source assets on disk:
+A Doxvelt workspace is a local source folder:
 
 ```text
 workspaces/demo/
@@ -60,16 +60,9 @@ workspaces/demo/
   connections/
 ```
 
-- `models`: JSON/YAML metadata for LLM endpoints.
-- `worlds`: unstructured Markdown describing immutable laws and norms.
-- `scenarios`: unstructured Markdown describing the objective starting situation.
-- `formats`: Markdown describing turn output schemas.
-- `entities`: dossiers for agents, affiliations, artifacts, and stateless actors.
-- `connections`: authored links between entities, including membership-like access.
+Entity folders hold files such as `IDENTITY.md`, `SURFACE.md`, `BELIEFS.md`, `MEMORY.md`, and `EXAMPLES.md`. Connections describe relationships, memberships, access, rivalry, ownership, or other links between entities.
 
-## Entity Dossiers
-
-Users should not have to author graph records directly. They write natural-language dossiers with lightweight mentions and tags:
+Source is intentionally prose-first. Lightweight mentions and tags help the compiler:
 
 ```md
 @jade is undercover inside @mafia. :canonical :hidden
@@ -78,27 +71,17 @@ Users should not have to author graph records directly. They write natural-langu
 This connection gives @jade access to @mafia knowledge. :access:member
 ```
 
-The engine compiles this prose into runtime fabric: entities, connections, propositions, beliefs, events, surfaces, and memories.
+## CLI
 
-Model files are resolved from source by ID when an AI turn or AI-backed episode closure runs. Endpoint details such as `base_url`, `model`, and `api_key_env` are operational config, not durable simulation state, so they are not copied into SQLite.
+The UI is the friendliest way in, but the CLI is useful for tests, automation, and quick inspection.
 
-## Status
-
-This repository currently contains design documents, an inspectable example, and a local CLI/runtime slice.
-
-Create a blank source scaffold for your own simulation:
-
-```sh
-bun run doxvelt -- init workspaces/demo
-```
-
-Or seed the executive-interviews example from [examples/executive-interviews](examples/executive-interviews):
+Create a demo workspace:
 
 ```sh
 bun run doxvelt -- init workspaces/demo --template executive-interviews
 ```
 
-Then try the current slice:
+Run a small manual slice:
 
 ```sh
 bun run doxvelt -- compile workspaces/demo --json
@@ -109,44 +92,7 @@ bun run doxvelt -- context ceo --json
 bun run doxvelt -- close-episode --label "Opening interviews" --json
 ```
 
-Stage whispers are private context for one actor's next turn only:
-
-```sh
-bun run doxvelt -- whisper ceo --text "Do not reveal the board panic yet." --json
-bun run doxvelt -- turn ceo --manual "We should stay focused on the facts." --json
-bun run doxvelt -- turn coo --ai --model local-openai-compatible --whisper "Deflect supplier questions." --json
-```
-
-Active audience controls who observes turns by default. The selected actor is always included:
-
-```sh
-bun run doxvelt -- audience add student-team --reason "The students enter the room." --json
-bun run doxvelt -- audience deactivate coo --reason "The COO takes a private call." --json
-bun run doxvelt -- audience list --json
-bun run doxvelt -- turn ceo --manual "We should keep this focused." --json
-```
-
-Projected surface lines from entity dossiers are included in actor context for entities the actor can currently observe.
-The first time an actor observes another entity, Doxvelt automatically stores a deterministic first-impression belief from that entity's projected surface.
-
-Runtime access changes are explicit events. They change effective context access without editing authored source files:
-
-```sh
-bun run doxvelt -- access grant student-team ceo --reason "The CEO gives the students briefing access." --json
-bun run doxvelt -- access revoke student-team ceo --reason "The briefing window closes." --json
-bun run doxvelt -- access list --json
-```
-
-When an actor loses membership-like access, live source beliefs disappear from context immediately. At episode closure, Doxvelt persists weakened retained beliefs for source beliefs the actor previously reached through that lost path, preserving the difference between stale remembered knowledge and current access.
-
-Export a portable local package, then import it elsewhere:
-
-```sh
-bun run doxvelt -- export workspaces/package-export --json
-bun run doxvelt -- import workspaces/package-export --world workspaces/imported-demo --db .doxvelt/imported-runtime.sqlite --json
-```
-
-Inspect runtime state:
+Common inspection commands:
 
 ```sh
 bun run doxvelt -- transcript --json
@@ -155,13 +101,16 @@ bun run doxvelt -- beliefs --json
 bun run doxvelt -- beliefs ceo --json
 ```
 
-The `memories` command reports both episode memories and long-term memories. Long-term memories are actor-owned runtime state and are included in that actor's future context.
-
-If a local OpenAI-compatible endpoint is running, try an AI-backed turn:
+Export and import a local package:
 
 ```sh
-bun run doxvelt -- turn coo --ai --model local-openai-compatible --audience coo,student-team --json
+bun run doxvelt -- export workspaces/package-export --json
+bun run doxvelt -- import workspaces/package-export --world workspaces/imported-demo --db .doxvelt/imported-runtime.sqlite --json
 ```
+
+## AI Turns
+
+Doxvelt can run in manual mode with no model dependency. AI-backed turns use model records from the workspace.
 
 The default scaffold expects an OpenAI-compatible chat completions endpoint:
 
@@ -182,3 +131,40 @@ ollama serve
 ```
 
 Then set `model` to an installed Ollama model. `OLLAMA_API_KEY` may be unset for local Ollama; it is only needed for endpoints that require bearer-token authentication.
+
+## Local Development
+
+Run the full check:
+
+```sh
+bun run check
+```
+
+Run the API and UI separately:
+
+```sh
+bun run api
+bun run ui
+```
+
+The UI reads `DOXVELT_API_BASE` and falls back to `http://127.0.0.1:8787`.
+
+Repository landmarks:
+
+- `src/core`: compiler, context assembly, turn engine, episode closure, and domain types.
+- `src/store`: SQLite runtime store.
+- `src/cli`: local CLI wrapper.
+- `src/local-api`: local HTTP API over the core engine.
+- `src/local-ui`: Nuxt workbench UI.
+- `design-system`: visual tokens, fonts, brand assets, and static UI specimens.
+- `examples/executive-interviews`: complete example source workspace.
+
+## Design Docs
+
+The deeper product and engine model lives in:
+
+- [Ubiquitous Language](docs/design/UBIQUITOUS_LANGUAGE.md)
+- [Subjective Context Model](docs/design/SUBJECTIVE_CONTEXT_MODEL.md)
+- [Entity Dossier Format](docs/design/ENTITY_DOSSIER_FORMAT.md)
+- [System Loop](docs/design/SYSTEM_LOOP.md)
+- [MVP Architecture](docs/design/MVP_ARCHITECTURE.md)

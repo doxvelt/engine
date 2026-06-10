@@ -14,7 +14,7 @@ Doxvelt can support entertainment play, education, strategy work, and training s
 
 The first product target is a local single-user app with import/export for simulations and games. Do not assume hosted accounts, real-time collaboration, or a marketplace in MVP. Packaging and distribution are undecided.
 
-The current implementation is a local CLI/runtime slice over the core engine. Keep new behavior in the core library first, then expose it through the CLI as a wrapper.
+The current implementation includes the core engine, local SQLite store, CLI/runtime slice, local HTTP API, and Nuxt local workbench UI. Keep new simulation behavior in the core library first, then expose it through the CLI and local API as sibling wrappers. The UI should call the local API rather than shelling out to the CLI.
 
 ## Design System
 
@@ -139,6 +139,20 @@ Extraction happens at episode closure for MVP, not after every turn.
 Closed episodes are immutable. If an actor was absent, inactive, or excluded from the turn audience, they should not write memories from that turn unless they later learn about it through a new accessible event.
 
 ## Current Local Interface
+
+The current local app surfaces are:
+
+- `src/local-ui`: Nuxt workbench UI with Home, Studio, and Stage pages.
+- `src/local-api`: local HTTP API over the same core engine and SQLite runtime store.
+- `src/cli`: CLI wrapper for users, tests, automations, coding agents, and future LLM tools.
+
+Run both the API and UI during local UI work with:
+
+```sh
+bun run dev
+```
+
+The API defaults to `http://127.0.0.1:8787` and `.doxvelt/runtime.sqlite`. The UI reads `DOXVELT_API_BASE` or falls back to that API URL.
 
 The current CLI surface includes:
 
