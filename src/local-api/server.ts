@@ -1,593 +1,774 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { existsSync } from "node:fs";
-import path from "node:path";
-import { DoxveltGenerationError, generateDoxveltText } from "../ai/generate.ts";
-import { resolveCurrentBeliefs } from "../core/beliefs.ts";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
+import { generateDoxveltText } from "../ai/generate.ts";
+import { closeBranchEpisode } from "../core/branch-episode.ts";
+import {
+  assertExpectedBranchHead,
+  commitManualTurn,
+  commitRuntimeEffects,
+  editAcceptedMessage,
+  forkBranch,
+  inspectActorContext,
+  LOCAL_OWNER_SCOPE,
+  projectBranch,
+  regenerateAcceptedResponse,
+  stageWhisper,
+  startBranchSimulation,
+} from "../core/branch-kernel.ts";
 import { compileWorkspace } from "../core/compiler.ts";
-import { resolveBeliefAccess } from "../core/context.ts";
-import { advanceTurn, buildActorContext, startSimulation } from "../core/engine.ts";
-import { closeEpisode } from "../core/episode.ts";
 import { initWorkspace } from "../core/init.ts";
 import { loadModelRecord } from "../core/models.ts";
-import { exportSimulationPackage, importSimulationPackage } from "../core/portable.ts";
-import { deleteWorkspaceSource, listWorkspaceSourceFiles, readSourceText, writeSourceText } from "../core/source.ts";
-import type { EntityRecord } from "../core/types.ts";
-import { openRuntimeStore, type RuntimeStore } from "../store/sqlite.ts";
+import {
+  exportSimulationPackage,
+  importSimulationPackage,
+} from "../store/portable.ts";
+import {
+  deleteWorkspaceSource,
+  listWorkspaceSourceFiles,
+  readSourceText,
+  writeSourceText,
+} from "../core/source.ts";
+import {
+  openBranchStore,
+  type SqliteSimulationRepository,
+} from "../store/branch-sqlite.ts";
+import {
+  BranchConflictError,
+  CommandIdentityError,
+  DomainNotFoundError,
+  DomainValidationError,
+} from "../core/ports.ts";
 
-const DEFAULT_DB_PATH = ".doxvelt/runtime.sqlite";
 const MAX_BODY_BYTES = 1_000_000;
-
+const DEFAULT_ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+];
 export type LocalApiOptions = {
   dbPath?: string;
+  allowedOrigins?: readonly string[];
 };
-
 export function createLocalApiServer(options: LocalApiOptions = {}) {
-  return createServer((request, response) => {
-    handleLocalApiRequest(request, response, options).catch((error) => {
-      sendError(response, error);
-    });
-  });
+  return createServer(
+    (request, response) =>
+      void handleLocalApiRequest(request, response, options).catch((error) =>
+        sendError(response, error),
+      ),
+  );
 }
 
 export async function handleLocalApiRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  options: LocalApiOptions = {}
+  options: LocalApiOptions = {},
 ): Promise<void> {
-  setCorsHeaders(response);
   const method = request.method || "GET";
-  if (method === "OPTIONS") {
-    response.writeHead(204);
-    response.end();
-    return;
-  }
-
+  validateLocalBoundary(request, response, method, options);
+  if (method === "OPTIONS") return end(response, 204);
   const url = new URL(request.url || "/", "http://localhost");
+  if (url.searchParams.has("ownerScope"))
+    throw new HttpError(
+      400,
+      "ownerScope is derived by the local API and must not be supplied.",
+    );
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
-
-  if (method === "GET" && url.pathname === "/health") {
-    sendJson(response, 200, { ok: true });
-    return;
+  if (method === "GET" && url.pathname === "/health")
+    return send(response, 200, { ok: true });
+  if (parts[0] === "source")
+    return sourceRoute(method, parts, url, request, response);
+  if (method === "POST" && parts[0] === "packages") {
+    const body = await bodyOf(request);
+    if (parts[1] === "export")
+      return send(
+        response,
+        200,
+        await exportSimulationPackage({
+          dbPath: options.dbPath || ".doxvelt/runtime.sqlite",
+          ownerScope: LOCAL_OWNER_SCOPE,
+          simulationId: optional(body, "simulationId") || "default",
+          targetDir: required(body, "targetDir"),
+        }),
+      );
+    if (parts[1] === "import")
+      return send(
+        response,
+        200,
+        await importSimulationPackage({
+          packageDir: required(body, "packageDir"),
+          targetSourceDir: required(body, "targetSourceDir"),
+          targetDbPath:
+            optional(body, "targetDbPath") ||
+            options.dbPath ||
+            ".doxvelt/runtime.sqlite",
+          expectedOwnerScope: LOCAL_OWNER_SCOPE,
+        }),
+      );
   }
-
-  if (method === "GET" && parts.length === 1 && parts[0] === "source") {
-    const workspacePath = requiredWorkspaceSearchParam(url);
-    sendJson(response, 200, await listWorkspaceSourceFiles(workspacePath));
-    return;
-  }
-
-  if (method === "GET" && parts.length === 2 && parts[0] === "source" && parts[1] === "file") {
-    const workspacePath = requiredWorkspaceSearchParam(url);
-    const relativePath = requiredSearchParam(url, "path");
-    sendJson(response, 200, await readSourceText(workspacePath, relativePath));
-    return;
-  }
-
-  if (method === "POST" && parts.length === 2 && parts[0] === "source" && parts[1] === "file") {
-    const body = await readJsonBody(request);
-    const workspacePath = requireWorkspacePath(body);
-    const relativePath = requireString(body, "path");
-    const text = requireAnyString(body, "text");
-    sendJson(response, 200, await writeSourceText(workspacePath, relativePath, text));
-    return;
-  }
-
-  if (method === "POST" && parts.length === 2 && parts[0] === "source" && parts[1] === "init") {
-    const body = await readJsonBody(request);
-    const workspacePath = requireWorkspacePath(body);
-    const resolvedWorkspacePath = path.resolve(workspacePath);
-    const template = optionalString(body, "template") || null;
-    if (existsSync(resolvedWorkspacePath)) {
-      sendJson(response, 200, {
-        root: resolvedWorkspacePath,
-        created: false,
-        message: "Workspace source already exists."
-      });
-      return;
-    }
-
-    sendJson(response, 200, await initWorkspace(workspacePath, { template }));
-    return;
-  }
-
-  if (method === "POST" && parts.length === 2 && parts[0] === "source" && parts[1] === "delete") {
-    const body = await readJsonBody(request);
-    const workspacePath = requireWorkspacePath(body);
-    sendJson(response, 200, await deleteWorkspaceSource(workspacePath));
-    return;
-  }
-
-  if (method === "POST" && parts.length === 2 && parts[0] === "source" && parts[1] === "compile") {
-    const body = await readJsonBody(request);
-    const workspacePath = requireWorkspacePath(body);
-    sendJson(response, 200, await compileWorkspace(workspacePath));
-    return;
-  }
-
-  if (method === "POST" && parts.length === 2 && parts[0] === "packages" && parts[1] === "export") {
-    const body = await readJsonBody(request);
-    const targetDir = requireString(body, "targetDir");
-    const simulationId = optionalString(body, "simulationId") || "default";
-    sendJson(
-      response,
-      200,
-      await exportSimulationPackage({
-        dbPath: options.dbPath || DEFAULT_DB_PATH,
-        simulationId,
-        targetDir
-      })
-    );
-    return;
-  }
-
-  if (method === "POST" && parts.length === 2 && parts[0] === "packages" && parts[1] === "import") {
-    const body = await readJsonBody(request);
-    const packageDir = requireString(body, "packageDir");
-    const targetSourceDir = requireString(body, "targetSourceDir");
-    const targetDbPath = optionalString(body, "targetDbPath") || options.dbPath || DEFAULT_DB_PATH;
-    sendJson(
-      response,
-      200,
-      await importSimulationPackage({
-        packageDir,
-        targetSourceDir,
-        targetDbPath
-      })
-    );
-    return;
-  }
-
-  if (method === "POST" && parts.length === 2 && parts[0] === "simulations" && parts[1] === "start") {
-    const body = await readJsonBody(request);
-    const workspacePath = requireWorkspacePath(body);
-    const simulationId = optionalString(body, "simulationId") || "default";
-    const scenarioId = optionalString(body, "scenarioId") || "default";
-
-    await withStore(options, async (store) => {
-      const result = await startSimulation({
-        store,
-        workspacePath,
-        simulationId,
-        scenarioId
-      });
-
-      sendJson(response, 200, {
-        simulationId: result.simulationId,
-        scenarioId: result.scenarioId,
-        actors: result.actors,
-        models: result.compiled.models,
-        diagnostics: result.compiled.diagnostics
-      });
-    });
-    return;
-  }
-
-  if (parts.length >= 2 && parts[0] === "simulations") {
-    const simulationId = parts[1];
-    if (!simulationId) throw new HttpError(404, "Simulation id is missing.");
-
-    if (method === "GET" && parts.length === 3 && parts[2] === "actors") {
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        sendJson(response, 200, {
-          simulationId,
-          actors: store.listActors(simulationId)
-        });
-      });
-      return;
-    }
-
-    if (method === "GET" && parts.length === 4 && parts[2] === "context") {
-      const actorId = parts[3];
-      if (!actorId) throw new HttpError(404, "Actor id is missing.");
-
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        sendJson(response, 200, buildActorContext({ store, simulationId, actorId }));
-      });
-      return;
-    }
-
-    if (method === "GET" && parts.length === 3 && parts[2] === "transcript") {
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        sendJson(response, 200, {
-          simulationId,
-          transcript: store.listTranscript(simulationId)
-        });
-      });
-      return;
-    }
-
-    if (method === "GET" && parts.length === 3 && parts[2] === "audience") {
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        sendJson(response, 200, {
-          simulationId,
-          audienceEvents: store.listAudienceEvents(simulationId),
-          audienceMembers: store.listAudienceMembers(simulationId),
-          activeAudience: store.listActiveAudienceIds(simulationId)
-        });
-      });
-      return;
-    }
-
-    if (method === "POST" && parts.length === 3 && parts[2] === "audience") {
-      const body = await readJsonBody(request);
-      const actorId = requireString(body, "actorId");
-      const action = requireAudienceAction(body, "action");
-
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        const event = store.appendAudienceEvent({
-          simulationId,
-          actorId,
-          action,
-          reason: optionalString(body, "reason") || null,
-          turnId: optionalNonNegativeInteger(body, "turnId"),
-          episodeId: optionalNonNegativeInteger(body, "episodeId")
-        });
-        sendJson(response, 200, {
-          simulationId,
-          event,
-          audienceMembers: store.listAudienceMembers(simulationId),
-          activeAudience: store.listActiveAudienceIds(simulationId)
-        });
-      });
-      return;
-    }
-
-    if (method === "GET" && parts.length === 3 && parts[2] === "access") {
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        sendJson(response, 200, {
-          simulationId,
-          accessEvents: store.listRuntimeAccessEvents(simulationId),
-          effectiveAccessLinks: store.listEffectiveAccessLinks(simulationId)
-        });
-      });
-      return;
-    }
-
-    if (method === "POST" && parts.length === 3 && parts[2] === "access") {
-      const body = await readJsonBody(request);
-      const action = requireAccessAction(body, "action");
-      const member = requireString(body, "member");
-      const container = requireString(body, "container");
-
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        const event = store.appendRuntimeAccessEvent({
-          simulationId,
-          action,
-          member,
-          container,
-          reason: optionalString(body, "reason") || null,
-          turnId: optionalNonNegativeInteger(body, "turnId"),
-          episodeId: optionalNonNegativeInteger(body, "episodeId")
-        });
-        sendJson(response, 200, {
-          simulationId,
-          event,
-          effectiveAccessLinks: store.listEffectiveAccessLinks(simulationId)
-        });
-      });
-      return;
-    }
-
-    if (method === "GET" && parts.length === 3 && parts[2] === "whispers") {
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        sendJson(response, 200, {
-          simulationId,
-          stageWhispers: store.listStageWhispers(simulationId)
-        });
-      });
-      return;
-    }
-
-    if (method === "POST" && parts.length === 3 && parts[2] === "whispers") {
-      const body = await readJsonBody(request);
-      const targetActorId = requireString(body, "targetActorId");
-      const text = requireString(body, "text");
-
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        const whisper = store.createStageWhisper({ simulationId, targetActorId, text });
-        sendJson(response, 200, {
-          simulationId,
-          whisper
-        });
-      });
-      return;
-    }
-
-    if (method === "GET" && parts.length === 3 && parts[2] === "memories") {
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        sendJson(response, 200, {
-          simulationId,
-          memories: store.listEpisodeMemories(simulationId),
-          longTermMemories: store.listLongTermMemories(simulationId)
-        });
-      });
-      return;
-    }
-
-    if (method === "GET" && parts.length === 3 && parts[2] === "beliefs") {
-      const actorId = url.searchParams.get("actorId");
-
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        if (!actorId) {
-          sendJson(response, 200, {
-            simulationId,
-            beliefs: store.listBeliefHistory(simulationId)
-          });
-          return;
-        }
-
-        const actor = store.getCompiledRecord<EntityRecord>(simulationId, "entity", actorId);
-        if (!actor) throw new HttpError(404, `Actor not found: ${actorId}`);
-
-        const beliefAccess = resolveBeliefAccess(
-          actorId,
-          store.listBeliefHistory(simulationId),
-          store.listEffectiveAccessLinks(simulationId)
-        );
-        const resolution = resolveCurrentBeliefs(beliefAccess);
-        sendJson(response, 200, {
-          simulationId,
-          actorId,
-          currentBeliefs: resolution.current,
-          conflictingBeliefs: resolution.conflicting,
-          supersededBeliefs: resolution.superseded,
-          groups: resolution.groups
-        });
-      });
-      return;
-    }
-
-    if (method === "POST" && parts.length === 3 && parts[2] === "turns") {
-      const body = await readJsonBody(request);
-      const actorId = requireString(body, "actorId");
-      const manualText = optionalString(body, "manualText");
-      const modelId = optionalString(body, "modelId");
-      const whisperText = optionalString(body, "whisperText");
-      const audience = optionalStringArray(body, "audience");
-
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        const result = await advanceTurn({
-          store,
-          simulationId,
-          actorId,
-          ...(manualText === undefined ? {} : { manualText }),
-          ...(whisperText === undefined ? {} : { whisperText }),
-          ...(audience === undefined ? {} : { audience }),
-          ...(modelId
-            ? {
-                generateText: async ({ context }) => {
-                  const model = await loadModelRecord(context.simulation.sourceRoot, modelId);
-                  if (!model) throw new HttpError(404, `Model not found: ${modelId}`);
-                  const generation = await generateDoxveltText({
-                    actorId,
-                    purpose: "turn",
-                    model,
-                    prompt: context.promptPreview
-                  });
-                  return generation.text;
-                }
-              }
-            : {})
-        });
-
-        sendJson(response, 200, result);
-      });
-      return;
-    }
-
-    if (method === "POST" && parts.length === 3 && parts[2] === "turn-draft") {
-      const body = await readJsonBody(request);
-      const actorId = requireString(body, "actorId");
-      const modelId = requireString(body, "modelId");
-      const whisperText = optionalString(body, "whisperText");
-      const activeAudience = optionalStringArray(body, "audience");
-
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        const syntheticWhispers = whisperText
-          ? [{
-              id: 0,
-              simulationId,
-              targetActorId: actorId,
-              text: whisperText,
-              consumedTurnId: null,
-              createdAt: new Date().toISOString(),
-              consumedAt: null
-            }]
-          : [];
-        const context = buildActorContext({
-          store,
-          simulationId,
-          actorId,
-          observedEntityIds: activeAudience || store.listActiveAudienceIds(simulationId),
-          stageWhispers: syntheticWhispers
-        });
-        const model = await loadModelRecord(context.simulation.sourceRoot, modelId);
-        if (!model) throw new HttpError(404, `Model not found: ${modelId}`);
-        const generation = await generateDoxveltText({
-          actorId,
-          purpose: "turn",
-          model,
-          prompt: context.promptPreview
-        });
-        sendJson(response, 200, {
-          simulationId,
-          actorId,
-          modelId,
-          text: generation.text.trim(),
-          context
-        });
-      });
-      return;
-    }
-
-    if (method === "POST" && parts.length === 4 && parts[2] === "episodes" && parts[3] === "close") {
-      const body = await readJsonBody(request);
-      const label = optionalString(body, "label") || null;
-
-      await withStore(options, async (store) => {
-        ensureSimulation(store, simulationId);
-        sendJson(response, 200, await closeEpisode({ store, simulationId, label }));
-      });
-      return;
-    }
-  }
-
-  throw new HttpError(404, `No route for ${method} ${url.pathname}.`);
-}
-
-async function withStore<TValue>(
-  options: LocalApiOptions,
-  callback: (store: RuntimeStore) => Promise<TValue> | TValue
-): Promise<TValue> {
-  const store = await openRuntimeStore(options.dbPath || DEFAULT_DB_PATH).open();
+  const store = await openBranchStore(
+    options.dbPath || ".doxvelt/runtime.sqlite",
+  ).open();
   try {
-    return await callback(store);
+    if (
+      method === "POST" &&
+      parts[0] === "simulations" &&
+      parts[1] === "start"
+    ) {
+      const body = await bodyOf(request);
+      const started = await startBranchSimulation(store, {
+        ownerScope: LOCAL_OWNER_SCOPE,
+        simulationId: optional(body, "simulationId") || "default",
+        workspacePath: requiredWorkspace(body),
+        scenarioId: optional(body, "scenarioId") || "default",
+        branchId: optional(body, "branchId") || "main",
+        commandId: required(body, "commandId"),
+      });
+      return send(response, 200, {
+        ...started,
+        actors: started.compiled.entities.filter(
+          (item) => item.kind !== "artifact",
+        ),
+        models: started.compiled.models,
+        diagnostics: started.compiled.diagnostics,
+      });
+    }
+    if (parts[0] !== "simulations" || !parts[1])
+      throw new HttpError(404, `No route for ${method} ${url.pathname}.`);
+    const simulationId = parts[1];
+    const ownerScope = LOCAL_OWNER_SCOPE;
+    const simulation = store.getSimulation(ownerScope, simulationId);
+    if (!simulation)
+      throw new HttpError(404, `Simulation not found: ${simulationId}`);
+    if (method === "GET" && parts[2] === "actors")
+      return send(response, 200, {
+        simulationId,
+        actors: content(
+          store,
+          ownerScope,
+          simulationId,
+        ).compiled.entities.filter((item) => item.kind !== "artifact"),
+      });
+    if (method === "GET" && parts[2] === "context" && parts[3]) {
+      const q = query(url, simulation);
+      const head = projectBranch(store, q).branch.headCommitId;
+      const whispers = store.listPendingStageWhispers(
+        ownerScope,
+        simulationId,
+        q.branchId,
+        head,
+        parts[3],
+      );
+      return send(
+        response,
+        200,
+        inspectActorContext(store, {
+          ...q,
+          actorId: parts[3],
+          stageWhispers: whispers,
+        }),
+      );
+    }
+    if (
+      method === "GET" &&
+      [
+        "transcript",
+        "audience",
+        "access",
+        "beliefs",
+        "memories",
+        "branches",
+      ].includes(parts[2] || "")
+    )
+      return sendProjection(
+        response,
+        parts[2]!,
+        projectBranch(store, query(url, simulation)),
+        store.exportSimulation(ownerScope, simulationId).branches,
+      );
+    if (method === "POST" && parts[2] === "turns") {
+      const body = await bodyOf(request);
+      const base = envelope(body, ownerScope, simulationId);
+      if (optional(body, "modelId"))
+        throw new HttpError(
+          400,
+          "Model output must be generated with turn-draft and accepted separately as manualText.",
+        );
+      const text = required(body, "manualText");
+      const actorId = required(body, "actorId");
+      const stageWhisperIds = requiredStrings(body, "stageWhisperIds");
+      assertExpectedBranchHead(store, base);
+      const q = {
+        ownerScope,
+        simulationId,
+        branchId: base.branchId,
+        head: base.expectedHead,
+      };
+      const audience =
+        body.audience === undefined
+          ? projectBranch(store, q)
+              .audience.filter((item) => item.status === "active")
+              .map((item) => item.actorId)
+          : strings(body, "audience");
+      const whispers = store.listPendingStageWhispers(
+        ownerScope,
+        simulationId,
+        base.branchId,
+        base.expectedHead,
+        actorId,
+      );
+      const actorContext = inspectActorContext(store, {
+        ...q,
+        actorId,
+        audience,
+        stageWhispers: whispers.filter((whisper) =>
+          stageWhisperIds.includes(String(whisper.id)),
+        ),
+      });
+      const committed = commitManualTurn(store, {
+        ...base,
+        payload: {
+          actorId,
+          text,
+          audience,
+          stageWhisper: optional(body, "whisperText") || null,
+          stageWhisperIds,
+          audienceChanges: audienceChangeArray(body),
+          accessChanges: accessChangeArray(body),
+        },
+      });
+      return send(response, 200, {
+        ...committed,
+        turn: projectBranch(store, {
+          ownerScope,
+          simulationId,
+          branchId: base.branchId,
+        }).transcript.at(-1),
+        context: actorContext,
+      });
+    }
+    if (method === "POST" && parts[2] === "turn-draft") {
+      const body = await bodyOf(request);
+      const actorId = required(body, "actorId");
+      const branchId = required(body, "branchId");
+      const expectedHead = required(body, "expectedHead");
+      assertExpectedBranchHead(store, {
+        ownerScope,
+        simulationId,
+        branchId,
+        expectedHead,
+      });
+      const pendingWhispers = store.listPendingStageWhispers(
+        ownerScope,
+        simulationId,
+        branchId,
+        expectedHead,
+        actorId,
+      );
+      const audience =
+        body.audience === undefined
+          ? projectBranch(store, {
+              ownerScope,
+              simulationId,
+              branchId,
+              head: expectedHead,
+            })
+              .audience.filter((item) => item.status === "active")
+              .map((item) => item.actorId)
+          : strings(body, "audience");
+      const context = inspectActorContext(store, {
+        ownerScope,
+        simulationId,
+        branchId,
+        head: expectedHead,
+        actorId,
+        audience,
+        stageWhispers: [
+          ...pendingWhispers,
+          ...(optional(body, "whisperText")
+            ? [
+                {
+                  id: "draft",
+                  ownerScope,
+                  simulationId,
+                  branchId,
+                  expectedHead,
+                  commandId: "draft",
+                  targetActorId: actorId,
+                  text: optional(body, "whisperText")!,
+                  createdAt: new Date().toISOString(),
+                },
+              ]
+            : []),
+        ],
+      });
+      const modelId = required(body, "modelId");
+      const model = await loadModelRecord(simulation.sourceRoot, modelId);
+      if (!model) throw new HttpError(404, `Model not found: ${modelId}`);
+      const generated = await generateDoxveltText({
+        actorId,
+        purpose: "turn",
+        model,
+        prompt: context.promptPreview,
+      });
+      return send(response, 200, {
+        simulationId,
+        actorId,
+        modelId,
+        text: generated.text.trim(),
+        audience: context.subjective.currentAudience,
+        stageWhisperIds: pendingWhispers.map((whisper) => String(whisper.id)),
+        context,
+      });
+    }
+    if (method === "POST" && parts[2] === "audience") {
+      const body = await bodyOf(request);
+      return send(
+        response,
+        200,
+        commitRuntimeEffects(store, {
+          ...envelope(body, ownerScope, simulationId),
+          payload: {
+            audienceChanges: [
+              {
+                actorId: required(body, "actorId"),
+                action: choice(body, "action", [
+                  "add",
+                  "remove",
+                  "deactivate",
+                  "reactivate",
+                ]),
+                reason: optional(body, "reason") || null,
+              },
+            ],
+          },
+        }),
+      );
+    }
+    if (method === "POST" && parts[2] === "access") {
+      const body = await bodyOf(request);
+      return send(
+        response,
+        200,
+        commitRuntimeEffects(store, {
+          ...envelope(body, ownerScope, simulationId),
+          payload: {
+            accessChanges: [
+              {
+                action: choice(body, "action", ["grant", "revoke"]),
+                member: required(body, "member"),
+                container: required(body, "container"),
+                reason: optional(body, "reason") || null,
+              },
+            ],
+          },
+        }),
+      );
+    }
+    if (method === "POST" && parts[2] === "whispers") {
+      const body = await bodyOf(request);
+      return send(
+        response,
+        200,
+        stageWhisper(store, {
+          ...envelope(body, ownerScope, simulationId),
+          targetActorId: required(body, "targetActorId"),
+          text: required(body, "text"),
+        }),
+      );
+    }
+    if (method === "GET" && parts[2] === "whispers") {
+      const branchId =
+        url.searchParams.get("branchId") || simulation.defaultBranchId;
+      const expectedHead = requiredSearch(url, "expectedHead");
+      const actorId = requiredSearch(url, "actorId");
+      return send(response, 200, {
+        stageWhispers: store.listPendingStageWhispers(
+          ownerScope,
+          simulationId,
+          branchId,
+          expectedHead,
+          actorId,
+        ),
+      });
+    }
+    if (method === "POST" && parts[2] === "edit") {
+      const body = await bodyOf(request);
+      const base = envelope(body, ownerScope, simulationId);
+      return send(
+        response,
+        200,
+        editAcceptedMessage(store, {
+          ...base,
+          sourceBranchId: base.branchId,
+          sourceCommitId: required(body, "sourceCommitId"),
+          branchId: required(body, "newBranchId"),
+          payload: {
+            actorId: required(body, "actorId"),
+            text: required(body, "manualText"),
+            audience: strings(body, "audience"),
+          },
+        }),
+      );
+    }
+    if (method === "POST" && parts[2] === "regenerate") {
+      const body = await bodyOf(request);
+      const base = envelope(body, ownerScope, simulationId);
+      return send(
+        response,
+        200,
+        regenerateAcceptedResponse(store, {
+          ...base,
+          sourceBranchId: base.branchId,
+          sourceCommitId: required(body, "sourceCommitId"),
+          branchId: required(body, "newBranchId"),
+          payload: {
+            actorId: required(body, "actorId"),
+            text: required(body, "manualText"),
+            audience: strings(body, "audience"),
+          },
+        }),
+      );
+    }
+    if (method === "POST" && parts[2] === "fork") {
+      const body = await bodyOf(request);
+      return send(
+        response,
+        200,
+        forkBranch(store, {
+          ownerScope,
+          simulationId,
+          sourceBranchId: required(body, "branchId"),
+          expectedHead: required(body, "expectedHead"),
+          atCommitId: required(body, "atCommitId"),
+          branchId: required(body, "newBranchId"),
+          commandId: required(body, "commandId"),
+          name: optional(body, "name") || null,
+        }),
+      );
+    }
+    if (method === "POST" && parts[2] === "episodes" && parts[3] === "close") {
+      const body = await bodyOf(request);
+      const closed = await closeBranchEpisode(store, {
+        ...envelope(body, ownerScope, simulationId),
+        payload: { label: optional(body, "label") || null },
+      });
+      return send(response, 200, { ...closed.closure, commit: closed.commit });
+    }
+    throw new HttpError(404, `No route for ${method} ${url.pathname}.`);
   } finally {
     store.close();
   }
 }
 
-function ensureSimulation(store: RuntimeStore, simulationId: string): void {
-  if (!store.getSimulation(simulationId)) {
-    throw new HttpError(404, `Simulation not found: ${simulationId}`);
-  }
+async function sourceRoute(
+  method: string,
+  parts: string[],
+  url: URL,
+  request: IncomingMessage,
+  response: ServerResponse,
+) {
+  if (method === "GET" && parts.length === 1)
+    return send(
+      response,
+      200,
+      await listWorkspaceSourceFiles(requiredSearch(url, "workspacePath")),
+    );
+  if (method === "GET" && parts[1] === "file")
+    return send(
+      response,
+      200,
+      await readSourceText(
+        requiredSearch(url, "workspacePath"),
+        requiredSearch(url, "path"),
+      ),
+    );
+  const body = await bodyOf(request);
+  if (method === "POST" && parts[1] === "file")
+    return send(
+      response,
+      200,
+      await writeSourceText(
+        requiredWorkspace(body),
+        required(body, "path"),
+        any(body, "text"),
+      ),
+    );
+  if (method === "POST" && parts[1] === "compile")
+    return send(response, 200, await compileWorkspace(requiredWorkspace(body)));
+  if (method === "POST" && parts[1] === "init")
+    return send(
+      response,
+      200,
+      await initWorkspace(requiredWorkspace(body), {
+        template: optional(body, "template") || null,
+      }),
+    );
+  if (method === "POST" && parts[1] === "delete")
+    return send(
+      response,
+      200,
+      await deleteWorkspaceSource(requiredWorkspace(body)),
+    );
+  throw new HttpError(404, "Unknown source route.");
 }
-
-async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = [];
-  let length = 0;
-
-  for await (const chunk of request) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    length += buffer.byteLength;
-    if (length > MAX_BODY_BYTES) throw new HttpError(413, "Request body is too large.");
-    chunks.push(buffer);
-  }
-
-  if (chunks.length === 0) return {};
-
-  try {
-    const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
-    if (!isRecord(parsed)) throw new Error("Body must be a JSON object.");
-    return parsed;
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new HttpError(400, `Invalid JSON request body: ${detail}`);
-  }
+function sendProjection(
+  response: ServerResponse,
+  kind: string,
+  p: ReturnType<typeof projectBranch>,
+  branches: unknown[],
+) {
+  if (kind === "transcript")
+    return send(response, 200, { branch: p.branch, transcript: p.transcript });
+  if (kind === "audience")
+    return send(response, 200, {
+      branch: p.branch,
+      audienceMembers: p.audience,
+      activeAudience: p.audience
+        .filter((item) => item.status === "active")
+        .map((item) => item.actorId),
+    });
+  if (kind === "access")
+    return send(response, 200, {
+      branch: p.branch,
+      effectiveAccessLinks: p.accessLinks,
+    });
+  if (kind === "beliefs")
+    return send(response, 200, { branch: p.branch, beliefs: p.beliefs });
+  if (kind === "memories")
+    return send(response, 200, {
+      branch: p.branch,
+      memories: p.episodeMemories,
+      longTermMemories: p.longTermMemories,
+    });
+  return send(response, 200, { branch: p.branch, branches });
 }
-
-function requireString(body: Record<string, unknown>, key: string): string {
-  const value = body[key];
-  if (typeof value === "string" && value.length > 0) return value;
-  throw new HttpError(400, `${key} must be a non-empty string.`);
+function query(
+  url: URL,
+  simulation: NonNullable<
+    ReturnType<SqliteSimulationRepository["getSimulation"]>
+  >,
+) {
+  const head = url.searchParams.get("head");
+  return {
+    ownerScope: simulation.ownerScope,
+    simulationId: simulation.id,
+    branchId: url.searchParams.get("branchId") || simulation.defaultBranchId,
+    ...(head ? { head } : {}),
+  };
 }
-
-function requireWorkspacePath(body: Record<string, unknown>): string {
-  const value = body.workspacePath ?? body.worldPath;
-  if (typeof value === "string" && value.length > 0) return value;
-  throw new HttpError(400, "workspacePath must be a non-empty string.");
-}
-
-function requireAnyString(body: Record<string, unknown>, key: string): string {
-  const value = body[key];
-  if (typeof value === "string") return value;
-  throw new HttpError(400, `${key} must be a string.`);
-}
-
-function requiredWorkspaceSearchParam(url: URL): string {
-  const value = url.searchParams.get("workspacePath") || url.searchParams.get("worldPath");
-  if (value) return value;
-  throw new HttpError(400, "workspacePath query parameter is required.");
-}
-
-function requiredSearchParam(url: URL, key: string): string {
-  const value = url.searchParams.get(key);
-  if (value) return value;
-  throw new HttpError(400, `${key} query parameter is required.`);
-}
-
-function optionalString(body: Record<string, unknown>, key: string): string | undefined {
-  const value = body[key];
-  if (value === undefined || value === null) return undefined;
-  if (typeof value === "string") return value;
-  throw new HttpError(400, `${key} must be a string.`);
-}
-
-function optionalStringArray(body: Record<string, unknown>, key: string): string[] | undefined {
-  const value = body[key];
-  if (value === undefined || value === null) return undefined;
-  if (Array.isArray(value) && value.every((item) => typeof item === "string")) return value;
-  throw new HttpError(400, `${key} must be an array of strings.`);
-}
-
-function optionalNonNegativeInteger(body: Record<string, unknown>, key: string): number | null {
-  const value = body[key];
-  if (value === undefined || value === null) return null;
-  if (Number.isInteger(value) && typeof value === "number" && value >= 0) return value;
-  throw new HttpError(400, `${key} must be a non-negative integer.`);
-}
-
-function requireAudienceAction(
+function envelope(
   body: Record<string, unknown>,
-  key: string
-): "add" | "remove" | "deactivate" | "reactivate" {
-  const value = requireString(body, key);
-  if (value === "add" || value === "remove" || value === "deactivate" || value === "reactivate") return value;
-  throw new HttpError(400, `${key} must be add, remove, deactivate, or reactivate.`);
+  ownerScope: string,
+  simulationId: string,
+) {
+  return {
+    ...envelopeBase(body, ownerScope, simulationId),
+    branchId: required(body, "branchId"),
+  };
 }
-
-function requireAccessAction(body: Record<string, unknown>, key: string): "grant" | "revoke" {
-  const value = requireString(body, key);
-  if (value === "grant" || value === "revoke") return value;
-  throw new HttpError(400, `${key} must be grant or revoke.`);
+function envelopeBase(
+  body: Record<string, unknown>,
+  ownerScope: string,
+  simulationId: string,
+) {
+  return {
+    ownerScope,
+    simulationId,
+    expectedHead: required(body, "expectedHead"),
+    commandId: required(body, "commandId"),
+  };
 }
-
-function sendJson(response: ServerResponse, status: number, value: unknown): void {
-  const body = JSON.stringify(value, jsonReplacer, 2);
+function content(
+  store: SqliteSimulationRepository,
+  owner: string,
+  simulation: string,
+) {
+  const sim = store.getSimulation(owner, simulation)!;
+  const revision = store.getContentRevision(owner, sim.contentRevisionId);
+  if (!revision) throw new Error("Pinned content revision missing.");
+  return revision;
+}
+async function bodyOf(request: IncomingMessage) {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of request) {
+    const item = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += item.length;
+    if (size > MAX_BODY_BYTES) throw new HttpError(413, "Body too large.");
+    chunks.push(item);
+  }
+  if (!chunks.length) return {};
+  try {
+    const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error("Body must be an object.");
+    const body = parsed as Record<string, unknown>;
+    if (Object.hasOwn(body, "ownerScope"))
+      throw new HttpError(
+        400,
+        "ownerScope is derived by the local API and must not be supplied.",
+      );
+    return body;
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    throw new HttpError(
+      400,
+      `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+function required(body: Record<string, unknown>, key: string) {
+  const item = body[key];
+  if (typeof item !== "string" || !item)
+    throw new HttpError(400, `${key} must be a non-empty string.`);
+  return item;
+}
+function any(body: Record<string, unknown>, key: string) {
+  const item = body[key];
+  if (typeof item !== "string")
+    throw new HttpError(400, `${key} must be a string.`);
+  return item;
+}
+function optional(body: Record<string, unknown>, key: string) {
+  const item = body[key];
+  if (item === undefined || item === null) return undefined;
+  if (typeof item !== "string")
+    throw new HttpError(400, `${key} must be a string.`);
+  return item;
+}
+function requiredWorkspace(body: Record<string, unknown>) {
+  const item = body.workspacePath ?? body.worldPath;
+  if (typeof item !== "string" || !item)
+    throw new HttpError(400, "workspacePath is required.");
+  return item;
+}
+function strings(body: Record<string, unknown>, key: string) {
+  const item = body[key];
+  if (item === undefined) return [];
+  if (!Array.isArray(item) || !item.every((value) => typeof value === "string"))
+    throw new HttpError(400, `${key} must be strings.`);
+  return item as string[];
+}
+function requiredStrings(body: Record<string, unknown>, key: string) {
+  if (!Object.hasOwn(body, key))
+    throw new HttpError(400, `${key} is required.`);
+  return strings(body, key);
+}
+function audienceChangeArray(body: Record<string, unknown>) {
+  const values = records(body, "audienceChanges");
+  return values.map((item) => ({
+    actorId: required(item, "actorId"),
+    action: choice(item, "action", [
+      "add",
+      "remove",
+      "deactivate",
+      "reactivate",
+    ]),
+    reason: optional(item, "reason") || null,
+  }));
+}
+function accessChangeArray(body: Record<string, unknown>) {
+  const values = records(body, "accessChanges");
+  return values.map((item) => ({
+    action: choice(item, "action", ["grant", "revoke"]),
+    member: required(item, "member"),
+    container: required(item, "container"),
+    reason: optional(item, "reason") || null,
+  }));
+}
+function records(
+  body: Record<string, unknown>,
+  key: string,
+): Record<string, unknown>[] {
+  const item = body[key];
+  if (item === undefined) return [];
+  if (
+    !Array.isArray(item) ||
+    !item.every(
+      (value) => value && typeof value === "object" && !Array.isArray(value),
+    )
+  )
+    throw new HttpError(400, `${key} must be an array of objects.`);
+  return item as Record<string, unknown>[];
+}
+function choice<const T extends string>(
+  body: Record<string, unknown>,
+  key: string,
+  choices: readonly T[],
+) {
+  const item = required(body, key);
+  if (!choices.includes(item as T))
+    throw new HttpError(400, `${key} is invalid.`);
+  return item as T;
+}
+function requiredSearch(url: URL, key: string) {
+  const item = url.searchParams.get(key);
+  if (!item) throw new HttpError(400, `${key} is required.`);
+  return item;
+}
+function send(response: ServerResponse, status: number, item: unknown) {
   response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
-    "content-length": Buffer.byteLength(body)
   });
-  response.end(body);
+  response.end(JSON.stringify(item, null, 2));
 }
-
-function setCorsHeaders(response: ServerResponse): void {
-  response.setHeader("access-control-allow-origin", "*");
+function sendError(response: ServerResponse, error: unknown) {
+  const status =
+    error instanceof HttpError
+      ? error.status
+      : error instanceof BranchConflictError ||
+          error instanceof CommandIdentityError
+        ? 409
+        : error instanceof DomainNotFoundError
+          ? 404
+          : error instanceof DomainValidationError
+            ? 400
+            : 500;
+  send(response, status, {
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+function validateLocalBoundary(
+  request: IncomingMessage,
+  response: ServerResponse,
+  method: string,
+  options: LocalApiOptions,
+): void {
+  response.setHeader("vary", "Origin");
+  const origin = request.headers.origin;
+  const allowedOrigins = new Set(
+    options.allowedOrigins || DEFAULT_ALLOWED_ORIGINS,
+  );
+  if (origin) {
+    if (!allowedOrigins.has(origin))
+      throw new HttpError(403, `Origin is not allowed: ${origin}`);
+    response.setHeader("access-control-allow-origin", origin);
+  }
   response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
   response.setHeader("access-control-allow-headers", "content-type");
+  if (method !== "OPTIONS" && isJsonMutation(method)) {
+    const contentType = request.headers["content-type"]
+      ?.split(";", 1)[0]
+      ?.trim()
+      .toLowerCase();
+    if (contentType !== "application/json")
+      throw new HttpError(
+        415,
+        "State-changing requests require Content-Type: application/json.",
+      );
+  }
 }
-
-function sendError(response: ServerResponse, error: unknown): void {
-  const status = error instanceof HttpError ? error.status : 500;
-  const message = error instanceof Error ? error.message : String(error);
-  const code = error instanceof DoxveltGenerationError ? "generation_failed" : "request_failed";
-  sendJson(response, status, { error: { code, message } });
+function isJsonMutation(method: string): boolean {
+  return ["POST", "PUT", "PATCH", "DELETE"].includes(method);
 }
-
-function jsonReplacer(_key: string, value: unknown): unknown {
-  return typeof value === "bigint" ? Number(value) : value;
+function end(response: ServerResponse, status: number) {
+  response.writeHead(status);
+  response.end();
 }
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 class HttpError extends Error {
-  status: number;
-
+  readonly status: number;
   constructor(status: number, message: string) {
     super(message);
     this.status = status;

@@ -1,767 +1,647 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { DoxveltGenerationError, generateDoxveltObject, generateDoxveltText } from "../ai/generate.ts";
+import { generateDoxveltText } from "../ai/generate.ts";
 import { resolveCurrentBeliefs } from "../core/beliefs.ts";
+import {
+  closeBranchEpisode,
+  type EpisodeClosureGenerator,
+} from "../core/branch-episode.ts";
+import {
+  assertExpectedBranchHead,
+  commitManualTurn,
+  commitRuntimeEffects,
+  editAcceptedMessage,
+  forkBranch,
+  inspectActorContext,
+  LOCAL_OWNER_SCOPE,
+  projectBranch,
+  regenerateAcceptedResponse,
+  stageWhisper,
+  startBranchSimulation,
+} from "../core/branch-kernel.ts";
 import { compileWorkspace } from "../core/compiler.ts";
 import { resolveBeliefAccess } from "../core/context.ts";
-import { advanceTurn, buildActorContext, startSimulation, type StartSimulationResult } from "../core/engine.ts";
-import { closeEpisode, type EpisodeClosureGenerator } from "../core/episode.ts";
 import { initWorkspace } from "../core/init.ts";
 import { loadModelRecord } from "../core/models.ts";
-import { exportSimulationPackage, importSimulationPackage } from "../core/portable.ts";
-import type { ActorContext, EntityRecord } from "../core/types.ts";
-import { openRuntimeStore, type RuntimeStore } from "../store/sqlite.ts";
+import {
+  exportSimulationPackage,
+  importSimulationPackage,
+} from "../store/portable.ts";
+import type { ActorContext } from "../core/types.ts";
+import {
+  openBranchStore,
+  type SqliteSimulationRepository,
+} from "../store/branch-sqlite.ts";
 
 async function main() {
-  const [command, ...args] = process.argv.slice(2);
-
+  const [name, ...args] = process.argv.slice(2);
   try {
-    if (!command || command === "help" || command === "--help" || command === "-h") {
-      printHelp();
-      return;
+    if (!name || ["help", "--help", "-h"].includes(name)) return help();
+    if (name === "init") return init(args);
+    if (name === "compile") return compile(args);
+    if (name === "export")
+      return print(
+        await exportSimulationPackage({
+          dbPath: db(args),
+          ownerScope: owner(args),
+          simulationId: simulation(args),
+          targetDir: requiredPositional(args, "target directory"),
+        }),
+        json(args),
+      );
+    if (name === "import")
+      return print(
+        await importSimulationPackage({
+          packageDir: requiredPositional(args, "package directory"),
+          targetSourceDir: required(args, "--world"),
+          targetDbPath: db(args),
+        }),
+        json(args),
+      );
+    const commands: Record<
+      string,
+      (
+        args: string[],
+        store: SqliteSimulationRepository,
+      ) => Promise<unknown> | unknown
+    > = {
+      start,
+      actors,
+      access,
+      audience,
+      whisper,
+      context,
+      turn,
+      draft,
+      edit,
+      regenerate,
+      fork,
+      transcript,
+      memories,
+      beliefs,
+      "close-episode": closeEpisode,
+    };
+    const command = commands[name];
+    if (!command) throw new CliError(`Unknown command: ${name}`);
+    const store = await openBranchStore(db(args)).open();
+    try {
+      const result = await command(args, store);
+      if (result !== undefined) print(result, json(args));
+    } finally {
+      store.close();
     }
-
-    if (command === "init") return await initCommand(args);
-    if (command === "compile") return await compileCommand(args);
-    if (command === "start") return await startCommand(args);
-    if (command === "export") return await exportCommand(args);
-    if (command === "import") return await importCommand(args);
-    if (command === "actors") return await actorsCommand(args);
-    if (command === "access") return await accessCommand(args);
-    if (command === "audience") return await audienceCommand(args);
-    if (command === "whisper") return await whisperCommand(args);
-    if (command === "context") return await contextCommand(args);
-    if (command === "turn") return await turnCommand(args);
-    if (command === "transcript") return await transcriptCommand(args);
-    if (command === "memories") return await memoriesCommand(args);
-    if (command === "beliefs") return await beliefsCommand(args);
-    if (command === "close-episode") return await closeEpisodeCommand(args);
-
-    throw new CliError(`Unknown command: ${command}`, 1);
   } catch (error) {
-    if (error instanceof CliError) {
-      console.error(error.message);
-      process.exit(error.exitCode);
-    }
-
-    if (error instanceof DoxveltGenerationError) {
-      console.error(error.message);
-      process.exit(1);
-    }
-
-    const detail = error instanceof Error ? error.stack || error.message : String(error);
-    console.error(detail);
-    process.exit(1);
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
   }
 }
 
-async function initCommand(args: string[]): Promise<void> {
-  const target = positionalArgs(args)[0] || "workspaces/demo";
-  const template = optionValue(args, "--template") || null;
-  if (existsSync(path.resolve(target))) {
-    throw new CliError(`Target already exists: ${target}`, 1);
-  }
-
-  const result = await initWorkspace(target, { template });
+async function init(args: string[]) {
+  const target = positional(args)[0] || "workspaces/demo";
+  if (existsSync(path.resolve(target)))
+    throw new CliError(`Target already exists: ${target}`);
   print(
-    {
-      message: template ? `Initialized Doxvelt workspace source from ${template}.` : "Initialized Doxvelt workspace scaffold.",
-      root: result.root,
-      template
-    },
-    hasFlag(args, "--json")
+    await initWorkspace(target, {
+      template: value(args, "--template") || null,
+    }),
+    json(args),
   );
 }
-
-async function compileCommand(args: string[]): Promise<void> {
-  const workspacePath = positionalArgs(args)[0] || "workspaces/demo";
-  const compiled = await compileWorkspace(workspacePath);
-  print(compiled, hasFlag(args, "--json"));
-}
-
-async function startCommand(args: string[]): Promise<void> {
-  const workspacePath = positionalArgs(args)[0] || "workspaces/demo";
-  const scenarioId = optionValue(args, "--scenario") || "default";
-  const simulationId = optionValue(args, "--simulation") || "default";
-  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const store = await openRuntimeStore(dbPath).open();
-  let result: StartSimulationResult;
-
-  try {
-    result = await startSimulation({
-      store,
-      workspacePath,
-      simulationId,
-      scenarioId
-    });
-  } finally {
-    store.close();
-  }
-
+async function compile(args: string[]) {
   print(
-    {
-      message: "Started Doxvelt simulation.",
-      simulationId,
-      scenarioId,
-      dbPath: path.resolve(dbPath),
-      actors: result.actors.map((entity) => entity.id)
-    },
-    hasFlag(args, "--json")
+    await compileWorkspace(positional(args)[0] || "workspaces/demo"),
+    json(args),
   );
 }
-
-async function exportCommand(args: string[]): Promise<void> {
-  const targetDir = positionalArgs(args)[0];
-  if (!targetDir) throw new CliError("Usage: doxvelt export <target-dir> [--simulation <id>] [--db <path>] [--json]", 1);
-
-  const simulationId = optionValue(args, "--simulation") || "default";
-  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const result = await exportSimulationPackage({ dbPath, simulationId, targetDir });
-  print(
-    {
-      message: "Exported Doxvelt simulation package.",
-      ...result
-    },
-    hasFlag(args, "--json")
-  );
-}
-
-async function importCommand(args: string[]): Promise<void> {
-  const packageDir = positionalArgs(args)[0];
-  if (!packageDir) {
-    throw new CliError("Usage: doxvelt import <package-dir> --world <target-source-dir> --db <target-db-path> [--json]", 1);
-  }
-
-  const targetSourceDir = optionValue(args, "--world");
-  const targetDbPath = optionValue(args, "--db");
-  if (!targetSourceDir || !targetDbPath) {
-    throw new CliError("Use doxvelt import with --world <target-source-dir> and --db <target-db-path>.", 1);
-  }
-
-  const result = await importSimulationPackage({
-    packageDir,
-    targetSourceDir,
-    targetDbPath
+async function start(args: string[], store: SqliteSimulationRepository) {
+  const result = await startBranchSimulation(store, {
+    ownerScope: owner(args),
+    simulationId: simulation(args),
+    workspacePath: positional(args)[0] || "workspaces/demo",
+    scenarioId: value(args, "--scenario") || "default",
+    branchId: value(args, "--branch") || "main",
+    commandId: required(args, "--command"),
   });
-  print(
-    {
-      message: "Imported Doxvelt simulation package.",
-      ...result
-    },
-    hasFlag(args, "--json")
-  );
-}
-
-async function actorsCommand(args: string[]): Promise<void> {
-  const simulationId = optionValue(args, "--simulation") || "default";
-  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    const actors = store.listActors(simulationId);
-    print({ simulationId, actors }, hasFlag(args, "--json"));
-  } finally {
-    store.close();
-  }
-}
-
-async function accessCommand(args: string[]): Promise<void> {
-  const [action, member, container] = positionalArgs(args);
-  if (action !== "grant" && action !== "revoke" && action !== "list") {
-    throw new CliError("Usage: doxvelt access (grant|revoke|list) [member-id] [container-id] [--reason <text>] [--json]", 1);
-  }
-
-  const simulationId = optionValue(args, "--simulation") || "default";
-  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    const simulation = store.getSimulation(simulationId);
-    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
-
-    if (action === "list") {
-      print(
-        {
-          simulationId,
-          accessEvents: store.listRuntimeAccessEvents(simulationId),
-          effectiveAccessLinks: store.listEffectiveAccessLinks(simulationId)
-        },
-        hasFlag(args, "--json")
-      );
-      return;
-    }
-
-    if (!member || !container) {
-      throw new CliError(`Usage: doxvelt access ${action} <member-id> <container-id> [--reason <text>] [--json]`, 1);
-    }
-
-    const event = store.appendRuntimeAccessEvent({
-      simulationId,
-      action,
-      member,
-      container,
-      reason: optionValue(args, "--reason") || null,
-      turnId: numericOptionValue(args, "--turn"),
-      episodeId: numericOptionValue(args, "--episode")
-    });
-
-    print(
-      {
-        message: `${action === "grant" ? "Granted" : "Revoked"} @${member} member access ${action === "grant" ? "to" : "from"} @${container}.`,
-        event,
-        effectiveAccessLinks: store.listEffectiveAccessLinks(simulationId)
-      },
-      hasFlag(args, "--json")
-    );
-  } finally {
-    store.close();
-  }
-}
-
-async function audienceCommand(args: string[]): Promise<void> {
-  const [action, actorId] = positionalArgs(args);
-  if (action !== "add" && action !== "remove" && action !== "deactivate" && action !== "reactivate" && action !== "list") {
-    throw new CliError("Usage: doxvelt audience (add|remove|deactivate|reactivate|list) [actor-id] [--reason <text>] [--json]", 1);
-  }
-
-  const simulationId = optionValue(args, "--simulation") || "default";
-  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    const simulation = store.getSimulation(simulationId);
-    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
-
-    if (action === "list") {
-      print(
-        {
-          simulationId,
-          audienceEvents: store.listAudienceEvents(simulationId),
-          audienceMembers: store.listAudienceMembers(simulationId),
-          activeAudience: store.listActiveAudienceIds(simulationId)
-        },
-        hasFlag(args, "--json")
-      );
-      return;
-    }
-
-    if (!actorId) {
-      throw new CliError(`Usage: doxvelt audience ${action} <actor-id> [--reason <text>] [--json]`, 1);
-    }
-
-    const event = store.appendAudienceEvent({
-      simulationId,
-      actorId,
-      action,
-      reason: optionValue(args, "--reason") || null,
-      turnId: numericOptionValue(args, "--turn"),
-      episodeId: numericOptionValue(args, "--episode")
-    });
-
-    print(
-      {
-        message: `Recorded audience ${action} for @${actorId}.`,
-        event,
-        audienceMembers: store.listAudienceMembers(simulationId),
-        activeAudience: store.listActiveAudienceIds(simulationId)
-      },
-      hasFlag(args, "--json")
-    );
-  } finally {
-    store.close();
-  }
-}
-
-async function whisperCommand(args: string[]): Promise<void> {
-  const actionOrActor = positionalArgs(args)[0];
-  const simulationId = optionValue(args, "--simulation") || "default";
-  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    const simulation = store.getSimulation(simulationId);
-    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
-
-    if (actionOrActor === "list") {
-      print(
-        {
-          simulationId,
-          stageWhispers: store.listStageWhispers(simulationId)
-        },
-        hasFlag(args, "--json")
-      );
-      return;
-    }
-
-    const targetActorId = actionOrActor;
-    const text = optionValue(args, "--text");
-    if (!targetActorId || !text) {
-      throw new CliError("Usage: doxvelt whisper <actor-id> --text <text> [--simulation <id>] [--db <path>] [--json]", 1);
-    }
-
-    const whisper = store.createStageWhisper({
-      simulationId,
-      targetActorId,
-      text
-    });
-
-    print(
-      {
-        message: `Stored private stage whisper for @${targetActorId}.`,
-        whisper
-      },
-      hasFlag(args, "--json")
-    );
-  } finally {
-    store.close();
-  }
-}
-
-async function contextCommand(args: string[]): Promise<void> {
-  const actorId = positionalArgs(args)[0];
-  if (!actorId) throw new CliError("Usage: doxvelt context <actor-id> [--json]", 1);
-
-  const simulationId = optionValue(args, "--simulation") || "default";
-  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    const simulation = store.getSimulation(simulationId);
-    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
-
-    const context = buildActorContext({
-      store,
-      simulationId,
-      actorId
-    });
-
-    print(context, hasFlag(args, "--json"));
-  } finally {
-    store.close();
-  }
-}
-
-async function turnCommand(args: string[]): Promise<void> {
-  const actorId = positionalArgs(args)[0];
-  if (!actorId) throw new CliError("Usage: doxvelt turn <actor-id> (--manual <text> | --ai --model <id>)", 1);
-
-  const simulationId = optionValue(args, "--simulation") || "default";
-  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    const isAiTurn = hasFlag(args, "--ai");
-    const manualText = optionValue(args, "--manual");
-    if (!manualText && !isAiTurn) {
-      throw new CliError("Use --manual <text> or --ai --model <id>.", 1);
-    }
-
-    const result = await advanceTurn({
-      store,
-      simulationId,
-      actorId,
-      whisperText: optionValue(args, "--whisper") || null,
-      audience: parseAudienceOption(optionValue(args, "--audience")),
-      ...(manualText === undefined ? {} : { manualText }),
-      ...(isAiTurn ? { generateText: async ({ context }: { context: ActorContext }) => generateAiTurnText({ args, actorId, context }) } : {})
-    });
-
-    print(
-      {
-        message: `Appended ${isAiTurn ? "AI" : "manual"} turn.`,
-        turn: result.turn,
-        consumedStageWhispers: result.consumedStageWhispers
-      },
-      hasFlag(args, "--json")
-    );
-  } finally {
-    store.close();
-  }
-}
-
-async function transcriptCommand(args: string[]): Promise<void> {
-  const simulationId = optionValue(args, "--simulation") || "default";
-  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    const simulation = store.getSimulation(simulationId);
-    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
-    print({ simulationId, transcript: store.listTranscript(simulationId) }, hasFlag(args, "--json"));
-  } finally {
-    store.close();
-  }
-}
-
-async function memoriesCommand(args: string[]): Promise<void> {
-  const simulationId = optionValue(args, "--simulation") || "default";
-  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    const simulation = store.getSimulation(simulationId);
-    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
-    print(
-      {
-        simulationId,
-        memories: store.listEpisodeMemories(simulationId),
-        longTermMemories: store.listLongTermMemories(simulationId)
-      },
-      hasFlag(args, "--json")
-    );
-  } finally {
-    store.close();
-  }
-}
-
-async function beliefsCommand(args: string[]): Promise<void> {
-  const actorId = positionalArgs(args)[0];
-  const simulationId = optionValue(args, "--simulation") || "default";
-  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    const simulation = store.getSimulation(simulationId);
-    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
-
-    if (actorId) {
-      const actor = store.getCompiledRecord<EntityRecord>(simulationId, "entity", actorId);
-      if (!actor) throw new CliError(`Actor not found: ${actorId}`, 1);
-
-      const beliefAccess = resolveBeliefAccess(
-        actorId,
-        store.listBeliefHistory(simulationId),
-        store.listEffectiveAccessLinks(simulationId)
-      );
-      const resolution = resolveCurrentBeliefs(beliefAccess);
-      print(
-        {
-          simulationId,
-          actorId,
-          currentBeliefs: resolution.current,
-          conflictingBeliefs: resolution.conflicting,
-          supersededBeliefs: resolution.superseded,
-          groups: resolution.groups
-        },
-        hasFlag(args, "--json")
-      );
-      return;
-    }
-
-    print({ simulationId, beliefs: store.listBeliefHistory(simulationId) }, hasFlag(args, "--json"));
-  } finally {
-    store.close();
-  }
-}
-
-async function closeEpisodeCommand(args: string[]): Promise<void> {
-  const simulationId = optionValue(args, "--simulation") || "default";
-  const dbPath = optionValue(args, "--db") || ".doxvelt/runtime.sqlite";
-  const label = optionValue(args, "--label") || null;
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    const simulation = store.getSimulation(simulationId);
-    if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
-
-    const generator = hasFlag(args, "--ai")
-      ? await createAiEpisodeClosureGenerator({ args, simulationId, store })
-      : null;
-    const closure = generator
-      ? await closeEpisode({ store, simulationId, label, generator })
-      : await closeEpisode({ store, simulationId, label });
-    print({ message: `Closed ${generator ? "AI" : "deterministic"} episode.`, ...closure }, hasFlag(args, "--json"));
-  } finally {
-    store.close();
-  }
-}
-
-async function generateAiTurnText({
-  args,
-  actorId,
-  context
-}: {
-  args: string[];
-  actorId: string;
-  context: ActorContext;
-}): Promise<string> {
-  const modelId = optionValue(args, "--model");
-  if (!modelId) throw new CliError("Use --ai with --model <id>.", 1);
-
-  const model = await loadModelRecord(context.simulation.sourceRoot, modelId);
-  if (!model) throw new CliError(`Model not found: ${modelId}`, 1);
-
-  const result = await generateDoxveltText({
-    actorId,
-    purpose: "turn",
-    model,
-    prompt: context.promptPreview
-  });
-
-  return result.text;
-}
-
-async function createAiEpisodeClosureGenerator({
-  args,
-  simulationId,
-  store
-}: {
-  args: string[];
-  simulationId: string;
-  store: RuntimeStore;
-}): Promise<EpisodeClosureGenerator> {
-  const modelId = optionValue(args, "--model");
-  if (!modelId) throw new CliError("Use close-episode --ai with --model <id>.", 1);
-
-  const simulation = store.getSimulation(simulationId);
-  if (!simulation) throw new CliError(`Simulation not found: ${simulationId}`, 1);
-
-  const model = await loadModelRecord(simulation.sourceRoot, modelId);
-  if (!model) throw new CliError(`Model not found: ${modelId}`, 1);
-
   return {
-    async writeMemory({ actor, context, label }) {
-      const prompt = [
-        "Write one Doxvelt episode memory for the actor below.",
-        "The memory must be subjective: use only the actor's accessible context and transcript.",
-        "Write in the actor's own first-person perspective. Include feelings, interpretations, uncertainty, and what now matters to them.",
-        "Do not reveal objective truth the actor could not access. Do not list bullet points.",
-        label ? `Episode label: ${label}` : "Episode label: unlabeled",
-        "",
-        context.promptPreview
-      ].join("\n");
-
-      const result = await generateDoxveltText({
-        actorId: actor.id,
-        purpose: "memory",
-        model,
-        prompt
-      });
-
-      return result.text.trim();
+    message: "Started Doxvelt branch simulation.",
+    simulationId: result.simulation.id,
+    scenarioId: result.simulation.scenarioId,
+    branch: result.branch,
+    head: result.root.id,
+    contentRevisionId: result.contentRevision.id,
+    actors: result.compiled.entities
+      .filter((item) => item.kind !== "artifact")
+      .map((item) => item.id),
+  };
+}
+function actors(args: string[], store: SqliteSimulationRepository) {
+  const content = revision(args, store);
+  return {
+    simulationId: simulation(args),
+    actors: content.compiled.entities.filter(
+      (item) => item.kind !== "artifact",
+    ),
+  };
+}
+function access(args: string[], store: SqliteSimulationRepository) {
+  const [action, member, container] = positional(args);
+  if (!action || action === "list") {
+    const p = projection(args, store);
+    return {
+      simulationId: simulation(args),
+      branch: p.branch,
+      accessEvents: p.commits
+        .flatMap((item) => item.events)
+        .filter((item) => item.type === "access_changed"),
+      effectiveAccessLinks: p.accessLinks,
+    };
+  }
+  if ((action !== "grant" && action !== "revoke") || !member || !container)
+    throw new CliError(
+      "Usage: access (grant|revoke|list) [member] [container]",
+    );
+  const result = commitRuntimeEffects(store, {
+    ...envelope(args),
+    payload: {
+      accessChanges: [
+        { action, member, container, reason: value(args, "--reason") || null },
+      ],
     },
-    async writeLongTermMemory({ actor, context, memory }) {
-      const result = await generateDoxveltText({
-        actorId: actor.id,
-        purpose: "memory",
-        model,
-        prompt: [
-          "Decide whether this Doxvelt episode memory should create one long-term memory for the actor.",
-          "If it should, write one concise first-person long-term memory that can guide future behavior.",
-          "If nothing is durable enough to preserve, return an empty response.",
-          "Do not reveal objective truth the actor could not access.",
-          "",
-          context.promptPreview,
-          "",
-          "# Episode Memory",
-          memory.text
-        ].join("\n")
-      });
-
-      return result.text.trim() || null;
+  });
+  return {
+    message: `Recorded access ${action}.`,
+    ...result,
+    effectiveAccessLinks: projectBranch(store, query(args, store)).accessLinks,
+  };
+}
+function audience(args: string[], store: SqliteSimulationRepository) {
+  const [action, actorId] = positional(args);
+  if (!action || action === "list") {
+    const p = projection(args, store);
+    return {
+      simulationId: simulation(args),
+      branch: p.branch,
+      audienceEvents: p.commits
+        .flatMap((item) => item.events)
+        .filter((item) => item.type === "audience_changed"),
+      audienceMembers: p.audience,
+      activeAudience: p.audience
+        .filter((item) => item.status === "active")
+        .map((item) => item.actorId),
+    };
+  }
+  if (
+    !(["add", "remove", "deactivate", "reactivate"] as string[]).includes(
+      action,
+    ) ||
+    !actorId
+  )
+    throw new CliError(
+      "Usage: audience (add|remove|deactivate|reactivate|list) [actor]",
+    );
+  const result = commitRuntimeEffects(store, {
+    ...envelope(args),
+    payload: {
+      audienceChanges: [
+        {
+          actorId,
+          action: action as "add" | "remove" | "deactivate" | "reactivate",
+          reason: value(args, "--reason") || null,
+        },
+      ],
     },
-    async extractBeliefs({ actor, memory }) {
-      const result = await generateDoxveltObject<BeliefExtractionOutput>({
-        actorId: actor.id,
-        purpose: "belief_extraction",
-        model,
-        schemaName: "episode_belief_extraction",
-        schemaDescription: "Subjective beliefs extracted from one actor-written Doxvelt episode memory.",
-        schema: beliefExtractionSchema,
-        prompt: [
-          "Extract subjective belief candidates from this Doxvelt episode memory.",
-          "Only extract beliefs the actor appears to hold after writing the memory.",
-          "Use strength values from this exact scale: +3 treats as true, +1 suspects true, 0 neutral, -1 doubts, -3 treats as false.",
-          "Write propositionText as a concise claim, preserving @entity handles when present.",
-          "Return an empty beliefs array if the memory contains no meaningful belief change.",
-          "",
-          `Actor: ${actor.name} (${actor.id})`,
-          "",
-          "# Memory",
-          memory.text
-        ].join("\n")
-      });
-
-      return result.output.beliefs.map((belief) => ({
-        strength: belief.strength,
-        propositionText: belief.propositionText.trim()
-      }));
-    }
+  });
+  const p = projectBranch(store, query(args, store));
+  return {
+    message: `Recorded audience ${action}.`,
+    ...result,
+    audienceMembers: p.audience,
+    activeAudience: p.audience
+      .filter((item) => item.status === "active")
+      .map((item) => item.actorId),
+  };
+}
+function whisper(args: string[], store: SqliteSimulationRepository) {
+  const actorId = positional(args)[0];
+  if (actorId === "list") {
+    const actor = value(args, "--actor");
+    if (!actor) throw new CliError("whisper list requires --actor");
+    const e = envelope(args);
+    return {
+      stageWhispers: store.listPendingStageWhispers(
+        e.ownerScope,
+        e.simulationId,
+        e.branchId,
+        e.expectedHead,
+        actor,
+      ),
+    };
+  }
+  if (!actorId) throw new CliError("whisper requires an actor");
+  const e = envelope(args);
+  const staged = stageWhisper(store, {
+    ...e,
+    targetActorId: actorId,
+    text: required(args, "--text"),
+  });
+  return {
+    message: `Staged private direction for @${actorId}.`,
+    whisper: staged,
+  };
+}
+function context(args: string[], store: SqliteSimulationRepository) {
+  const actorId = positional(args)[0];
+  if (!actorId) throw new CliError("context requires an actor");
+  const q = query(args, store);
+  const pending = store.listPendingStageWhispers(
+    q.ownerScope,
+    q.simulationId,
+    q.branchId,
+    q.head ||
+      store.getBranch(q.ownerScope, q.simulationId, q.branchId)!.headCommitId,
+    actorId,
+  );
+  return inspectActorContext(store, { ...q, actorId, stageWhispers: pending });
+}
+async function turn(args: string[], store: SqliteSimulationRepository) {
+  const actorId = positional(args)[0];
+  if (!actorId) throw new CliError("turn requires an actor");
+  const e = envelope(args);
+  if (flag(args, "--ai"))
+    throw new CliError(
+      "Model output must be generated with draft and accepted separately with turn --manual.",
+    );
+  assertExpectedBranchHead(store, e);
+  const p = projectBranch(store, {
+    ownerScope: e.ownerScope,
+    simulationId: e.simulationId,
+    branchId: e.branchId,
+    head: e.expectedHead,
+  });
+  const audienceIds =
+    parseAudience(value(args, "--audience")) ||
+    p.audience
+      .filter((item) => item.status === "active")
+      .map((item) => item.actorId);
+  const pending = store.listPendingStageWhispers(
+    e.ownerScope,
+    e.simulationId,
+    e.branchId,
+    e.expectedHead,
+    actorId,
+  );
+  const actorContext = inspectActorContext(store, {
+    ownerScope: e.ownerScope,
+    simulationId: e.simulationId,
+    branchId: e.branchId,
+    head: e.expectedHead,
+    actorId,
+    audience: audienceIds,
+    stageWhispers: pending,
+  });
+  const text = required(args, "--manual");
+  const result = commitManualTurn(store, {
+    ...e,
+    payload: {
+      actorId,
+      text,
+      audience: audienceIds,
+      stageWhisper: value(args, "--whisper") || null,
+      ...(args.includes("--whisper-ids")
+        ? { stageWhisperIds: parseAudience(value(args, "--whisper-ids")) || [] }
+        : {}),
+    },
+  });
+  return {
+    message: "Committed manual turn.",
+    turn: projectBranch(store, query(args, store)).transcript.at(-1),
+    commit: result.commit,
+    consumedStageWhispers: result.commit.events.filter(
+      (item) => item.type === "stage_whisper_consumed",
+    ),
+  };
+}
+async function draft(args: string[], store: SqliteSimulationRepository) {
+  const actorId = positional(args)[0];
+  if (!actorId) throw new CliError("draft requires an actor");
+  const ownerScope = owner(args);
+  const simulationId = simulation(args);
+  const branchId = required(args, "--branch");
+  const expectedHead = required(args, "--expected-head");
+  assertExpectedBranchHead(store, {
+    ownerScope,
+    simulationId,
+    branchId,
+    expectedHead,
+  });
+  const projection = projectBranch(store, {
+    ownerScope,
+    simulationId,
+    branchId,
+    head: expectedHead,
+  });
+  const audience =
+    parseAudience(value(args, "--audience")) ||
+    projection.audience
+      .filter((item) => item.status === "active")
+      .map((item) => item.actorId);
+  const stageWhispers = store.listPendingStageWhispers(
+    ownerScope,
+    simulationId,
+    branchId,
+    expectedHead,
+    actorId,
+  );
+  const inlineWhisper = value(args, "--whisper");
+  if (inlineWhisper)
+    stageWhispers.push({
+      id: "draft-inline",
+      ownerScope,
+      simulationId,
+      branchId,
+      expectedHead,
+      commandId: "draft-inline",
+      targetActorId: actorId,
+      text: inlineWhisper,
+      createdAt: new Date().toISOString(),
+    });
+  const actorContext = inspectActorContext(store, {
+    ownerScope,
+    simulationId,
+    branchId,
+    head: expectedHead,
+    actorId,
+    audience,
+    stageWhispers,
+  });
+  const text = await generateTurn(args, actorId, actorContext);
+  return {
+    simulationId,
+    branchId,
+    head: expectedHead,
+    actorId,
+    modelId: required(args, "--model"),
+    text: text.trim(),
+    stageWhisperIds: stageWhispers
+      .filter((whisper) => whisper.id !== "draft-inline")
+      .map((whisper) => String(whisper.id)),
+    context: actorContext,
+  };
+}
+function edit(args: string[], store: SqliteSimulationRepository) {
+  const actorId = positional(args)[0];
+  if (!actorId) throw new CliError("edit requires an actor");
+  const e = envelope(args);
+  return editAcceptedMessage(store, {
+    ownerScope: e.ownerScope,
+    simulationId: e.simulationId,
+    sourceBranchId: e.branchId,
+    expectedHead: e.expectedHead,
+    commandId: e.commandId,
+    sourceCommitId: required(args, "--source-commit"),
+    branchId: required(args, "--new-branch"),
+    payload: {
+      actorId,
+      text: required(args, "--manual"),
+      audience: parseAudience(value(args, "--audience")) || [],
+    },
+  });
+}
+function regenerate(args: string[], store: SqliteSimulationRepository) {
+  const actorId = positional(args)[0];
+  if (!actorId) throw new CliError("regenerate requires an actor");
+  const e = envelope(args);
+  return regenerateAcceptedResponse(store, {
+    ownerScope: e.ownerScope,
+    simulationId: e.simulationId,
+    sourceBranchId: e.branchId,
+    expectedHead: e.expectedHead,
+    commandId: e.commandId,
+    sourceCommitId: required(args, "--source-commit"),
+    branchId: required(args, "--new-branch"),
+    payload: {
+      actorId,
+      text: required(args, "--manual"),
+      audience: parseAudience(value(args, "--audience")) || [],
+    },
+  });
+}
+function fork(args: string[], store: SqliteSimulationRepository) {
+  return forkBranch(store, {
+    ownerScope: owner(args),
+    simulationId: simulation(args),
+    sourceBranchId: required(args, "--branch"),
+    expectedHead: required(args, "--expected-head"),
+    atCommitId: required(args, "--at"),
+    branchId: required(args, "--new-branch"),
+    commandId: required(args, "--command"),
+    name: value(args, "--name") || null,
+  });
+}
+function transcript(args: string[], store: SqliteSimulationRepository) {
+  const p = projection(args, store);
+  return {
+    simulationId: simulation(args),
+    branch: p.branch,
+    transcript: p.transcript,
+  };
+}
+function memories(args: string[], store: SqliteSimulationRepository) {
+  const p = projection(args, store);
+  return {
+    simulationId: simulation(args),
+    branch: p.branch,
+    memories: p.episodeMemories,
+    longTermMemories: p.longTermMemories,
+  };
+}
+function beliefs(args: string[], store: SqliteSimulationRepository) {
+  const actorId = positional(args)[0];
+  const p = projection(args, store);
+  if (!actorId)
+    return {
+      simulationId: simulation(args),
+      branch: p.branch,
+      beliefs: p.beliefs,
+    };
+  const resolution = resolveCurrentBeliefs(
+    resolveBeliefAccess(actorId, p.beliefs, p.accessLinks),
+  );
+  return {
+    simulationId: simulation(args),
+    branch: p.branch,
+    actorId,
+    currentBeliefs: resolution.current,
+    conflictingBeliefs: resolution.conflicting,
+    supersededBeliefs: resolution.superseded,
+    groups: resolution.groups,
+  };
+}
+async function closeEpisode(args: string[], store: SqliteSimulationRepository) {
+  const generator = flag(args, "--ai")
+    ? await aiClosureGenerator(args, store)
+    : undefined;
+  const result = await closeBranchEpisode(
+    store,
+    { ...envelope(args), payload: { label: value(args, "--label") || null } },
+    generator,
+  );
+  return {
+    message: `Closed ${generator ? "AI" : "deterministic"} episode.`,
+    ...result.closure,
+    commit: result.commit,
   };
 }
 
-function printHelp() {
-  console.log(`Doxvelt engine CLI
-
-Usage:
-  doxvelt init [world-path] [--template executive-interviews] [--json]
-  doxvelt compile [world-path] [--json]
-  doxvelt start [world-path] --scenario <id> [--simulation <id>] [--db <path>] [--json]
-  doxvelt export <target-dir> [--simulation <id>] [--db <path>] [--json]
-  doxvelt import <package-dir> --world <target-source-dir> --db <target-db-path> [--json]
-  doxvelt actors [--simulation <id>] [--db <path>] [--json]
-  doxvelt access list [--simulation <id>] [--db <path>] [--json]
-  doxvelt access grant <member-id> <container-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
-  doxvelt access revoke <member-id> <container-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
-  doxvelt audience list [--simulation <id>] [--db <path>] [--json]
-  doxvelt audience add <actor-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
-  doxvelt audience remove <actor-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
-  doxvelt audience deactivate <actor-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
-  doxvelt audience reactivate <actor-id> [--reason <text>] [--turn <id>] [--episode <id>] [--simulation <id>] [--db <path>] [--json]
-  doxvelt whisper <actor-id> --text <text> [--simulation <id>] [--db <path>] [--json]
-  doxvelt whisper list [--simulation <id>] [--db <path>] [--json]
-  doxvelt context <actor-id> [--simulation <id>] [--db <path>] [--json]
-  doxvelt turn <actor-id> --manual <text> [--whisper <text>] [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
-  doxvelt turn <actor-id> --ai --model <id> [--whisper <text>] [--audience <ids>] [--simulation <id>] [--db <path>] [--json]
-  doxvelt transcript [--simulation <id>] [--db <path>] [--json]
-  doxvelt memories [--simulation <id>] [--db <path>] [--json]
-  doxvelt beliefs [actor-id] [--simulation <id>] [--db <path>] [--json]
-  doxvelt close-episode [--label <text>] [--simulation <id>] [--db <path>] [--json]
-  doxvelt close-episode --ai --model <id> [--label <text>] [--simulation <id>] [--db <path>] [--json]
-`);
+async function generateTurn(
+  args: string[],
+  actorId: string,
+  context: ActorContext,
+) {
+  const model = await modelFor(args, context.simulation.sourceRoot);
+  return (
+    await generateDoxveltText({
+      actorId,
+      purpose: "turn",
+      model,
+      prompt: context.promptPreview,
+    })
+  ).text;
 }
-
-function print(value: unknown, asJson: boolean): void {
-  if (asJson) {
-    console.log(JSON.stringify(value, null, 2));
-    return;
+async function aiClosureGenerator(
+  args: string[],
+  store: SqliteSimulationRepository,
+): Promise<EpisodeClosureGenerator> {
+  const sim = store.getSimulation(owner(args), simulation(args));
+  if (!sim) throw new CliError("Simulation not found.");
+  const model = await modelFor(args, sim.sourceRoot);
+  return {
+    async writeMemory({ actor, context }) {
+      return (
+        await generateDoxveltText({
+          actorId: actor.id,
+          purpose: "memory",
+          model,
+          prompt: context.promptPreview,
+        })
+      ).text;
+    },
+    extractBeliefs({ memory }) {
+      return [
+        {
+          strength: 1,
+          propositionText: `@${memory.actorId} treats this episode as meaningful.`,
+        },
+      ];
+    },
+  };
+}
+async function modelFor(args: string[], root: string) {
+  const id = required(args, "--model");
+  const model = await loadModelRecord(root, id);
+  if (!model) throw new CliError(`Model not found: ${id}`);
+  return model;
+}
+function projection(args: string[], store: SqliteSimulationRepository) {
+  return projectBranch(store, query(args, store));
+}
+function query(args: string[], store: SqliteSimulationRepository) {
+  const ownerScope = owner(args);
+  const simulationId = simulation(args);
+  const sim = store.getSimulation(ownerScope, simulationId);
+  if (!sim) throw new CliError(`Simulation not found: ${simulationId}`);
+  const head = value(args, "--head");
+  return {
+    ownerScope,
+    simulationId,
+    branchId: value(args, "--branch") || sim.defaultBranchId,
+    ...(head ? { head } : {}),
+  };
+}
+function envelope(args: string[]) {
+  return {
+    ownerScope: owner(args),
+    simulationId: simulation(args),
+    branchId: required(args, "--branch"),
+    expectedHead: required(args, "--expected-head"),
+    commandId: required(args, "--command"),
+  };
+}
+function revision(args: string[], store: SqliteSimulationRepository) {
+  const sim = store.getSimulation(owner(args), simulation(args));
+  if (!sim) throw new CliError(`Simulation not found: ${simulation(args)}`);
+  const content = store.getContentRevision(owner(args), sim.contentRevisionId);
+  if (!content) throw new Error("Pinned content revision is missing.");
+  return content;
+}
+function value(args: string[], key: string) {
+  const i = args.indexOf(key);
+  return i < 0 ? undefined : args[i + 1];
+}
+function required(args: string[], key: string) {
+  const item = value(args, key);
+  if (!item) throw new CliError(`${key} is required.`);
+  return item;
+}
+function flag(args: string[], key: string) {
+  return args.includes(key);
+}
+function positional(args: string[]) {
+  const result: string[] = [];
+  const boolean = new Set(["--json", "--ai"]);
+  for (let i = 0; i < args.length; i += 1) {
+    const item = args[i]!;
+    if (item.startsWith("--")) {
+      if (!boolean.has(item)) i += 1;
+    } else result.push(item);
   }
-
-  if (!isPrintableRecord(value)) {
-    console.log(JSON.stringify(value, null, 2));
-    return;
-  }
-
-  if (typeof value.message === "string") console.log(value.message);
-  if (typeof value.root === "string") console.log(`root: ${value.root}`);
-  if (typeof value.dbPath === "string") console.log(`db: ${value.dbPath}`);
-  if (Array.isArray(value.actors)) {
-    console.log(`actors: ${value.actors.map((actor) => actorLabel(actor)).join(", ")}`);
-  }
-  if (!value.message && !value.root && !value.dbPath && !value.actors) {
-    console.log(JSON.stringify(value, null, 2));
-  }
+  return result;
 }
-
-function hasFlag(args: string[], flag: string): boolean {
-  return args.includes(flag);
+function requiredPositional(args: string[], label: string) {
+  const item = positional(args)[0];
+  if (!item) throw new CliError(`${label} is required.`);
+  return item;
 }
-
-function optionValue(args: string[], flag: string): string | undefined {
-  const index = args.indexOf(flag);
-  if (index === -1) return undefined;
-  return args[index + 1];
+function parseAudience(item: string | undefined) {
+  return item === undefined
+    ? null
+    : item
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
 }
-
-function numericOptionValue(args: string[], flag: string): number | null {
-  const value = optionValue(args, flag);
-  if (!value) return null;
-
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new CliError(`${flag} must be a non-negative integer.`, 1);
-  }
-
-  return parsed;
+function db(args: string[]) {
+  return value(args, "--db") || ".doxvelt/runtime.sqlite";
 }
-
-function positionalArgs(args: string[]): string[] {
-  const positional: string[] = [];
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (!arg) continue;
-
-    if (arg.startsWith("--")) {
-      if (optionTakesValue(arg)) index += 1;
-      continue;
-    }
-
-    positional.push(arg);
-  }
-
-  return positional;
+function owner(args: string[]) {
+  return value(args, "--owner") || LOCAL_OWNER_SCOPE;
 }
-
-function optionTakesValue(flag: string): boolean {
-  return VALUE_OPTIONS.has(flag);
+function simulation(args: string[]) {
+  return value(args, "--simulation") || "default";
 }
-
-const VALUE_OPTIONS = new Set([
-  "--template",
-  "--scenario",
-  "--simulation",
-  "--db",
-  "--world",
-  "--reason",
-  "--turn",
-  "--episode",
-  "--text",
-  "--whisper",
-  "--manual",
-  "--model",
-  "--audience",
-  "--label"
-]);
-
-function parseAudienceOption(value: string | undefined): string[] | null {
-  return value ? value.split(",").filter(Boolean) : null;
+function json(args: string[]) {
+  return flag(args, "--json");
 }
-
-class CliError extends Error {
-  exitCode: number;
-
-  constructor(message: string, exitCode: number) {
-    super(message);
-    this.exitCode = exitCode;
-  }
+function print(item: unknown, asJson: boolean) {
+  console.log(
+    asJson
+      ? JSON.stringify(item, null, 2)
+      : typeof item === "string"
+        ? item
+        : JSON.stringify(item, null, 2),
+  );
 }
-
-function isPrintableRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+function help() {
+  console.log(
+    [
+      "Doxvelt branch-aware runtime",
+      "Commands: init compile start export import actors access audience whisper context",
+      "turn draft edit regenerate fork transcript memories beliefs close-episode",
+      "All mutations require --command; branch mutations require --branch and --expected-head.",
+      "Turn/draft options: --whisper <text>; turn acceptance also supports --whisper-ids <ids>.",
+    ].join("\n"),
+  );
 }
-
-function actorLabel(actor: unknown): string {
-  if (typeof actor === "string") return actor;
-  if (typeof actor === "object" && actor !== null && "id" in actor && typeof actor.id === "string") {
-    return actor.id;
-  }
-
-  return String(actor);
-}
-
-type BeliefExtractionOutput = {
-  beliefs: Array<{
-    strength: -3 | -1 | 0 | 1 | 3;
-    propositionText: string;
-  }>;
-};
-
-const beliefExtractionSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["beliefs"],
-  properties: {
-    beliefs: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["strength", "propositionText"],
-        properties: {
-          strength: {
-            type: "integer",
-            enum: [-3, -1, 0, 1, 3]
-          },
-          propositionText: {
-            type: "string",
-            minLength: 1
-          }
-        }
-      }
-    }
-  }
-} as const;
-
+class CliError extends Error {}
 await main();

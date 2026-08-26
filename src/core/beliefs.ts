@@ -3,7 +3,8 @@ import type {
   CurrentBeliefResolution,
   SubjectiveBeliefAccess,
   BeliefProvenance,
-  SubjectiveBeliefRecord
+  RetainedBeliefRecord,
+  SubjectiveBeliefRecord,
 } from "./types.ts";
 
 export type RetainedBeliefDraft = {
@@ -11,16 +12,16 @@ export type RetainedBeliefDraft = {
   strength: number;
   propositionText: string;
   provenance: BeliefProvenance;
-  sourceBelief: SubjectiveBeliefRecord;
+  sourceBelief: Exclude<SubjectiveBeliefRecord, RetainedBeliefRecord>;
 };
 
 export function createRetainedBeliefDraft({
   holder,
   sourceBelief,
-  previousProvenance
+  previousProvenance,
 }: {
   holder: string;
-  sourceBelief: SubjectiveBeliefRecord;
+  sourceBelief: Exclude<SubjectiveBeliefRecord, RetainedBeliefRecord>;
   previousProvenance: BeliefProvenance;
 }): RetainedBeliefDraft {
   return {
@@ -31,9 +32,9 @@ export function createRetainedBeliefDraft({
       mode: "retained_after_access_loss",
       holder,
       sourceHolder: previousProvenance.sourceHolder,
-      accessPath: previousProvenance.accessPath
+      accessPath: previousProvenance.accessPath,
     },
-    sourceBelief
+    sourceBelief,
   };
 }
 
@@ -45,7 +46,9 @@ export function weakenRetainedStrength(strength: number): number {
   return 0;
 }
 
-export function resolveCurrentBeliefs(beliefAccess: SubjectiveBeliefAccess[]): CurrentBeliefResolution {
+export function resolveCurrentBeliefs(
+  beliefAccess: SubjectiveBeliefAccess[],
+): CurrentBeliefResolution {
   const grouped = new Map<string, SubjectiveBeliefAccess[]>();
 
   for (const access of beliefAccess) {
@@ -74,7 +77,7 @@ export function resolveCurrentBeliefs(beliefAccess: SubjectiveBeliefAccess[]): C
       key,
       current: [current],
       superseded,
-      conflicting
+      conflicting,
     });
   }
 
@@ -82,7 +85,7 @@ export function resolveCurrentBeliefs(beliefAccess: SubjectiveBeliefAccess[]): C
     current: groups.flatMap((group) => group.current),
     superseded: groups.flatMap((group) => group.superseded),
     conflicting: groups.flatMap((group) => group.conflicting),
-    groups
+    groups,
   };
 }
 
@@ -114,8 +117,12 @@ function normalizeProposition(text: string): string {
     .trim();
 }
 
-function compareBeliefAccess(left: SubjectiveBeliefAccess, right: SubjectiveBeliefAccess): number {
-  const strengthDelta = Math.abs(right.belief.strength) - Math.abs(left.belief.strength);
+function compareBeliefAccess(
+  left: SubjectiveBeliefAccess,
+  right: SubjectiveBeliefAccess,
+): number {
+  const strengthDelta =
+    Math.abs(right.belief.strength) - Math.abs(left.belief.strength);
   if (strengthDelta !== 0) return strengthDelta;
 
   const recencyDelta = beliefRecency(right.belief) - beliefRecency(left.belief);
@@ -125,7 +132,8 @@ function compareBeliefAccess(left: SubjectiveBeliefAccess, right: SubjectiveBeli
 }
 
 function beliefRecency(belief: SubjectiveBeliefRecord): number {
-  const idOffset = "id" in belief ? Number(belief.id) / 1_000_000 : 0;
+  const numericId = "id" in belief ? Number(belief.id) : 0;
+  const idOffset = Number.isFinite(numericId) ? numericId / 1_000_000 : 0;
 
   if ("createdAt" in belief) {
     const parsed = Date.parse(belief.createdAt);
@@ -133,14 +141,19 @@ function beliefRecency(belief: SubjectiveBeliefRecord): number {
   }
 
   if ("id" in belief) {
-    return Number(belief.id);
+    return Number.isFinite(numericId) ? numericId : 0;
   }
 
   return belief.sourceSpan.line;
 }
 
-function isConflictingBelief(current: SubjectiveBeliefAccess, other: SubjectiveBeliefAccess): boolean {
-  return Math.sign(current.belief.strength) !== 0
-    && Math.sign(other.belief.strength) !== 0
-    && Math.sign(current.belief.strength) !== Math.sign(other.belief.strength);
+function isConflictingBelief(
+  current: SubjectiveBeliefAccess,
+  other: SubjectiveBeliefAccess,
+): boolean {
+  return (
+    Math.sign(current.belief.strength) !== 0 &&
+    Math.sign(other.belief.strength) !== 0 &&
+    Math.sign(current.belief.strength) !== Math.sign(other.belief.strength)
+  );
 }

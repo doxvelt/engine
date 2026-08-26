@@ -43,7 +43,12 @@ export type SourceSpan = {
   quote: string;
 };
 
-export type AssetKind = "model" | "world" | "scenario" | "format" | "connection";
+export type AssetKind =
+  | "model"
+  | "world"
+  | "scenario"
+  | "format"
+  | "connection";
 
 export type AssetRecord = {
   id: string;
@@ -100,35 +105,6 @@ export type AccessLinkRecord = {
   container: string;
   mode: "member";
   sourceSpan: SourceSpan;
-};
-
-export type RuntimeAccessEventRecord = {
-  id: number | bigint;
-  simulationId: string;
-  action: "grant" | "revoke";
-  member: string;
-  container: string;
-  mode: "member";
-  reason: string | null;
-  turnId: number | bigint | null;
-  episodeId: number | bigint | null;
-  createdAt: string;
-};
-
-export type AudienceEventRecord = {
-  id: number | bigint;
-  simulationId: string;
-  actorId: string;
-  action: "add" | "remove" | "deactivate" | "reactivate";
-  reason: string | null;
-  turnId: number | bigint | null;
-  episodeId: number | bigint | null;
-  createdAt: string;
-};
-
-export type AudienceMemberRecord = {
-  actorId: string;
-  status: "active" | "inactive";
 };
 
 export type BeliefProvenanceMode =
@@ -196,52 +172,156 @@ export type CompiledWorkspace = {
 
 export type SimulationRecord = {
   id: string;
+  ownerScope: string;
+  contentRevisionId: string;
   sourceRoot: string;
   scenarioId: string | null;
+  defaultBranchId: string;
   createdAt: string;
 };
 
-export type TranscriptTurn = {
-  id: number | bigint;
+export type ContentRevisionRecord = {
+  id: string;
+  ownerScope: string;
+  digest: string;
+  compiled: CompiledWorkspace;
+  createdAt: string;
+};
+
+export type BranchRecord = {
+  id: string;
+  ownerScope: string;
   simulationId: string;
+  name: string | null;
+  headCommitId: string;
+  origin:
+    | { kind: "root"; commandId: string; baseCommitId: string }
+    | {
+        kind: "fork" | "edit" | "regenerate";
+        commandId: string;
+        sourceBranchId: string;
+        sourceHeadCommitId: string;
+        baseCommitId: string;
+      };
+  createdAt: string;
+};
+
+export type CommitKind = "root" | "turn" | "effects" | "episode_closure";
+
+export type CommitRecord = {
+  id: string;
+  ownerScope: string;
+  simulationId: string;
+  parentCommitId: string | null;
+  kind: CommitKind;
+  commandId: string;
+  events: RuntimeEvent[];
+  createdAt: string;
+};
+
+export type MessageVersionRecord = {
+  id: string;
+  logicalMessageId: string;
   actorId: string;
   text: string;
   audience: string[];
-  episodeId: number | bigint | null;
+  provenance: { mode: "manual"; operation: "turn" | "edit" | "regenerate" };
+};
+
+export type RuntimeEvent =
+  | { type: "message_accepted"; message: MessageVersionRecord }
+  | {
+      type: "audience_changed";
+      actorId: string;
+      action: "add" | "remove" | "deactivate" | "reactivate";
+      reason: string | null;
+    }
+  | {
+      type: "access_changed";
+      action: "grant" | "revoke";
+      member: string;
+      container: string;
+      mode: "member";
+      reason: string | null;
+    }
+  | {
+      type: "first_impression_formed";
+      impression: Omit<
+        FirstImpressionRecord,
+        "id" | "simulationId" | "createdAt"
+      >;
+    }
+  | {
+      type: "stage_whisper_consumed";
+      whisperId: string;
+      targetActorId: string;
+      text: string;
+    }
+  | { type: "episode_closed"; closure: EpisodeClosure };
+
+export type CommandEnvelope<TPayload> = {
+  ownerScope: string;
+  simulationId: string;
+  branchId: string;
+  expectedHead: string;
+  commandId: string;
+  payload: TPayload;
+};
+
+export type ProjectionQuery = {
+  ownerScope: string;
+  simulationId: string;
+  branchId: string;
+  head?: string;
+};
+
+export type TranscriptTurn = {
+  id: string;
+  simulationId: string;
+  commitId?: string;
+  logicalMessageId?: string;
+  messageVersionId?: string;
+  actorId: string;
+  text: string;
+  audience: string[];
+  episodeId: string | null;
   createdAt: string;
 };
 
 export type StageWhisperRecord = {
-  id: number | bigint;
+  id: string;
   simulationId: string;
+  ownerScope: string;
+  branchId: string;
+  expectedHead: string;
+  commandId: string;
   targetActorId: string;
   text: string;
-  consumedTurnId: number | bigint | null;
   createdAt: string;
-  consumedAt: string | null;
 };
 
 export type EpisodeRecord = {
-  id: number | bigint;
+  id: string;
   simulationId: string;
+  commitId?: string;
   label: string | null;
   closedAt: string;
 };
 
 export type EpisodeMemoryRecord = {
-  id: number | bigint;
-  episodeId: number | bigint;
+  id: string;
+  episodeId: string;
   simulationId: string;
   actorId: string;
   text: string;
-  sourceTurnIds: Array<number | bigint>;
+  sourceTurnIds: string[];
   createdAt: string;
 };
 
 export type LongTermMemoryRecord = {
-  id: number | bigint;
-  episodeId: number | bigint;
-  episodeMemoryId: number | bigint;
+  id: string;
+  episodeId: string;
+  episodeMemoryId: string;
   simulationId: string;
   actorId: string;
   text: string;
@@ -249,9 +329,9 @@ export type LongTermMemoryRecord = {
 };
 
 export type ExtractedBeliefRecord = {
-  id: number | bigint;
-  episodeId: number | bigint;
-  memoryId: number | bigint;
+  id: string;
+  episodeId: string;
+  memoryId: string;
   simulationId: string;
   holder: string;
   strength: number;
@@ -260,8 +340,8 @@ export type ExtractedBeliefRecord = {
 };
 
 export type RetainedBeliefRecord = {
-  id: number | bigint;
-  episodeId: number | bigint;
+  id: string;
+  episodeId: string;
   simulationId: string;
   holder: string;
   strength: number;
@@ -269,12 +349,12 @@ export type RetainedBeliefRecord = {
   sourceHolder: string;
   accessPath: string[];
   sourceBelief: BeliefRecord | ExtractedBeliefRecord | FirstImpressionRecord;
-  runtimeAccessEventId: number | bigint | null;
+  runtimeAccessEventId: string;
   createdAt: string;
 };
 
 export type FirstImpressionRecord = {
-  id: number | bigint;
+  id: string;
   simulationId: string;
   holder: string;
   observerId: string;
@@ -304,6 +384,9 @@ export type ActorContext = {
     id: string;
     scenarioId: string | null;
     sourceRoot: string;
+    branchId?: string;
+    headCommitId?: string;
+    contentRevisionId?: string;
   };
   actor: EntityRecord;
   assets: {
