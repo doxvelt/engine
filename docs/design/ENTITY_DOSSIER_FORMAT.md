@@ -21,9 +21,12 @@ MVP uses folder dossiers only.
 
 ```text
 workspaces/demo/
-  models/
-    local-llama.yaml
-    hosted-opus.yaml
+  runtime-profiles/
+    default-character.yaml
+    memory-writer.yaml
+  skills/
+    starfleet-medicine/
+    engineering-operations/
   worlds/
     noir-city.md
     strategy-class.md
@@ -58,9 +61,11 @@ workspaces/demo/
     police-mafia.md
 ```
 
-Models, worlds, scenarios, formats, entities, and connections live next to each other inside the workspace source folder.
+Runtime profiles, approved skill references, worlds, scenarios, formats, entities, and connections live next to each other inside the workspace source folder.
 
-Worlds and scenarios are unstructured Markdown files that describe objective canonical truth only. Formats are Markdown files that define the desired turn-output schema. Models are JSON or YAML files with endpoint metadata.
+Worlds and scenarios are unstructured Markdown files that describe objective canonical truth only. Formats are Markdown files that define the desired turn-output schema. Runtime profiles describe model intent, prompt composition, skills, capabilities, and budgets without containing credentials or deployment-specific provider endpoints.
+
+The current prototype still uses a `models/` folder with endpoint metadata. That is an implementation artifact to migrate, not the target portable content contract.
 
 Agents, affiliations, artifacts, and stateless invokable actors all use entity folders. Not every entity needs every file. Artifacts and stateless actors often need fewer files.
 
@@ -74,6 +79,8 @@ id: jade
 kind: agent
 name: Jade
 visibility: public
+runtime_profile: default-character
+skills: [investigation]
 ---
 ```
 
@@ -231,9 +238,9 @@ Example:
 
 ### MEMORY.md
 
-Agent-written prose memories.
+Starting memories and memory-style examples.
 
-Episode memories and long-term memories should be maintained separately in runtime state, but this file can seed initial memory style or starting memories.
+Episode and long-term memories are maintained as branch-bound runtime operations, never written back into source automatically. This file may seed the initial memory projection or demonstrate the actor's memory voice.
 
 Memories should be raw, direct, and in the entity's voice rather than polished literary summaries.
 
@@ -280,6 +287,8 @@ Directional sections set perspective. Line tags then refine strength, visibility
 
 Compilation happens on explicit user action.
 
+Each accepted compilation produces an immutable content revision with stable source identity and source spans. A simulation pins the content revisions from which it began.
+
 Compiler output should include a human review report:
 
 - Extracted entities.
@@ -293,7 +302,7 @@ Compiler output should include a human review report:
 - Possible contradictions.
 - Source spans for important extracted records.
 
-The graph is generated runtime fabric. Users tune the prose and recompile.
+The graph is generated content fabric. Users tune the prose and compile another revision.
 
 ## Source Spans
 
@@ -344,6 +353,10 @@ When a user edits prose:
 2. Compare old compiled output to new compiled output.
 3. Show the diff in the review report.
 4. Let the user accept or tune prose.
+5. Publish an immutable content revision when accepted.
+6. Explicitly choose whether a simulation continues on its pinned revision, starts over, or adopts compatible changes through a new branch operation.
+
+Source edits never silently rewrite canonical history in an existing simulation.
 
 ## Open Questions
 
