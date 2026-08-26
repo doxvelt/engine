@@ -1,222 +1,271 @@
 # System Loop
 
-This document captures Doxvelt's runtime mechanics around the subjective context model.
-
-The engine is a turn-based RPG or role-play simulation in the form of a chat. The transcript grows incrementally, one actor turn at a time.
+This document defines Doxvelt's turn lifecycle on top of the branch and subjective-context model.
 
 ## Experience Model
 
-The default experience is a turn-based chat RPG, but the same loop should support educational and training simulations.
+Doxvelt is a turn-based RPG or role-play simulation in the form of a chat.
 
-- Each turn belongs to exactly one actor.
-- The transcript grows after every turn.
-- There is no multi-agent consolidation step in MVP.
-- The player decides who acts next.
-- Stateless actors can be invoked as actors when useful.
+- Exactly one actor owns each committed turn.
+- The player normally chooses who acts next.
+- The transcript grows through accepted turns.
+- Generated responses begin as drafts, not reality.
+- One branch contains one singular canonical history.
+- Editing, regenerating, or forking creates another history path.
+- There is no simultaneous multi-agent reconciliation step in the architectural MVP.
 
-The one-actor-per-turn rule avoids discrepancies that would require reconciliation between simultaneous agent outputs.
+The hard-turn rule remains intentional. Branching resolves alternative histories; it does not imply concurrent actors.
 
 ## Actor Types
 
 Actors can be:
 
-- Agent entities.
-- Affiliation entities, if the group is being played by a model.
-- Stateless entities such as Fate or scene heading generator.
-- Player characters.
+- agent entities;
+- affiliation entities played by a model;
+- stateless entities such as Fate or a scene-opening generator;
+- player characters.
 
-Player characters are simpler than agent entities:
+Player characters participate in the same transcript and perception fabric. The player may initially hold their internal state manually, but this does not make their turns exempt from branch and audience semantics.
 
-- The player holds their state.
-- They do not write memories.
-- They can still have surface and connections.
-- They can participate in the simulation fabric.
+Stateless actors can generate output and use approved capabilities but do not accumulate actor memories or evolving beliefs unless promoted to a stateful entity.
 
 ## Player Role
 
-The player can act as director, player character, or both.
+The player may act as director, player character, or both.
 
-As director, the player can:
+As director, the player may:
 
-- Choose the next actor.
-- Invoke a stateless actor.
-- Provide a stage whisper to the next actor.
-- Resume play after source edits.
+- choose or request the next actor;
+- invoke a stateless actor;
+- provide private direction;
+- accept, edit, reject, or regenerate a generated draft;
+- fork or navigate history;
+- close an episode;
+- inspect author-visible provenance and projections.
 
-As a player character, the player contributes directly to the transcript as their character.
+As a player character, the player contributes accepted turns attributed to that character.
 
-## Stage Whispers
+## Turn Lifecycle
 
-A stage whisper is private, directed context supplied by the player to the next actor for the next turn.
+### 1. Select Branch And Actor
 
-Example:
+Every command identifies a simulation, branch, and expected head. The coordinator rejects stale mutations rather than silently appending to the wrong history.
 
-> Mike, remember you have not told Jade that you are in love with her.
+### 2. Open Draft Transaction
 
-MVP behavior:
+The coordinator opens an isolated transaction for:
 
-- A stage whisper is directed to one actor.
-- It is visible only for that actor's next turn.
-- It is hidden from other actors.
-- It is not automatically remembered in future turns.
-- It is consumed when the target actor's turn is appended.
-- It may be stored briefly for audit/debugging, including which turn consumed it.
+- generated text;
+- private direction;
+- tool and capability results;
+- random outcomes;
+- proposed world changes;
+- proposed memory changes;
+- runtime metadata.
 
-Future behavior may support ephemeral versus permanent whispers, but that is out of scope for MVP.
+Nothing in the draft is canonical yet.
 
-## Transcript Model
+### 3. Assemble Subjective Context
 
-The engine maintains:
+The engine projects context for the selected actor at the expected branch head.
 
-- One shared transcript.
-- Subjective context per actor.
-- Private stage whispers for targeted turns.
-- Actor audience membership and active/inactive state across transcript spans.
+Context includes only branch-valid material:
 
-Actors should not automatically know transcript spans where they were absent, inactive, or excluded from the turn audience.
+- actor constitution and current agenda;
+- accessible world and scenario material;
+- current beliefs and relevant conflicts;
+- belief provenance and access paths;
+- relevant memories;
+- projected surfaces from actual perceptions;
+- accessible transcript spans;
+- audience and private direction;
+- approved skills and capabilities;
+- required output format.
+
+Context assembly is a pure query. If an actor newly observes another entity, the observation and resulting first-impression proposal belong to the accepted turn transaction—not the context read.
+
+### 4. Run Manual Or Model Draft
+
+Manual mode records user-supplied actor text in the draft.
+
+Model mode invokes the configured runtime profile. The runtime may call scoped capabilities through the Capability Broker. Capability mutations remain staged inside the draft.
+
+A runtime may suggest another actor or future action, but it cannot choose or commit the next turn unilaterally unless the simulation rules explicitly grant that capability.
+
+### 5. Review Or Regenerate
+
+The player may:
+
+- edit the draft;
+- regenerate from the same input and context;
+- change the runtime profile or model;
+- reject the draft;
+- accept it.
+
+Regenerating an unaccepted draft does not create canonical branches unless diagnostic draft preservation is enabled.
+
+### 6. Validate And Commit
+
+On acceptance, Doxvelt validates:
+
+- branch head has not changed;
+- actor and audience are valid;
+- required output shape;
+- capability grants and staged events;
+- world invariants;
+- idempotency identity;
+- provenance completeness.
+
+It then atomically commits:
+
+```text
+accepted message version
++ staged world events
++ audience and access effects
++ actor perceptions
++ private-direction consumption
++ runtime provenance
+= one new branch head
+```
+
+Memory work may be included or scheduled from that committed causal node.
+
+## Transcript And Perception
+
+There is one committed transcript per branch path. Actors receive different transcript projections.
+
+A turn records its audience. An actor does not automatically gain access to turns where they were absent, inactive, or excluded.
 
 Example:
 
 - Luke leaves the cabin.
-- Jade and Mike talk while Luke is absent.
-- Luke's later turn context does not include that conversation unless he learns it through another route.
+- Jade and Mike speak on a restricted audience.
+- Luke's later context excludes those turns.
+- If Pete later tells Luke what happened, Luke may perceive and remember Pete's claim—not the original conversation.
 
-MVP access tracking is explicit:
+Private conversations are ordinary committed turns with restricted audience metadata.
 
-- Add an actor to make them part of the active audience.
-- Remove an actor to end their access.
-- Temporarily deactivate an actor to pause their access.
-- Keep an actor active if they should observe but not act.
+## Audience And Access
 
-Audience changes are runtime events. By default, a turn's audience is the selected actor plus the current active audience. A per-turn audience override can still create private or restricted turns.
+Audience and access are runtime events.
 
-Affiliation and artifact access changes are also explicit runtime events. They grant or revoke effective access for context assembly without mutating authored source links.
+Audience events determine who can perceive a turn through presence:
 
-The player controls who receives turns by selecting the next actor. Active observers do not act unless selected.
+- add;
+- remove;
+- deactivate;
+- reactivate.
 
-Private conversations are normal turns with restricted audience metadata.
+Access events determine live access through affiliations, artifacts, or other engine-recognized paths:
 
-## Context Assembly
+- grant;
+- revoke.
 
-For each turn, the engine assembles context for exactly one actor.
+Authored connections define starting access. Runtime events modify branch-local effective access without rewriting source content.
 
-Context includes:
+Access loss removes live access to a source. It does not erase branch-valid perceptions or memories already formed. Later memory consolidation may retain, weaken, distort, or retract the actor's stance.
 
-- The actor's subjective beliefs.
-- Active affiliation beliefs through membership-like connections.
-- Relevant memories.
-- Relevant first impressions and projected-surface beliefs.
-- Accessible artifact beliefs.
-- Shared transcript spans the actor had access to.
-- Stage whisper for this turn, if any.
-- Scenario and world material.
-- Required output format.
+## Stage Whispers And Private Direction
 
-The context assembler must filter transcript access by actor audience membership, active/inactive state, restricted audience metadata, and private delivery.
+A stage whisper is private player-supplied context for one target actor's draft.
 
-Surface channels are recognized as a modeling concept, but channel-filtered perception is out of scope for MVP.
+Default behavior:
 
-For MVP, include everything accessible until the context becomes too large. Ranking and retrieval can come later.
+- directed to one actor;
+- hidden from other actors;
+- available only inside its draft transaction;
+- consumed only when that draft is accepted;
+- not automatically treated as canonical truth;
+- not automatically remembered;
+- recorded with enough provenance to explain the accepted output.
 
-## Turns
+Rejecting or regenerating a draft does not consume its whisper. Editing accepted history creates a new branch; whisper consumption follows the accepted branch ancestry.
 
-A turn runs roughly as:
+Future direction types may distinguish instruction, recalled fact, emotional cue, or canonical revelation. The architectural MVP keeps one private-direction mechanism.
 
-1. Player selects next actor.
-2. Player optionally provides a stage whisper.
-3. Engine assembles actor-specific context.
-4. Actor model generates output in the selected format.
-5. Output appends to the shared transcript.
-6. Engine defers belief extraction until episode closure.
+## Edit, Regenerate, And Fork
 
-Future behavior may allow a turn response to recommend the next actor and suggested stage whispers, but this is out of scope for MVP.
+### Edit Accepted Message
 
-Format rules are prompt instructions for model actors. The engine does not enforce or repair malformed player-character messages in MVP.
+Select the parent before the message, create a new message version, and continue on a sibling branch. Downstream events and memories from the old path remain on the old branch.
+
+### Regenerate Accepted Response
+
+Create a new draft from the same causal input. Acceptance creates a sibling branch. Tool outcomes and world effects are recomputed inside the new draft.
+
+### Fork
+
+Create a branch reference at any permitted commit and continue from its inherited state.
+
+See [Branching and Memory](BRANCHING_AND_MEMORY.md).
 
 ## Episode Closure
 
-At episode closure, each relevant agent writes memories from subjective material.
+The player decides when an episode or meaningful beat closes.
 
-The player decides when an episode ends. Closure is a deliberate "wrap this beat" action, not an automatic turn count or scheduler event.
+Closure is a branch-bound checkpoint and memory-consolidation request. It may initially block the local UI; the target contract also supports durable jobs.
 
-Closing an episode pauses play until memory writing and belief extraction complete. The UI should especially warn the player that this is a blocking operation. It should also clarify that closure commits the current beat into persistent memories and beliefs.
+For each participating actor:
 
-The memory input is:
+1. Resolve branch-valid subjective perceptions and accessible turns.
+2. Generate or deterministically construct an episode-memory proposal.
+3. Propose long-term memory assertions, revisions, consolidations, or retractions.
+4. Extract subjective beliefs from the actor's memory and interpretation.
+5. Validate and attach operations to the closure commit.
+6. Update derived memory and belief projections.
 
-- The agent's subjective context.
-- The shared transcript filtered by access.
-- Relevant private context available to that agent.
+Agents absent from the episode receive no memory from its unperceived events.
 
-Agents do not write memories from an omniscient objective transcript unless they had access to it.
+A closed episode commit is immutable. Editing earlier history creates a branch that does not inherit that closure. The old closed path remains intact.
 
-Only participating agents write memories. An absent or inactive agent writes no memory for an episode whose subjective transcript is empty. If that agent later learns what happened, that learning belongs to the later episode where the agent is present or otherwise receives access.
-
-Episode closure uses this flow:
-
-1. Filter the transcript and context per participating agent.
-2. Ask each participating agent to write episode memories.
-3. Ask each participating agent to revise or promote long-term memories.
-4. Extract subjective beliefs from the agent-written memories.
-5. Append extracted beliefs to belief history.
-
-The engine extracts beliefs from memories rather than directly from the transcript because the goal is subjective, colored, distorted, filtered, or biased belief state.
-
-If an actor loses access to a belief source during an episode, that lost access does not immediately write a permanent belief. At episode closure, the actor's memory and belief extraction may persist a weakened retained belief. Current access and retained knowledge remain separate: current access is live source context, while retained knowledge is the actor's stale or memory-shaped stance after the access path is gone.
-
-For MVP:
-
-- Belief extraction is automatic.
-- Extracted beliefs are player-visible.
-- Extracted beliefs are not editable in a review step.
-- Agent-written memories become runtime state without player review.
-- Contradictory extracted beliefs are appended to belief history; current-belief selection handles strength and recency.
-- Stateless actor outputs do not create beliefs directly. They can influence later memories and extracted beliefs through transcript content.
+Closure failures are visible and retryable. A failed memory writer must not leave a half-closed branch with unexplained partial state.
 
 ## Canonical Truth During Play
 
-The player cannot directly edit canonical truth during play.
+Canonical truth changes only through accepted domain events.
 
-To change objective source material, the player edits the source files, recompiles or resumes play, and decides whether to continue or start over.
+The player may alter history by:
+
+- accepting a new canonical event;
+- editing or regenerating into another branch;
+- forking from an earlier point;
+- changing authored content for a new content version or simulation.
+
+Editing source content does not silently mutate an existing simulation. The player explicitly decides whether to start a new simulation, create a branch from a compatible revision, or keep the pinned content version.
 
 ## Runtime Persistence
 
-The engine does not know when an RPG has ended. It only knows whether an episode is currently running.
+A simulation preserves:
 
-Therefore an RPG instance preserves the whole runtime state:
+- pinned content versions;
+- branches and heads;
+- committed messages and world events;
+- audience and access events;
+- actor perceptions;
+- stage-whisper provenance;
+- episode closures;
+- memory and belief operations;
+- runtime artifacts and model/skill/tool provenance;
+- branch checkpoints and derived indexes.
 
-- Selected source assets.
-- Compiled graph.
-- Shared transcript.
-- Audience membership history.
-- Stage whispers where needed for audit/debugging.
-- Episode memories.
-- Long-term memories.
-- Belief history.
-- Current-belief materialization if used.
+Doxvelt does not need to know when a whole RPG is permanently finished. Any branch may receive a later continuation unless product policy archives or seals it.
 
-Any closed episode may have a follow-up episode later.
+## Failure Semantics
 
-Closed episodes are immutable in MVP. Follow-up play starts a new episode, even if it continues the same scene or conversation.
-
-## MVP Engine Functions
-
-Likely MVP functions:
-
-- `setup`: scaffold worlds, scenarios, formats, entities, connections, and models.
-- `compile`: compile source material into runtime fabric and review report.
-- `start_sim`: initialize a simulation from selected assets.
-- `assemble_context`: build one actor's turn context.
-- `advance_turn`: run or record exactly one actor turn.
-- `invoke_stateless`: invoke a stateless actor such as Fate.
-- `close_episode`: close an episode and trigger memory generation.
-- `write_memories`: ask agents to generate episode and long-term memories.
-- `extract_beliefs`: extract candidate propositions, beliefs, and events from transcript or memories.
+- Generation failure creates no committed turn.
+- Aborting discards the draft transaction.
+- Capability retries are idempotent inside the draft.
+- A stale expected head produces a conflict, not an implicit merge.
+- Worker failure leaves a resumable or discardable draft/job, not partial canonical state.
+- Late memory results attach only to their originating commit and branch.
+- Auth and provider failures remain runtime errors, not fictional events.
 
 ## Open Questions
 
-- How actor audience membership and active/inactive state are stored in transcript metadata.
-- Whether stage whispers can later become permanent memories or beliefs.
-- How player-character surfaces and connections are authored.
-- Whether turn output should include optional next-actor recommendations after MVP.
-- When to introduce retrieval and ranking once accessible context outgrows the model window.
-- Whether post-MVP should support reopening a closed episode. MVP does not.
+- Which turn and event types need explicit rule-engine schemas in the first slice?
+- When should player review of memory proposals be offered?
+- How are authored source revisions adopted by an existing simulation, if at all?
+- Which observation channels require first-class perception mechanics after MVP?
+- How should runtime-proposed next actors interact with player control?
+- What branch retention, export, and garbage-collection policies are useful locally and when hosted?
+- When does retrieval move from full accessible context to ranked actor-specific recall?

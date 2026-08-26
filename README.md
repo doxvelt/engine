@@ -1,6 +1,6 @@
 # Doxvelt
 
-Doxvelt is a local-first workbench for building and running turn-based chat RPGs and role-play simulations.
+Doxvelt is a local-first workbench and simulation engine for building and running turn-based chat RPGs and role-play simulations. It is designed to run locally without Doxvelt-hosted infrastructure while preserving a path to a hosted service.
 
 You author a simulation as plain Markdown dossiers and scenario files. Doxvelt compiles that source into a runtime with actors, beliefs, memories, affiliations, artifacts, access paths, stage whispers, and a transcript where exactly one actor acts per turn.
 
@@ -44,7 +44,31 @@ From the UI, create a blank workspace or initialize the `executive-interviews` d
 - Close episodes to write memories and extract beliefs.
 - Export and import local simulation packages.
 
-This is still an early MVP slice. Doxvelt is local single-user software right now; hosted accounts, collaboration, publishing, and marketplaces are intentionally out of scope.
+This is still an early MVP slice. Doxvelt is local single-user software right now; hosted accounts, collaboration, publishing, and marketplaces are intentionally out of scope for the current product. The target architecture actively avoids local-only domain assumptions.
+
+## Architecture Direction
+
+The current implementation is a working prototype and executable specification. Its runtime is still linear and SQLite-specific; edit, regenerate, fork, branch-aware memory, Pi integration, capability mediation, and sandboxed tools are target architecture rather than implemented behavior.
+
+The reset keeps the proven product ideas:
+
+- prose-first dossiers and source spans;
+- hard turns;
+- singular canonical reality with subjective actor access;
+- beliefs, provenance, audiences, access paths, surfaces, and memories;
+- manual generation and portable simulations;
+- the Nuxt/Nuxt UI workbench and Doxvelt design system.
+
+The target changes the runtime foundation:
+
+- immutable branch-linked turns and events;
+- actor perceptions and memories projected at a branch head;
+- generated drafts separated from accepted reality;
+- Doxvelt-owned memory and capability validation;
+- Pi Agent Harness as a candidate replaceable model/auth/tool-loop adapter;
+- local and hosted persistence behind the same domain contracts.
+
+Start with [Target Architecture](docs/design/ARCHITECTURE.md), [Branching and Memory](docs/design/BRANCHING_AND_MEMORY.md), and [Agent Runtime and Security](docs/design/AGENT_RUNTIME.md).
 
 ## Workspace Shape
 
@@ -159,10 +183,15 @@ Repository landmarks:
 - `design-system`: visual tokens, fonts, brand assets, and static UI specimens.
 - `examples/executive-interviews`: complete example source workspace.
 
+The listed folders describe the current prototype, not a promise that target module boundaries already exist.
+
 ## Design Docs
 
 The deeper product and engine model lives in:
 
+- [Target Architecture](docs/design/ARCHITECTURE.md)
+- [Branching and Memory](docs/design/BRANCHING_AND_MEMORY.md)
+- [Agent Runtime and Security](docs/design/AGENT_RUNTIME.md)
 - [Ubiquitous Language](docs/design/UBIQUITOUS_LANGUAGE.md)
 - [Subjective Context Model](docs/design/SUBJECTIVE_CONTEXT_MODEL.md)
 - [Entity Dossier Format](docs/design/ENTITY_DOSSIER_FORMAT.md)

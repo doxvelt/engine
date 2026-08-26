@@ -1,53 +1,94 @@
 # Agent Notes
 
-This repository is in early design formation. The current task is not to implement a generic chatbot. It is to design and eventually build Doxvelt: a turn-based chat RPG and role-play simulation engine with subjective context, social knowledge, beliefs, memories, affiliations, artifacts, and player-directed turns.
+Doxvelt is a turn-based chat RPG and role-play simulation engine with subjective context, social knowledge, beliefs, memories, affiliations, artifacts, and player-directed turns.
+
+The current code is an early local prototype and executable specification. The target architecture introduces branch-aware event history, memory provenance, a replaceable Pi runtime adapter, capability mediation, and local/hosted deployment parity. Do not assume the current SQLite schema, Vercel AI integration, API routes, or folder boundaries are permanent.
 
 Read these first:
 
-1. `docs/design/UBIQUITOUS_LANGUAGE.md`
-2. `docs/design/SUBJECTIVE_CONTEXT_MODEL.md`
-3. `docs/design/ENTITY_DOSSIER_FORMAT.md`
-4. `docs/design/SYSTEM_LOOP.md`
-5. `docs/design/MVP_ARCHITECTURE.md`
+1. `docs/design/ARCHITECTURE.md`
+2. `docs/design/BRANCHING_AND_MEMORY.md`
+3. `docs/design/AGENT_RUNTIME.md`
+4. `docs/design/UBIQUITOUS_LANGUAGE.md`
+5. `docs/design/SUBJECTIVE_CONTEXT_MODEL.md`
+6. `docs/design/ENTITY_DOSSIER_FORMAT.md`
+7. `docs/design/SYSTEM_LOOP.md`
+8. `docs/design/MVP_ARCHITECTURE.md`
 
-Doxvelt can support entertainment play, education, strategy work, and training simulations. Preserve the hard-turn, subjective-context model even when adding non-game examples such as executive interviews, crisis exercises, or coordination simulations.
+## Product Direction
 
-The first product target is a local single-user app with import/export for simulations and games. Do not assume hosted accounts, real-time collaboration, or a marketplace in MVP. Packaging and distribution are undecided.
+Doxvelt can support entertainment play, education, strategy work, and training simulations. Preserve the hard-turn, subjective-context model across all use cases.
 
-The current implementation includes the core engine, local SQLite store, CLI/runtime slice, local HTTP API, and Nuxt local workbench UI. Keep new simulation behavior in the core library first, then expose it through the CLI and local API as sibling wrappers. The UI should call the local API rather than shelling out to the CLI.
+The first maintained product remains a local single-user app with import/export. The architecture must also permit a hosted service without replacing simulation semantics.
 
-## Design System
+Local-first means no hosted Doxvelt account is required. It does not mean host filesystem paths, one-user identity, SQLite types, or synchronous in-process jobs may leak into domain contracts.
 
-The product design system lives in `design-system/`. It contains the static specimen page, canonical visual tokens, fonts, and brand assets for Doxvelt's local workbench UI.
+## Non-Negotiable Architecture
 
-Use the design system when changing UI surfaces. Preserve its Doxvelt-specific semantics for source spans, dossiers, beliefs, access paths, transcript turns, tags, badges, authoring fields, and restrained operational states. Do not invent parallel palettes, badge semantics, typography scales, or component treatments without updating the design system first.
+- One branch contains one singular canonical reality.
+- Actor access to that reality is subjective.
+- Accepted messages, world events, perceptions, memories, and belief changes are causally linked and immutable.
+- Edit, regenerate, and fork create alternate branch paths; they do not mutate accepted history in place.
+- Context assembly and retrieval are pure projections at a branch head.
+- Generated responses remain drafts until accepted.
+- Agent tool effects remain staged in a draft transaction until commit.
+- Doxvelt owns simulation semantics, memory validation, and capability authorization.
+- The model harness owns provider/model/auth/tool-loop mechanics behind a replaceable port.
+- Local and hosted adapters implement the same domain contracts.
 
-Keep `docs/design/` for product/domain design documents and `design-system/` for visual/product UI language.
+Do not introduce simultaneous multi-agent turns in the architectural MVP. Alternative responses belong on sibling branches, not in a reconciliation step.
 
-## Core Product Shape
+## Current Prototype
 
-The engine is a turn-based RPG in the form of a chat.
+The current implementation includes:
 
-- Exactly one actor acts per turn.
-- The player chooses the next actor.
-- The transcript grows incrementally.
-- The engine assembles subjective context for the selected actor.
-- Episode closure writes memories and extracts beliefs.
-- Closed episodes are immutable in MVP.
+- `src/core`: source compiler, context assembly, hard-turn engine, and episode closure;
+- `src/store`: linear SQLite runtime store;
+- `src/ai`: Vercel AI SDK/OpenAI-compatible generation path;
+- `src/cli`: local CLI wrapper;
+- `src/local-api`: local HTTP API;
+- `src/local-ui`: Nuxt/Nuxt UI workbench;
+- `design-system`: canonical product UI language;
+- behavior-heavy tests in `tests/`.
 
-Do not introduce simultaneous multi-agent orchestration for MVP. The hard-turn constraint is intentional because it avoids reconciliation problems.
+Preserve the proven concepts and acceptance behavior. Replace runtime code only where target semantics demand it. Do not perform a preparatory purge.
 
-## Source Versus Runtime
+Known target conflicts include:
 
-The authored source is natural-language dossier material on disk. The runtime graph is compiled fabric.
+- destructive simulation reset;
+- linear turn and episode tables without branch ancestry;
+- direct SQLite `RuntimeStore` imports in core functions;
+- context reads that persist first impressions;
+- non-transactional episode closure;
+- deployment credentials/endpoints embedded in portable source;
+- arbitrary filesystem paths crossing the HTTP boundary;
+- page-local duplicated contracts and orchestration.
 
-Do not make users author graph atoms directly. Users should write dossiers, connections, worlds, scenarios, formats, and models.
+## Design System And Nuxt
 
-Planned source layout:
+The product design system lives in `design-system/`. It contains the static specimen page, canonical visual tokens, fonts, and brand assets.
+
+Use it for UI changes. Preserve Doxvelt-specific semantics for source spans, dossiers, beliefs, access paths, transcript turns, tags, badges, authoring fields, branch state, drafts, and restrained operational states.
+
+Keep Nuxt and Nuxt UI unless a concrete product requirement disproves the choice. Nuxt remains a client or thin BFF, never the domain kernel.
+
+- Keep API contracts outside page components.
+- Prefer generated or shared transport types.
+- Move API access and orchestration into focused clients, composables, or stores.
+- Use Nuxt UI as the canonical component layer; native controls require a semantic reason.
+- Split large page components when behavior stabilizes and decomposition reduces change risk.
+- Do not invent parallel palettes, typography scales, badge semantics, or component treatments without updating the design system.
+
+## Authored Content Versus Runtime
+
+Users author natural-language content packages. They do not author graph atoms directly.
+
+Target local workspace shape:
 
 ```text
 workspaces/demo/
-  models/
+  runtime-profiles/
+  skills/
   worlds/
   scenarios/
   formats/
@@ -55,50 +96,24 @@ workspaces/demo/
   connections/
 ```
 
-Worlds and scenarios are objective canonical truth only. Subjective context comes from entities, connections, beliefs, memories, surfaces, and access.
+The current prototype still uses `models/` with endpoint metadata. Migrate that through an explicit content/runtime-profile decision; do not silently preserve credentials or host endpoint configuration as portable world truth.
 
-Compiled source is the starting fabric. Runtime changes such as turns, audience changes, stage whispers, access grants/revokes, memories, first impressions, and extracted beliefs are append-only runtime state.
+Each accepted compilation produces an immutable content revision with source spans. A simulation pins its starting content versions. Source edits never silently rewrite an existing branch.
 
-## Entity Kinds
+Worlds and scenarios describe objective canonical truth. Subjective context comes from perceptions, entities, connections, beliefs, memories, surfaces, audiences, and access.
 
-MVP entity kinds:
+## Entity And Belief Model
+
+Initial entity kinds:
 
 - `agent`
 - `affiliation`
 - `artifact`
 - `stateless`
 
-Agents, affiliations, and artifacts can hold beliefs. Stateless entities are invokable generators or assistants and do not hold evolving beliefs or memories.
+Agents, affiliations, and artifacts can hold beliefs. Stateless entities are invokable generators and do not hold evolving memory unless promoted.
 
-## Dossier Rules
-
-Entity folders use files such as:
-
-- `IDENTITY.md`
-- `STATE.md`
-- `SURFACE.md`
-- `BELIEFS.md`
-- `MEMORY.md`
-- `EXAMPLES.md`
-
-Connection files cover both relationships and memberships. A membership is a connection with engine-recognized access mechanics.
-
-Use lightweight mentions and line tags:
-
-```md
-@jade is undercover inside @mafia. :canonical :hidden
-@pete suspects @mike loves @jade. :+1
-@jade usually appears calm. :surface:in_person,video :+3
-This connection gives @jade access to @mafia knowledge. :access:member
-```
-
-Tags use `:` and apply to the whole line.
-
-## Belief Model
-
-Beliefs are holder-specific stances toward propositions.
-
-MVP scale:
+Belief strength:
 
 - `+3`: treats as true
 - `+1`: suspects or leans true
@@ -106,77 +121,90 @@ MVP scale:
 - `-1`: doubts or leans false
 - `-3`: treats as false
 
-Characters can confidently believe false things. Do not collapse belief into canonical truth.
+Characters can confidently believe false things. Never collapse belief into canonical truth.
 
-Secrets are not a separate content type. Secrets emerge from lack of access.
+Belief and memory provenance matters. Losing live access does not erase what an actor perceived or remembered. Current state is projected from branch-valid operations.
 
-Belief provenance matters. Current code distinguishes held beliefs, beliefs accessed through membership-like paths, observed/first-impression beliefs, and beliefs retained after access loss.
+Secrets are not a separate content type. They emerge from access and visibility.
 
-Losing access to a source removes live access to that source's current beliefs. It does not erase what an actor already encountered. Persistent retained knowledge should be created through episode closure and weakened in confidence, preserving the belief direction.
+## Turns, Perceptions, And Memory
 
-## Context And Episodes
+Exactly one actor owns each committed turn. The player normally chooses the next actor.
 
-Context assembly should include everything accessible until the context becomes too large. Retrieval and ranking can come later.
-
-Access is tracked through authored membership-like access links, runtime access events, active audience events, and restricted-audience turn metadata. Actors can observe without acting if they remain active but are not selected for a turn.
-
-Runtime access changes are explicit grant/revoke events. They affect effective context access without editing authored source files.
-
-Active audience is runtime state. By default, a turn's audience is the selected actor plus the current active audience. A per-turn audience override can create private or restricted turns, but the selected actor is always included.
-
-Private conversations are normal turns with restricted audience metadata. Stage whispers are private player-supplied context for one target actor's next turn. They are consumed when that actor's turn is appended and do not automatically become memories or beliefs.
-
-Projected surfaces are included for entities the actor can currently observe. The first time an actor observes another entity, Doxvelt deterministically stores a `+1` first-impression belief derived from that entity's first projected surface line. AI-generated or player-reviewed impressions are future work.
-
-Episode closure is player-triggered, blocking, and memory-first:
+A turn flows through:
 
 ```text
-subjective transcript/context -> memories -> extracted beliefs -> belief history
+expected branch head
+  -> draft transaction
+  -> actor context projection
+  -> manual or model output
+  -> staged capability effects
+  -> review/regenerate
+  -> atomic accepted commit
+  -> actor perceptions
+  -> branch-bound memory work
 ```
 
-Extraction happens at episode closure for MVP, not after every turn.
+Audience and access changes are explicit events. Private conversations are ordinary turns with restricted audience metadata.
 
-Closed episodes are immutable. If an actor was absent, inactive, or excluded from the turn audience, they should not write memories from that turn unless they later learn about it through a new accessible event.
+Stage whispers are private direction in a draft transaction. They are consumed only by an accepted turn and do not automatically become canonical truth or memory.
 
-## Current Local Interface
+Episode closure remains a deliberate memory-consolidation checkpoint. Closed commits are immutable; editing earlier history creates another branch that does not inherit the old closure.
 
-The current local app surfaces are:
+Memory writers propose structured operations. Doxvelt validates and commits them. Agents never receive direct persistence access.
 
-- `src/local-ui`: Nuxt workbench UI with Home, Studio, and Stage pages.
-- `src/local-api`: local HTTP API over the same core engine and SQLite runtime store.
-- `src/cli`: CLI wrapper for users, tests, automations, coding agents, and future LLM tools.
+## Agent Runtime And Security
 
-Run both the API and UI during local UI work with:
+Pi Agent Harness is the preferred adapter candidate, not a committed foundation until its spike passes.
 
-```sh
-bun run dev
-```
+Prefer `pi-ai` and `pi-agent-core` with:
 
-The API defaults to `http://127.0.0.1:8787` and `.doxvelt/runtime.sqlite`. The UI reads `DOXVELT_API_BASE` or falls back to that API URL.
+- Doxvelt-supplied system prompts and actor context;
+- in-memory/disposable conversation state;
+- explicit curated skills;
+- Doxvelt-only capabilities;
+- no Pi conversation history as simulation truth;
+- no global skill, project-context, shell, filesystem, or network discovery.
 
-The current CLI surface includes:
+Agents do not receive database access, arbitrary host paths, provider credentials, shell/process execution, unrestricted network, or another actor's hidden context.
 
-- `init`, `compile`, `start`, `actors`, `context`, `turn`, and `close-episode`
-- `audience add/remove/deactivate/reactivate/list`
-- `access grant/revoke/list`
-- `whisper`, `whisper list`, and `turn --whisper`
-- `transcript`, `memories`, and `beliefs`
-- `export` and `import`
+Side-effecting capability calls execute within a draft transaction. Executable helpers run in sandboxed workers without auth credentials.
 
-Exported local packages are plain directories containing source material, runtime SQLite state, and a manifest. Do not include secrets such as API keys in exports.
+Containerization is defense in depth. Capability validation remains the primary authorization boundary.
+
+## Local And Hosted Modes
+
+Local mode may use filesystem content, SQLite, local blobs, in-process jobs, and a local credential store.
+
+Hosted mode may use database/object-storage content, Postgres, a durable queue, runtime/sandbox worker pools, and managed credentials.
+
+The domain engine sees ports and explicit owner scope in either mode. Hosted readiness does not authorize building accounts, collaboration, billing, publishing, or a marketplace during the architectural MVP.
 
 ## Implementation Guidance
 
-Prefer making design decisions explicit in `docs/design/` before coding large mechanics.
+- Make design decisions explicit before large mechanics.
+- Prove immutable manual branches before integrating Pi.
+- Keep core behavior behind interfaces, not CLI or HTTP parsing.
+- Preserve source spans and human review of compiled prose.
+- Keep manual mode as a deterministic test seam.
+- Treat imported content and model output as untrusted.
+- Use expected-head checks and idempotent command IDs.
+- Record provider/model/prompt/skill/tool provenance for accepted runtime artifacts.
+- Materialized projections, FTS/vector indexes, caches, and snapshots are rebuildable, not authoritative.
+- Prefer focused checks during iteration. Reserve full builds for pre-commit, release/package, or build-affecting changes.
+- Do not add `LICENSE`, `CONTRIBUTING.md`, or other social-coding artifacts unless requested.
 
-During fast iteration, prefer focused checks over production builds. Do not run `bun run ui:build` or other full builds after every small UI/runtime tweak. Reserve builds for pre-commit verification, release/package checks, or changes that directly affect build configuration.
+## Architecture Proof
 
-Doxvelt owns simulation semantics. Use a mature AI substrate for provider mechanics. The preferred MVP substrate is Vercel AI SDK behind a thin Doxvelt generation boundary; do not build a custom provider matrix, streaming protocol, model gateway, inference runtime, or authentication framework.
+The first replacement slice must prove:
 
-Treat the core engine as a library, not as the CLI. The CLI is a first-class wrapper for users, tests, automations, coding agents, and future LLM tools. A future local API server should be a sibling wrapper over the same core engine, not an HTTP wrapper around the CLI.
+1. Immutable content revision.
+2. Simulation and branch creation.
+3. Manual accepted turn commit.
+4. Edit and regenerate into sibling branches.
+5. Actor context replay at both heads.
+6. Branch-relative audience, access, perception, belief, and memory.
+7. Pure context queries.
+8. No leaked side effects from rejected drafts.
 
-When implementing, preserve source spans from compiled records back to dossier prose. The graph is generated fabric, and users tune prose when compilation goes wrong.
-
-Avoid over-structuring authoring files. Natural language is the main interface; tags are compiler hints.
-
-Do not add social-coding artifacts such as `LICENSE` or `CONTRIBUTING.md` unless the user asks.
+Only after that should Pi, executable skills, retrieval indexes, or hosted adapters expand the surface.
