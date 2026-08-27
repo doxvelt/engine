@@ -70,7 +70,8 @@ Do not rewrite the frontend merely because the runtime changes.
 
 ### Pi
 
-Use Pi only after the spike in [Agent Runtime and Security](AGENT_RUNTIME.md) passes.
+The bounded spike in [Pi Runtime Spike](../spikes/PI_RUNTIME_SPIKE.md) passed.
+Use the validated composition without making Pi state canonical Doxvelt truth.
 
 Preferred composition:
 
@@ -123,6 +124,18 @@ interfaces
 The domain and application modules must not import concrete SQLite, filesystem, Nuxt, Pi, or provider SDK implementations.
 
 ## Implementation Slices
+
+Current status:
+
+- **Slice 1 — complete:** immutable manual branches, subjective projections,
+  editing, regeneration, forks, and portable schema-v4 history.
+- **Slice 2 — complete:** stable message perceptions, branch-local memory
+  operations, resumable closure jobs, append-only transitions, and portable
+  schema-v5 history.
+- **Slice 3 — next:** implement runtime-neutral profiles and one replaceable
+  adapter using `pi-ai` `Models` plus low-level `pi-agent-core` `Agent`, then add
+  the staged Doxvelt capability path validated by the spike.
+- **Slice 4 — pending:** migrate the Nuxt Stage workbench after the runtime contract stabilizes.
 
 ### Slice 1: Immutable Manual Branches
 

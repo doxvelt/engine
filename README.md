@@ -31,7 +31,11 @@ From the UI, create a blank workspace or initialize the `executive-interviews` d
 
 - Use **Studio** to edit source files, create assets, validate compilation, and inspect compiled source spans.
 
-Studio/source authoring remains usable in Slice 1. The existing **Stage** UI has not yet migrated to the required branch ID, expected-head, and command-ID contracts, so it is temporarily incompatible with the branch-aware runtime. Use the CLI or local API for simulation play until the later workbench migration is complete.
+Studio/source authoring remains usable after Slices 1 and 2. The existing
+**Stage** UI has not yet migrated to the required branch ID, expected-head,
+command-ID, and memory-job contracts, so it is temporarily incompatible with
+the branch-aware runtime. Use the CLI or local API for simulation play until the
+later workbench migration is complete.
 
 ## What You Can Do Today
 
@@ -42,16 +46,34 @@ Studio/source authoring remains usable in Slice 1. The existing **Stage** UI has
 - Control who is in the audience for each turn.
 - Add private stage whispers for one actor's next turn.
 - Grant and revoke runtime access without editing source files.
-- Close episodes to write memories and extract beliefs.
+- Edit, regenerate, and fork accepted history without destroying its original branch.
+- Close episodes to write actor-specific memories and extract beliefs.
+- Revise or retract memories on one branch without contaminating siblings.
+- Request, inspect, observe failures, and retry causally anchored memory jobs
+  through the local API.
 - Export and import local simulation packages.
 
-This is still an early MVP slice. The CLI and local API are the supported Slice 1 play interfaces; full local UI play cannot be claimed until Stage is migrated in a later workbench slice. Doxvelt is local single-user software right now; hosted accounts, collaboration, publishing, and marketplaces are intentionally out of scope for the current product. The target architecture actively avoids local-only domain assumptions.
+Slices 1 and 2 of the architectural MVP are complete. The CLI and local API are
+the supported play interfaces; full local UI play cannot be claimed until Stage
+is migrated in a later workbench slice. Doxvelt is local single-user software
+right now; hosted accounts, collaboration, publishing, and marketplaces are
+intentionally out of scope for the current product. The target architecture
+actively avoids local-only domain assumptions.
 
 ## Architecture Direction
 
-The current implementation includes the first branch-aware manual kernel. Content revisions, commits, message versions, branches, audience/access effects, first impressions, memories, and beliefs are immutable and projected at a selected branch head. Portable schema-v4 archives carry explicit branch origins and are semantically verified by the domain before import. SQLite is the first adapter behind storage-neutral domain/application ports. Pi integration, capability mediation, and sandboxed tools remain later slices.
+The current implementation includes the branch-aware manual kernel and
+memory/closure slice. Content revisions, commits, message versions, branches,
+audience/access effects, first impressions, perceptions, memory operations,
+jobs, and beliefs are immutable or append-only and projected at a selected
+branch head. Portable schema-v5 archives carry explicit branch origins, memory
+jobs, transitions, and detached operations; schema-v4 archives are validated
+before deterministic upconversion. SQLite is the first adapter behind
+storage-neutral domain/application ports. The Pi runtime composition is
+validated; its Doxvelt adapter, capability mediation, and sandboxed executable
+helpers remain later slices.
 
-Slice 1 derives transcript perception from committed message audiences. First-class generic actor-perception records and structured memory operations remain later slices.
+Slice 2 derives stable message-perception records from committed audiences and uses them as memory provenance. Generalized perception for non-message world events remains later work.
 
 The reset keeps the proven product ideas:
 
@@ -68,7 +90,8 @@ The target changes the runtime foundation:
 - actor perceptions and memories projected at a branch head;
 - generated drafts separated from accepted reality;
 - Doxvelt-owned memory and capability validation;
-- Pi Agent Harness as a candidate replaceable model/auth/tool-loop adapter;
+- validated `pi-ai` `Models` plus `pi-agent-core` `Agent` as a replaceable
+  model/auth/tool-loop adapter;
 - local and hosted persistence behind the same domain contracts.
 
 Start with [Target Architecture](docs/design/ARCHITECTURE.md), [Branching and Memory](docs/design/BRANCHING_AND_MEMORY.md), and [Agent Runtime and Security](docs/design/AGENT_RUNTIME.md).
@@ -100,7 +123,7 @@ This connection gives @jade access to @mafia knowledge. :access:member
 
 ## CLI
 
-The CLI is the supported interactive play surface for Slice 1 and is also useful for tests, automation, and quick inspection. Studio remains the visual source-authoring surface.
+The CLI is the supported interactive play surface for the current engine and is also useful for tests, automation, and quick inspection. Studio remains the visual source-authoring surface.
 
 Create a demo workspace:
 
@@ -127,6 +150,11 @@ bun run doxvelt -- memories --json
 bun run doxvelt -- beliefs --json
 bun run doxvelt -- beliefs ceo --json
 ```
+
+The local API additionally exposes memory revision/retraction and explicit
+memory-job request, run/retry, list, and transition-history routes. The
+synchronous CLI `close-episode` command composes a durable closure request with
+an immediate job run.
 
 Export and import a local package:
 
