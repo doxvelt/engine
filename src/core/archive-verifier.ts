@@ -28,6 +28,7 @@ import {
 import type { SimulationArchive } from "./ports.ts";
 import type {
   CommitRecord,
+  MemoryOperation,
   RuntimeEvent,
 } from "./types.ts";
 
@@ -53,7 +54,16 @@ function topologicalCommits(commits: CommitRecord[]): CommitRecord[] {
 }
 
 export function validateSimulationArchive(archive: SimulationArchive): void {
-  if (archive.schemaVersion !== 4)
+  if (archive.schemaVersion === 4) {
+    const untouched = structuredClone(archive);
+    untouched.schemaVersion = 5;
+    untouched.memoryJobs = [];
+    untouched.memoryJobTransitions = [];
+    untouched.detachedMemoryOperations = [];
+    validateSimulationArchive(untouched);
+    upconvertV4Archive(archive);
+  }
+  if (archive.schemaVersion !== 5)
     throw new Error(
       `Unsupported simulation archive schema: ${String(archive.schemaVersion)}`,
     );
@@ -96,6 +106,7 @@ export function validateSimulationArchive(archive: SimulationArchive): void {
   ));
   if (new Set(operationIds).size !== operationIds.length)
     throw new Error("Simulation archive contains duplicate memory operation IDs.");
+  validateMemoryJobs(archive);
   for (const branch of archive.branches) {
     validateBranchRecord(branch);
     if (
@@ -135,6 +146,247 @@ export function validateSimulationArchive(archive: SimulationArchive): void {
   validateCommandResults(archive);
   validateCanonicalProvenance(archive);
   replayAccessGraph(archive, topologicalCommits(archive.commits));
+}
+
+function upconvertV4Archive(archive: SimulationArchive): void {
+  const jobs = [], transitions = [], detached: MemoryOperation[] = [];
+  for (const commit of archive.commits) {
+    const event = commit.events.find((item) => item.type === "episode_closed");
+    if (!event || event.type !== "episode_closed") continue;
+    const result = structuredClone(event.closure);
+    result.memoryOperations ||= legacyClosureOperations(commit);
+    const operations = result.memoryOperations;
+    detached.push(...operations);
+    const closureCommand = archive.commandResults.find(
+      (item) => item.commandId === commit.commandId,
+    );
+    const originBranchId = closureCommand?.canonicalInput.kind === "closure"
+      ? closureCommand.canonicalInput.branchId
+      : null;
+    const branch = archive.branches.find((item) => item.id === originBranchId);
+    if (!branch || !commit.parentCommitId) throw new Error(`Invalid v4 closure ancestry: ${commit.id}`);
+    const resultFingerprint = hash(stableStringify(result));
+    const jobId = domainId("memory_job", archive.simulation.ownerScope, archive.simulation.id, commit.commandId);
+    jobs.push({ id: jobId,
+      ownerScope: archive.simulation.ownerScope, simulationId: archive.simulation.id,
+      originBranchId: branch.id, episodeId: event.closure.episode.id, closureCommitId: commit.id,
+      basisHeadCommitId: commit.parentCommitId, commandId: commit.commandId,
+      label: event.closure.episode.label, status: "completed" as const, attemptCount: 1,
+      resultFingerprint, result, lastError: null, createdAt: commit.createdAt,
+      updatedAt: commit.createdAt });
+    transitions.push(
+      { id: domainId("memory_job_transition", jobId, "1", "running"),
+        jobId, ownerScope: archive.simulation.ownerScope,
+        simulationId: archive.simulation.id, attempt: 1, status: "running" as const,
+        resultFingerprint: null, result: null, error: null, createdAt: commit.createdAt },
+      { id: domainId("memory_job_transition", jobId, "1", "completed"),
+        jobId, ownerScope: archive.simulation.ownerScope,
+        simulationId: archive.simulation.id, attempt: 1, status: "completed" as const,
+        resultFingerprint, result, error: null, createdAt: commit.createdAt },
+    );
+    event.closure.memories = [];
+    event.closure.longTermMemories = [];
+    event.closure.extractedBeliefs = [];
+    event.closure.retainedBeliefs = [];
+    event.closure.memoryOperations = [];
+    const command = archive.commandResults.find((item) => item.commandId === commit.commandId);
+    if (command?.result.kind === "commit")
+      command.result.commit = structuredClone(commit);
+  }
+  archive.schemaVersion = 5; archive.memoryJobs = jobs;
+  archive.memoryJobTransitions = transitions;
+  archive.detachedMemoryOperations = detached;
+}
+
+function validateMemoryJobs(archive: SimulationArchive): void {
+  const jobs = archive.memoryJobs;
+  const transitions = archive.memoryJobTransitions;
+  const operations = archive.detachedMemoryOperations;
+  if (!jobs || !transitions || !operations)
+    throw new Error("Simulation archive v5 memory job collections are missing.");
+  const ids = new Set<string>(), transitionIds = new Set<string>();
+  const operationIds = new Set<string>();
+  for (const transition of transitions) {
+    if (transitionIds.has(transition.id))
+      throw new Error("Simulation archive contains duplicate memory job transition IDs.");
+    transitionIds.add(transition.id);
+    if (typeof transition.id !== "string" || typeof transition.jobId !== "string" ||
+      typeof transition.ownerScope !== "string" || typeof transition.simulationId !== "string" ||
+      !Number.isInteger(transition.attempt) || transition.attempt < 1 ||
+      !["running", "failed", "completed"].includes(transition.status) ||
+      typeof transition.createdAt !== "string")
+      throw new Error("Simulation archive contains a malformed memory job transition.");
+  }
+  for (const operation of operations) {
+    validateMemoryOperation(operation);
+    if (operation.type !== "asserted" && operation.type !== "consolidated")
+      throw new Error(`Simulation archive detached memory operation type is invalid: ${operation.id}`);
+    if (operationIds.has(operation.id)) throw new Error("Simulation archive contains duplicate detached memory operation IDs.");
+    operationIds.add(operation.id);
+  }
+  for (const job of jobs) {
+    if (
+      typeof job.id !== "string" || typeof job.ownerScope !== "string" ||
+      typeof job.simulationId !== "string" || typeof job.originBranchId !== "string" ||
+      typeof job.episodeId !== "string" || typeof job.closureCommitId !== "string" ||
+      typeof job.basisHeadCommitId !== "string" || typeof job.commandId !== "string" ||
+      typeof job.createdAt !== "string" || typeof job.updatedAt !== "string" ||
+      !(job.label === null || typeof job.label === "string") ||
+      !(job.resultFingerprint === null || typeof job.resultFingerprint === "string") ||
+      !(job.result === null || typeof job.result === "object") ||
+      !(job.lastError === null || typeof job.lastError === "string")
+    ) throw new Error("Simulation archive contains a malformed memory job.");
+    if (ids.has(job.id)) throw new Error("Simulation archive contains duplicate memory job IDs.");
+    ids.add(job.id);
+    const closure = archive.commits.find((item) => item.id === job.closureCommitId);
+    const branch = archive.branches.find((item) => item.id === job.originBranchId);
+    const command = archive.commandResults.find((item) => item.commandId === job.commandId);
+    const closureInput = command?.canonicalInput.kind === "closure"
+      ? command.canonicalInput : null;
+    const detachedResult = operations.filter((item) => item.closureCommitId === job.closureCommitId);
+    if (!closure || closure.kind !== "episode_closure" || closure.parentCommitId !== job.basisHeadCommitId ||
+      closure.commandId !== job.commandId || !branch || !isAncestor(archive.commits, closure.id, branch.headCommitId) ||
+      job.ownerScope !== archive.simulation.ownerScope || job.simulationId !== archive.simulation.id ||
+      job.id !== domainId("memory_job", job.ownerScope, job.simulationId, job.commandId) ||
+      job.episodeId !== domainId("episode", job.commandId) ||
+      !["pending", "running", "failed", "completed"].includes(job.status) ||
+      !Number.isInteger(job.attemptCount) || job.attemptCount < 0)
+      throw new Error(`Simulation archive memory job is invalid: ${job.id}`);
+    const normalizedLabel = closureInput?.payload.label?.trim() || null;
+    const checkpoint = closure.events.find((item) => item.type === "episode_closed");
+    if (!closureInput || closureInput.branchId !== job.originBranchId ||
+      closureInput.expectedHead !== job.basisHeadCommitId ||
+      normalizedLabel !== job.label || checkpoint?.type !== "episode_closed" ||
+      checkpoint.closure.episode.label !== job.label ||
+      checkpoint.closure.episode.closedAt !== job.createdAt ||
+      closure.createdAt !== job.createdAt)
+      throw new Error(`Simulation archive memory job request is not bound: ${job.id}`);
+    validateJobTransitions(archive, job, transitions.filter((item) => item.jobId === job.id));
+    if (job.status === "completed") {
+      if (!job.result) throw new Error(`Simulation archive completed memory job result is missing: ${job.id}`);
+      validateClosure(job.result);
+      if (job.attemptCount < 1 || !job.resultFingerprint || job.lastError !== null ||
+        hash(stableStringify(job.result)) !== job.resultFingerprint ||
+        stableStringify(job.result.memoryOperations || []) !== stableStringify(detachedResult))
+        throw new Error(`Simulation archive completed memory job result is invalid: ${job.id}`);
+      if (job.result.episode.id !== job.episodeId ||
+        job.result.episode.commitId !== job.closureCommitId ||
+        job.result.episode.label !== job.label)
+        throw new Error(`Simulation archive completed memory job episode is invalid: ${job.id}`);
+      validateClosureIntegrity(archive, job.commandId, closure, job.result, false);
+      const basis = ancestryThrough(archive.commits, job.basisHeadCommitId);
+      const lastClosure = basis.findLastIndex((item) => item.kind === "episode_closure");
+      const openCommits = basis.slice(lastClosure + 1);
+      const expectedActors = archive.contentRevision.compiled.entities
+        .filter(canHoldEpisodeMemory)
+        .filter((entity) => projectPerceptions(openCommits).some((item) => item.actorId === entity.id))
+        .map((entity) => entity.id);
+      const assertedActors = detachedResult.filter((item) => item.type === "asserted").map((item) => item.actorId);
+      if (stableStringify(assertedActors) !== stableStringify(expectedActors))
+        throw new Error(`Simulation archive completed memory job operation set is incomplete: ${job.id}`);
+    } else if (detachedResult.length || job.result !== null || job.resultFingerprint !== null ||
+      (job.status === "pending" && (job.attemptCount !== 0 || job.lastError !== null)) ||
+      (job.status === "running" && (job.attemptCount < 1 || job.lastError !== null)) ||
+      (job.status === "failed" && (job.attemptCount < 1 || !job.lastError)))
+      throw new Error(`Simulation archive incomplete memory job has a result: ${job.id}`);
+    const perceptions = new Map(projectPerceptions(ancestryThrough(archive.commits, job.basisHeadCommitId)).map((item) => [item.id, item]));
+    for (const operation of detachedResult) {
+      if (operation.basisCommitId !== job.basisHeadCommitId ||
+        operation.producer.mode !== "episode_closure" ||
+        operation.producer.commandId !== job.commandId ||
+        operation.type === "asserted" && operation.memoryKind !== "episode" ||
+        operation.type === "consolidated" && operation.memoryKind !== "long_term" ||
+        !("content" in operation) || !operation.content.trim())
+        throw new Error(`Simulation archive detached memory operation basis is invalid: ${operation.id}`);
+      validateMemoryOperationBasis(archive, closure, operation, perceptions);
+      const expectedSources = projectPerceptions(
+        ancestryThrough(archive.commits, job.basisHeadCommitId).slice(
+          ancestryThrough(archive.commits, job.basisHeadCommitId)
+            .findLastIndex((item) => item.kind === "episode_closure") + 1,
+        ),
+      ).filter((item) => item.actorId === operation.actorId);
+      if (
+        stableStringify(operation.sourcePerceptionIds) !== stableStringify(expectedSources.map((item) => item.id)) ||
+        stableStringify(operation.sourceEventIds) !== stableStringify(expectedSources.map((item) => item.sourceEventId)) ||
+        stableStringify(operation.sourceMessageVersionIds) !== stableStringify(expectedSources.map((item) => item.sourceMessageVersionId))
+      ) throw new Error(`Simulation archive detached memory provenance is incomplete: ${operation.id}`);
+      const expectedId = domainId("memory_operation", job.closureCommitId, operation.memoryId, operation.type);
+      const expectedMemoryId = domainId(
+        operation.type === "asserted" ? "episode_memory" : "long_memory",
+        job.commandId, operation.actorId,
+      );
+      if (operation.id !== expectedId || operation.memoryId !== expectedMemoryId)
+        throw new Error(`Simulation archive detached memory operation ID is invalid: ${operation.id}`);
+      if (operation.type === "consolidated" && !detachedResult.some((item) =>
+        item.type === "asserted" && item.memoryId === operation.episodeMemoryId &&
+        item.actorId === operation.actorId))
+        throw new Error(`Simulation archive consolidation has no episode assertion: ${operation.id}`);
+    }
+    const consolidations = detachedResult.filter((item) => item.type === "consolidated");
+    if (new Set(consolidations.map((item) => item.actorId)).size !== consolidations.length)
+      throw new Error(`Simulation archive contains duplicate consolidations: ${job.id}`);
+  }
+  for (const transition of transitions)
+    if (!jobs.some((job) => job.id === transition.jobId))
+      throw new Error(`Simulation archive memory job transition is unowned: ${transition.id}`);
+  for (const operation of operations)
+    if (!jobs.some((job) => job.closureCommitId === operation.closureCommitId))
+      throw new Error(`Simulation archive detached memory operation is unowned: ${operation.id}`);
+}
+
+function validateJobTransitions(
+  archive: SimulationArchive,
+  job: NonNullable<SimulationArchive["memoryJobs"]>[number],
+  transitions: NonNullable<SimulationArchive["memoryJobTransitions"]>,
+): void {
+  let expectedAttempt = 1;
+  for (let index = 0; index < transitions.length;) {
+    const running = transitions[index++];
+    if (!running || running.status !== "running" || running.attempt !== expectedAttempt)
+      throw new Error(`Simulation archive memory job transition order is invalid: ${job.id}`);
+    validateTransitionIdentity(archive, job, running);
+    const terminal = transitions[index];
+    if (!terminal) break;
+    if (terminal.attempt !== expectedAttempt ||
+      !["failed", "completed"].includes(terminal.status))
+      throw new Error(`Simulation archive memory job terminal transition is invalid: ${job.id}`);
+    validateTransitionIdentity(archive, job, terminal);
+    index++;
+    if (terminal.status === "completed" && index !== transitions.length)
+      throw new Error(`Simulation archive memory job has transitions after completion: ${job.id}`);
+    expectedAttempt++;
+  }
+  const latest = transitions.at(-1);
+  const expected = latest ? {
+    status: latest.status, attemptCount: latest.attempt,
+    resultFingerprint: latest.resultFingerprint, result: latest.result,
+    lastError: latest.error, updatedAt: latest.createdAt,
+  } : {
+    status: "pending", attemptCount: 0, resultFingerprint: null,
+    result: null, lastError: null, updatedAt: job.createdAt,
+  };
+  for (const key of Object.keys(expected) as Array<keyof typeof expected>)
+    if (stableStringify(job[key]) !== stableStringify(expected[key]))
+      throw new Error(`Simulation archive memory job current state is forged: ${job.id}`);
+}
+
+function validateTransitionIdentity(
+  archive: SimulationArchive,
+  job: NonNullable<SimulationArchive["memoryJobs"]>[number],
+  transition: NonNullable<SimulationArchive["memoryJobTransitions"]>[number],
+): void {
+  if (transition.id !== domainId("memory_job_transition", job.id,
+    String(transition.attempt), transition.status) ||
+    transition.ownerScope !== archive.simulation.ownerScope ||
+    transition.simulationId !== archive.simulation.id ||
+    transition.status === "completed" && (!transition.result ||
+      !transition.resultFingerprint || transition.error !== null) ||
+    transition.status !== "completed" && (transition.result !== null ||
+      transition.resultFingerprint !== null) ||
+    transition.status === "failed" && (!transition.error ||
+      transition.error.length > 256 || /(?:bearer|api[_-]?key|token|sk-)/i.test(transition.error)) ||
+    transition.status === "running" && transition.error !== null)
+    throw new Error(`Simulation archive memory job transition is invalid: ${transition.id}`);
 }
 
 function assertAcyclicBranchOrigins(archive: SimulationArchive): void {
@@ -878,6 +1130,7 @@ function validateClosureIntegrity(
   commandId: string,
   commit: CommitRecord,
   closure: Extract<RuntimeEvent, { type: "episode_closed" }>["closure"],
+  allowCheckpoint = true,
 ): void {
   const episodeId = domainId("episode", commandId);
   if (
@@ -892,9 +1145,6 @@ function validateClosureIntegrity(
     closure.episode.simulationId !== archive.simulation.id
   )
     throw invalidCommandResult(commandId, "closure identity mismatch");
-  const entities = new Map(
-    archive.contentRevision.compiled.entities.map((entity) => [entity.id, entity]),
-  );
   const ancestry = ancestryThrough(archive.commits, commit.parentCommitId);
   const lastClosure = ancestry.findLastIndex((item) => item.kind === "episode_closure");
   const openTurns = ancestry.slice(lastClosure + 1).flatMap((item) =>
@@ -904,7 +1154,21 @@ function validateClosureIntegrity(
   );
   if (!openTurns.length)
     throw invalidCommandResult(commandId, "closure has no open turns");
-  const turns = new Map(openTurns.map((turn) => [turn.message.id, turn]));
+  const detachedJob = archive.memoryJobs?.find(
+    (job) => job.closureCommitId === commit.id,
+  );
+  if (detachedJob && allowCheckpoint) {
+    if (
+      detachedJob.episodeId !== closure.episode.id ||
+      closure.memories.length || closure.longTermMemories.length ||
+      closure.extractedBeliefs.length || closure.retainedBeliefs.length ||
+      (closure.memoryOperations?.length || 0)
+    ) throw invalidCommandResult(commandId, "closure checkpoint payload mismatch");
+    return;
+  }
+  const entities = new Map(
+    archive.contentRevision.compiled.entities.map((entity) => [entity.id, entity]),
+  );
   const memories = new Map(closure.memories.map((memory) => [memory.id, memory]));
   const expectedMemoryActors = archive.contentRevision.compiled.entities
     .filter(canHoldEpisodeMemory)
@@ -1067,6 +1331,9 @@ function validateMemoryInput(
   const ancestry = ancestryThrough(archive.commits, commit.parentCommitId);
   const operations = ancestry.flatMap((item) => [
     ...legacyClosureOperations(item),
+    ...(archive.detachedMemoryOperations || []).filter(
+      (operation) => operation.closureCommitId === item.id,
+    ),
     ...item.events.filter((event) => event.type === "memory_operation")
       .map((event) => event.type === "memory_operation" ? event.operation : neverValue()),
   ]);

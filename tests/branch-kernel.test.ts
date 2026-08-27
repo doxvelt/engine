@@ -653,17 +653,15 @@ test("closure failure and stale closure leave no partial memory state", async (t
       ),
     /writer failed/,
   );
-  assert.equal(
-    store.getBranch("owner-a", "sim-a", "main")?.headCommitId,
-    turn.commit.id,
-  );
+  assert.notEqual(store.getBranch("owner-a", "sim-a", "main")?.headCommitId, turn.commit.id);
+  assert.equal(store.listMemoryJobs("owner-a", "sim-a")[0]?.status, "failed");
   assert.equal(
     projectBranch(store, {
       ownerScope: "owner-a",
       simulationId: "sim-a",
       branchId: "main",
     }).episodeClosures.length,
-    0,
+    1,
   );
 });
 
@@ -702,7 +700,7 @@ test("logical import/export preserves content, branches, commits, and projection
     simulationId: "sim-a",
     targetDir: packageDir,
   });
-  assert.equal(exported.manifest.schemaVersion, 4);
+  assert.equal(exported.manifest.schemaVersion, 5);
   await importSimulationPackage({
     packageDir,
     targetSourceDir: targetSource,

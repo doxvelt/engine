@@ -34,7 +34,7 @@ export type ImportSimulationPackageOptions = {
 };
 export type SimulationPackageManifest = {
   doxveltVersion: string;
-  schemaVersion: 4;
+  schemaVersion: 5;
   exportedAt: string;
   ownerScope: string;
   simulationId: string;
@@ -73,7 +73,7 @@ export async function exportSimulationPackage({
   const resolvedTarget = path.resolve(targetDir);
   const manifest: SimulationPackageManifest = {
     doxveltVersion: "0.0.0",
-    schemaVersion: 4,
+    schemaVersion: 5,
     exportedAt: new Date().toISOString(),
     ownerScope,
     simulationId,
@@ -301,7 +301,7 @@ function skip(entry: Dirent) {
 }
 function validateManifest(manifest: SimulationPackageManifest) {
   if (
-    manifest.schemaVersion !== 4 ||
+    ![4, 5].includes(manifest.schemaVersion) ||
     manifest.files.source !== "source" ||
     manifest.files.runtime !== "simulation.json"
   )

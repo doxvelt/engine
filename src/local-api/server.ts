@@ -4,7 +4,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import { generateDoxveltText } from "../ai/generate.ts";
-import { closeBranchEpisode } from "../core/branch-episode.ts";
+import { closeBranchEpisode, requestEpisodeClosure, runEpisodeMemoryJob } from "../core/branch-episode.ts";
 import {
   assertExpectedBranchHead,
   commitManualTurn,
@@ -41,6 +41,7 @@ import {
   CommandIdentityError,
   DomainNotFoundError,
   DomainValidationError,
+  MemoryJobConflictError,
 } from "../core/ports.ts";
 
 const MAX_BODY_BYTES = 1_000_000;
@@ -480,6 +481,27 @@ export async function handleLocalApiRequest(
       });
       return send(response, 200, { ...closed.closure, commit: closed.commit });
     }
+    if (method === "POST" && parts[2] === "episodes" && parts[3] === "request-closure") {
+      const body = await bodyOf(request);
+      return send(response, 200, requestEpisodeClosure(store, {
+        ...envelope(body, ownerScope, simulationId),
+        payload: { label: optional(body, "label") || null },
+      }));
+    }
+    if (
+      method === "GET" && parts[2] === "memory-jobs" && parts[3] &&
+      parts[4] === "transitions"
+    )
+      return send(response, 200, store.listMemoryJobTransitions(
+        ownerScope, simulationId, parts[3],
+      ));
+    if (method === "GET" && parts[2] === "memory-jobs")
+      return send(response, 200, store.listMemoryJobs(ownerScope, simulationId));
+    if (method === "POST" && parts[2] === "memory-jobs" && parts[3]) {
+      return send(response, 200, await runEpisodeMemoryJob(store, {
+        ownerScope, simulationId, jobId: parts[3],
+      }));
+    }
     throw new HttpError(404, `No route for ${method} ${url.pathname}.`);
   } finally {
     store.close();
@@ -745,7 +767,8 @@ function sendError(response: ServerResponse, error: unknown) {
     error instanceof HttpError
       ? error.status
       : error instanceof BranchConflictError ||
-          error instanceof CommandIdentityError
+          error instanceof CommandIdentityError ||
+          error instanceof MemoryJobConflictError
         ? 409
         : error instanceof DomainNotFoundError
           ? 404

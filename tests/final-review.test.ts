@@ -25,6 +25,7 @@ import {
   exportSimulationPackage,
   importSimulationPackage,
 } from "../src/store/portable.ts";
+import { completedArchiveAsSchemaV4 } from "./archive-test-helpers.ts";
 
 const run = promisify(execFile);
 const exampleWorkspace = path.resolve("examples/executive-interviews");
@@ -718,7 +719,7 @@ test("archive fingerprints bind canonical input to authoritative history", async
         targetSourceDir: source,
         targetDbPath: db,
       }),
-      /fingerprint mismatch|input .*mismatch|turn payload mismatch|runtime effects mismatch/,
+      /fingerprint mismatch|input .*mismatch|turn payload mismatch|runtime effects mismatch|job request is not bound/,
     );
     await assert.rejects(readFile(source, "utf8"), /ENOENT/);
     const audit = await openBranchStore(db).open();
@@ -730,7 +731,7 @@ test("archive fingerprints bind canonical input to authoritative history", async
   }
 });
 
-test("archive import rejects malformed runtime event payloads before writes", async (t) => {
+test("legacy embedded closure payload validation", async (t) => {
   const { root, store, started } = await fixture(t, "malformed-events");
   const turn = commitManualTurn(store, {
     ownerScope: "local",
@@ -755,7 +756,10 @@ test("archive import rejects malformed runtime event payloads before writes", as
     commandId: "event-close",
     payload: {},
   });
-  const original = store.exportSimulation("local", "malformed-events");
+  const original = completedArchiveAsSchemaV4(
+    store.exportSimulation("local", "malformed-events"),
+  );
+  validateSimulationArchive(structuredClone(original));
   const mutations = [
     (archive: typeof original) => {
       const event = archive.commits[1]!.events[0] as Record<string, unknown>;
