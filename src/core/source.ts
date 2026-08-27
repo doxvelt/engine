@@ -1,4 +1,15 @@
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { constants } from "node:fs";
 import type { Dirent } from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "./frontmatter.ts";
@@ -80,7 +91,22 @@ export async function listWorkspaceSourceFiles(workspacePath: string): Promise<{
 export async function readSourceText(workspacePath: string, relativePath: string): Promise<{ root: string; path: string; text: string }> {
   const root = path.resolve(workspacePath);
   const absolutePath = resolveSourcePath(root, relativePath);
-  const text = await readFile(absolutePath, "utf8");
+  const rootReal = await validateWorkspaceRoot(root);
+  await validateExistingSourcePath(root, absolutePath, rootReal);
+  await requireRegularSourceTarget(absolutePath);
+  const handle = await open(
+    absolutePath,
+    constants.O_RDONLY | constants.O_NONBLOCK | (constants.O_NOFOLLOW || 0),
+  );
+  let text: string;
+  try {
+    const stats = await handle.stat();
+    if (!stats.isFile() || stats.nlink > 1)
+      throw new Error("Source path must be a private regular file.");
+    text = await handle.readFile("utf8");
+  } finally {
+    await handle.close();
+  }
   return {
     root,
     path: path.relative(root, absolutePath).replaceAll("\\", "/"),
@@ -95,8 +121,25 @@ export async function writeSourceText(
 ): Promise<{ root: string; path: string; text: string }> {
   const root = path.resolve(workspacePath);
   const absolutePath = resolveSourcePath(root, relativePath);
-  await mkdir(path.dirname(absolutePath), { recursive: true });
-  await writeFile(absolutePath, text, "utf8");
+  const rootReal = await validateWorkspaceRoot(root);
+  await createSafeSourceDirectories(root, path.dirname(absolutePath), rootReal);
+  await validateExistingSourcePath(root, absolutePath, rootReal, true);
+  await requireRegularSourceTarget(absolutePath, true);
+  const handle = await open(
+    absolutePath,
+    constants.O_WRONLY | constants.O_CREAT |
+      constants.O_NONBLOCK | (constants.O_NOFOLLOW || 0),
+    0o600,
+  );
+  try {
+    const stats = await handle.stat();
+    if (!stats.isFile() || stats.nlink > 1)
+      throw new Error("Source path must be a private regular file.");
+    await handle.truncate(0);
+    await handle.writeFile(text, "utf8");
+  } finally {
+    await handle.close();
+  }
   return {
     root,
     path: path.relative(root, absolutePath).replaceAll("\\", "/"),
@@ -253,6 +296,95 @@ function resolveSourcePath(root: string, relativePath: string): string {
   }
 
   return absolutePath;
+}
+
+async function validateWorkspaceRoot(root: string): Promise<string> {
+  await rejectSymlinkComponents(root);
+  const stats = await lstat(root);
+  if (!stats.isDirectory()) throw new Error("Workspace path must be a directory.");
+  return realpath(root);
+}
+
+async function validateExistingSourcePath(
+  root: string,
+  absolutePath: string,
+  rootReal: string,
+  allowMissing = false,
+): Promise<void> {
+  await rejectSymlinkComponents(absolutePath, allowMissing);
+  try {
+    assertRealContainment(rootReal, await realpath(absolutePath));
+  } catch (error) {
+    if (allowMissing && isNodeError(error) && error.code === "ENOENT") return;
+    throw error;
+  }
+  const relative = path.relative(root, absolutePath);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative))
+    throw new Error("Source path must stay inside the workspace source folder.");
+}
+
+async function createSafeSourceDirectories(
+  root: string,
+  targetDirectory: string,
+  rootReal: string,
+): Promise<void> {
+  const relative = path.relative(root, targetDirectory);
+  let current = root;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    try {
+      const stats = await lstat(current);
+      if (stats.isSymbolicLink() || !stats.isDirectory())
+        throw new Error("Workspace source path contains an unsafe component.");
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== "ENOENT") throw error;
+      await mkdir(current, { recursive: false });
+      const stats = await lstat(current);
+      if (stats.isSymbolicLink() || !stats.isDirectory())
+        throw new Error("Workspace source directory changed during creation.");
+    }
+    assertRealContainment(rootReal, await realpath(current));
+  }
+}
+
+async function rejectSymlinkComponents(
+  absolutePath: string,
+  allowMissing = false,
+): Promise<void> {
+  const parsed = path.parse(absolutePath);
+  let current = parsed.root;
+  for (const segment of absolutePath.slice(parsed.root.length).split(path.sep)) {
+    if (!segment) continue;
+    current = path.join(current, segment);
+    try {
+      if ((await lstat(current)).isSymbolicLink())
+        throw new Error("Workspace source path may not contain symbolic links.");
+    } catch (error) {
+      if (allowMissing && isNodeError(error) && error.code === "ENOENT") return;
+      throw error;
+    }
+  }
+}
+
+function assertRealContainment(rootReal: string, candidateReal: string): void {
+  const relative = path.relative(rootReal, candidateReal);
+  if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative)))
+    return;
+  throw new Error("Workspace source path escapes the workspace.");
+}
+
+async function requireRegularSourceTarget(
+  target: string,
+  allowMissing = false,
+): Promise<void> {
+  try {
+    const stats = await lstat(target);
+    if (!stats.isFile() || stats.nlink > 1)
+      throw new Error("Source path must be a private regular file.");
+  } catch (error) {
+    if (allowMissing && isNodeError(error) && error.code === "ENOENT") return;
+    throw error;
+  }
 }
 
 function idFromFilename(filename: string): string {

@@ -1,22 +1,18 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { DoxveltGenerationError, describeModelForDiagnostics, generateDoxveltText } from "../src/ai/generate.ts";
-import { createRetainedBeliefDraft, resolveCurrentBeliefs, weakenRetainedStrength } from "../src/core/beliefs.ts";
+import {
+  DoxveltGenerationError,
+  describeModelForDiagnostics,
+  generateDoxveltText,
+} from "../src/ai/generate.ts";
 import { compileWorkspace } from "../src/core/compiler.ts";
-import { assembleActorContext } from "../src/core/context.ts";
-import { advanceTurn, buildActorContext, startSimulation } from "../src/core/engine.ts";
-import { closeEpisode } from "../src/core/episode.ts";
+import type { AssetRecord } from "../src/core/types.ts";
 import { parseFrontmatter } from "../src/core/frontmatter.ts";
-import { ensureFirstImpressions } from "../src/core/impressions.ts";
 import { initWorkspace } from "../src/core/init.ts";
-import { loadModelRecord } from "../src/core/models.ts";
-import type { AssetRecord, EntityRecord, SimulationRecord, TranscriptTurn } from "../src/core/types.ts";
-import { createLocalApiServer } from "../src/local-api/server.ts";
-import { openRuntimeStore } from "../src/store/sqlite.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -29,7 +25,9 @@ test("initWorkspace creates a sparse compilable scaffold", async (context) => {
 
   assert.equal(compiled.entities.length, 1);
   assert.equal(compiled.scenarios.at(0)?.id, "scenario");
-  assert.ok(compiled.models.some((model) => model.id === "local-openai-compatible"));
+  assert.ok(
+    compiled.models.some((model) => model.id === "local-openai-compatible"),
+  );
   assert.ok(compiled.beliefs.length >= 1);
   assert.ok(compiled.beliefs.at(0)?.sourceSpan.file);
 });
@@ -43,7 +41,9 @@ test("initWorkspace can seed the executive interviews example", async (context) 
 
   assert.equal(compiled.entities.length, 7);
   assert.equal(compiled.scenarios.at(0)?.id, "executive-interviews");
-  assert.ok(compiled.models.some((model) => model.id === "local-openai-compatible"));
+  assert.ok(
+    compiled.models.some((model) => model.id === "local-openai-compatible"),
+  );
   assert.ok(compiled.beliefs.length >= 30);
   assert.ok(compiled.surfaces.length >= 8);
   assert.ok(compiled.beliefs.at(0)?.sourceSpan.file);
@@ -71,7 +71,7 @@ test("initWorkspace rejects unknown templates", async (context) => {
 
   await assert.rejects(
     () => initWorkspace(workspacePath, { template: "missing-template" }),
-    /Unknown Doxvelt init template/
+    /Unknown Doxvelt init template/,
   );
 });
 
@@ -93,7 +93,7 @@ test("compiler validates model record metadata shape", async (context) => {
 id: missing-provider
 model: llama3.1
 ---
-`
+`,
   );
   await writeFile(
     path.join(workspacePath, "models", "bad-base-url.yaml"),
@@ -103,12 +103,20 @@ provider: openai-compatible
 model: llama3.1
 base_url: not-a-url
 ---
-`
+`,
   );
 
   const compiled = await compileWorkspace(workspacePath);
-  assert.ok(compiled.diagnostics.some((diagnostic) => diagnostic.code === "model_missing_provider"));
-  assert.ok(compiled.diagnostics.some((diagnostic) => diagnostic.code === "model_invalid_base_url"));
+  assert.ok(
+    compiled.diagnostics.some(
+      (diagnostic) => diagnostic.code === "model_missing_provider",
+    ),
+  );
+  assert.ok(
+    compiled.diagnostics.some(
+      (diagnostic) => diagnostic.code === "model_invalid_base_url",
+    ),
+  );
 });
 
 test("compiler does not infer belief strength from untagged prose", async (context) => {
@@ -122,14 +130,14 @@ test("compiler does not infer belief strength from untagged prose", async (conte
       "@actor knows @other is late.",
       "@actor suspects @other is hiding something.",
       "@actor doubts @other will help.",
-      "@actor treats tagged material as compiled. :+1"
-    ].join("\n")
+      "@actor treats tagged material as compiled. :+1",
+    ].join("\n"),
   );
 
   const compiled = await compileWorkspace(workspacePath);
   assert.deepEqual(
     compiled.beliefs.map((belief) => belief.propositionText),
-    ["@actor treats tagged material as compiled."]
+    ["@actor treats tagged material as compiled."],
   );
 });
 
@@ -148,11 +156,13 @@ visibility: public
 ---
 
 @actor is a participant in the simulation.
-`
+`,
   );
 
   const compiled = await compileWorkspace(workspacePath);
-  const diagnostic = compiled.diagnostics.find((candidate) => candidate.code === "entity_invalid_kind");
+  const diagnostic = compiled.diagnostics.find(
+    (candidate) => candidate.code === "entity_invalid_kind",
+  );
   assert.ok(diagnostic);
   assert.match(diagnostic.message, /organization/);
 });
@@ -171,7 +181,7 @@ entities: [mafia, alice]
 ---
 
 This connection gives @mafia access to @alice knowledge. :access:member
-`
+`,
   );
   await writeFile(
     path.join(workspacePath, "connections", "alice-self.md"),
@@ -182,12 +192,16 @@ entities: [alice]
 ---
 
 This connection gives @alice access to @alice knowledge. :access:member
-`
+`,
   );
 
   const compiled = await compileWorkspace(workspacePath);
-  const cycle = compiled.diagnostics.find((diagnostic) => diagnostic.code === "membership_cycle");
-  const selfLoop = compiled.diagnostics.find((diagnostic) => diagnostic.code === "membership_self_loop");
+  const cycle = compiled.diagnostics.find(
+    (diagnostic) => diagnostic.code === "membership_cycle",
+  );
+  const selfLoop = compiled.diagnostics.find(
+    (diagnostic) => diagnostic.code === "membership_self_loop",
+  );
   assert.ok(cycle);
   assert.match(cycle.message, /@alice -> @inner-circle -> @mafia -> @alice/);
   assert.ok(selfLoop);
@@ -208,12 +222,23 @@ entities: [mafia, alice]
 ---
 
 This connection gives @mafia access to @alice knowledge. :access:member
-`
+`,
   );
 
   await assert.rejects(
-    () => runCli(["start", workspacePath, "--scenario", "membership-room", "--db", dbPath, "--json"]),
-    /Membership access cycle is invalid/
+    () =>
+      runCli([
+        "start",
+        workspacePath,
+        "--scenario",
+        "membership-room",
+        "--command",
+        "cycle-start",
+        "--db",
+        dbPath,
+        "--json",
+      ]),
+    /Membership access cycle is invalid/,
   );
 });
 
@@ -228,10 +253,12 @@ test("CLI positional parsing ignores option values", async (context) => {
     "start",
     "--scenario",
     "membership-room",
+    "--command",
+    "positional-start",
     workspacePath,
     "--db",
     dbPath,
-    "--json"
+    "--json",
   ]);
 
   assert.equal(started.scenarioId, "membership-room");
@@ -239,7 +266,9 @@ test("CLI positional parsing ignores option values", async (context) => {
 });
 
 test("frontmatter parser accepts yaml-only files with closing fence at EOF", () => {
-  const parsed = parseFrontmatter("---\nid: local\nprovider: openai-compatible\n---");
+  const parsed = parseFrontmatter(
+    "---\nid: local\nprovider: openai-compatible\n---",
+  );
 
   assert.equal(parsed.data.id, "local");
   assert.equal(parsed.data.provider, "openai-compatible");
@@ -248,15 +277,18 @@ test("frontmatter parser accepts yaml-only files with closing fence at EOF", () 
 
 test("OpenAI-compatible model diagnostics normalize valid base URLs", () => {
   const model = modelRecord({
-    base_url: "http://localhost:11434/v1/"
+    base_url: "http://localhost:11434/v1/",
   });
 
-  assert.match(describeModelForDiagnostics(model), /Base URL: http:\/\/localhost:11434\/v1/);
+  assert.match(
+    describeModelForDiagnostics(model),
+    /Base URL: http:\/\/localhost:11434\/v1/,
+  );
 });
 
 test("AI generation reports invalid OpenAI-compatible base URLs without SDK retry noise", async () => {
   const model = modelRecord({
-    base_url: "https://https://inf1-ein.tail8a1c20.ts.net/v1"
+    base_url: "https://https://inf1-ein.tail8a1c20.ts.net/v1",
   });
 
   await assert.rejects(
@@ -265,7 +297,7 @@ test("AI generation reports invalid OpenAI-compatible base URLs without SDK retr
         actorId: "coo",
         purpose: "turn",
         model,
-        prompt: "Speak as the COO."
+        prompt: "Speak as the COO.",
       }),
     (error) => {
       assert.ok(error instanceof DoxveltGenerationError);
@@ -274,1573 +306,8 @@ test("AI generation reports invalid OpenAI-compatible base URLs without SDK retr
       assert.match(error.message, /more than one URL scheme/);
       assert.doesNotMatch(error.message, /AI_RetryError/);
       return true;
-    }
-  );
-});
-
-test("runtime store saves compiled actors and manual turns", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await initWorkspace(workspacePath, { template: "executive-interviews" });
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "executive-interviews",
-      compiled
-    });
-
-    const actors = store.listActors("default");
-    assert.deepEqual(
-      actors.map((actor) => actor.id),
-      ["board", "ceo", "cfo", "coo", "product-lead", "student-team"]
-    );
-    assert.deepEqual(store.listCompiledRecords<AssetRecord>("default", "model"), []);
-
-    const model = await loadModelRecord(compiled.sourceRoot, "local-openai-compatible");
-    assert.equal(model?.metadata.provider, "openai-compatible");
-
-    const turn = store.appendTurn({
-      simulationId: "default",
-      actorId: "ceo",
-      text: "The market is changing faster than our organization.",
-      audience: ["ceo", "student-team"]
-    });
-
-    assert.equal(turn.actorId, "ceo");
-    assert.equal(turn.audience.length, 2);
-  } finally {
-    store.close();
-  }
-});
-
-test("core engine starts simulations and advances turns without CLI parsing", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await initWorkspace(workspacePath, { template: "executive-interviews" });
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    const started = await startSimulation({
-      store,
-      workspacePath,
-      scenarioId: "executive-interviews"
-    });
-
-    assert.deepEqual(
-      started.actors.map((actor) => actor.id),
-      ["board", "ceo", "cfo", "coo", "product-lead", "student-team"]
-    );
-
-    const advanced = await advanceTurn({
-      store,
-      actorId: "ceo",
-      manualText: "The board needs a clearer operating picture.",
-      whisperText: "Keep the board panic private.",
-      audience: ["student-team"]
-    });
-
-    assert.deepEqual(advanced.turn.audience, ["ceo", "student-team"]);
-    assert.equal(advanced.consumedStageWhispers.length, 1);
-    assert.match(advanced.context.promptPreview, /Keep the board panic private/);
-
-    const afterTurnContext = buildActorContext({
-      store,
-      actorId: "ceo"
-    });
-
-    assert.match(afterTurnContext.promptPreview, /The board needs a clearer operating picture/);
-    assert.doesNotMatch(afterTurnContext.promptPreview, /Keep the board panic private/);
-
-    await startSimulation({
-      store,
-      workspacePath,
-      scenarioId: "executive-interviews"
-    });
-
-    assert.equal(store.listTranscript("default").length, 0);
-  } finally {
-    store.close();
-  }
-});
-
-test("local API exposes the core play loop without shelling out to the CLI", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-  const packageDir = path.join(root, "package");
-
-  const server = createLocalApiServer({ dbPath });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  context.after(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
-  });
-
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
-  const baseUrl = `http://127.0.0.1:${address.port}`;
-
-  const preflight = await fetch(`${baseUrl}/simulations/default/actors`, { method: "OPTIONS" });
-  assert.equal(preflight.status, 204);
-  assert.equal(preflight.headers.get("access-control-allow-origin"), "*");
-
-  const initialized = await apiJson(`${baseUrl}/source/init`, {
-    method: "POST",
-    body: {
-      workspacePath,
-      template: "executive-interviews"
-    }
-  });
-  assert.equal(initialized.root, path.resolve(workspacePath));
-
-  const compiled = await apiJson(`${baseUrl}/source/compile`, {
-    method: "POST",
-    body: { workspacePath }
-  });
-  assert.equal(compiled.entities.length, 7);
-
-  const sourceList = await apiJson(`${baseUrl}/source?workspacePath=${encodeURIComponent(workspacePath)}`);
-  assert.ok(sourceList.files.some((file: { path: string }) => file.path === "entities/ceo/IDENTITY.md"));
-
-  const sourceFile = await apiJson(
-    `${baseUrl}/source/file?workspacePath=${encodeURIComponent(workspacePath)}&path=${encodeURIComponent("worlds/strategy-class.md")}`
-  );
-  assert.match(sourceFile.text, /strategy class/i);
-
-  const studioNote = "---\nid: studio-note\nname: Studio Note\n---\n\nStudio authoring works.\n";
-  const writtenFile = await apiJson(`${baseUrl}/source/file`, {
-    method: "POST",
-    body: {
-      workspacePath,
-      path: "worlds/studio-note.md",
-      text: studioNote
-    }
-  });
-  assert.equal(writtenFile.path, "worlds/studio-note.md");
-  assert.equal(await readFile(path.join(workspacePath, "worlds", "studio-note.md"), "utf8"), studioNote);
-
-  const nonWorkspacePath = path.join(root, "not-a-workspace");
-  await mkdir(nonWorkspacePath, { recursive: true });
-  await assert.rejects(
-    () =>
-      apiJson(`${baseUrl}/source/delete`, {
-        method: "POST",
-        body: { workspacePath: nonWorkspacePath }
-      }),
-    /does not look like a Doxvelt workspace/
-  );
-
-  await assert.rejects(
-    () =>
-      apiJson(`${baseUrl}/source/delete`, {
-        method: "POST",
-        body: { workspacePath: path.join(process.cwd(), "examples", "executive-interviews") }
-      }),
-    /Refusing to delete protected repository folder: examples/
-  );
-
-  const deleteWorkspacePath = path.join(root, "delete-workspace");
-  await initWorkspace(deleteWorkspacePath);
-  const deleted = await apiJson(`${baseUrl}/source/delete`, {
-    method: "POST",
-    body: { workspacePath: deleteWorkspacePath }
-  });
-  assert.equal(deleted.deleted, true);
-  await assert.rejects(() => readFile(path.join(deleteWorkspacePath, "worlds", "world.md"), "utf8"), /ENOENT/);
-
-  const started = await apiJson(`${baseUrl}/simulations/start`, {
-    method: "POST",
-    body: {
-      workspacePath,
-      scenarioId: "executive-interviews"
-    }
-  });
-
-  assert.deepEqual(
-    started.actors.map((actor: EntityRecord) => actor.id),
-    ["board", "ceo", "cfo", "coo", "product-lead", "student-team"]
-  );
-
-  const actors = await apiJson(`${baseUrl}/simulations/default/actors`);
-  assert.deepEqual(
-    actors.actors.map((actor: EntityRecord) => actor.id),
-    ["board", "ceo", "cfo", "coo", "product-lead", "student-team"]
-  );
-
-  const audience = await apiJson(`${baseUrl}/simulations/default/audience`, {
-    method: "POST",
-    body: {
-      actorId: "student-team",
-      action: "add",
-      reason: "Students join the interview."
-    }
-  });
-  assert.deepEqual(audience.activeAudience, ["student-team"]);
-
-  const access = await apiJson(`${baseUrl}/simulations/default/access`, {
-    method: "POST",
-    body: {
-      action: "grant",
-      member: "ceo",
-      container: "coo",
-      reason: "The CEO receives the COO briefing."
-    }
-  });
-  assert.ok(
-    access.effectiveAccessLinks.some((link: { member: string; container: string }) => {
-      return link.member === "ceo" && link.container === "coo";
-    })
-  );
-
-  const whisper = await apiJson(`${baseUrl}/simulations/default/whispers`, {
-    method: "POST",
-    body: {
-      targetActorId: "ceo",
-      text: "Keep the board panic private."
-    }
-  });
-  assert.equal(whisper.whisper.targetActorId, "ceo");
-
-  const turn = await apiJson(`${baseUrl}/simulations/default/turns`, {
-    method: "POST",
-    body: {
-      actorId: "ceo",
-      manualText: "The board needs a clearer operating picture."
-    }
-  });
-
-  assert.deepEqual(turn.turn.audience, ["ceo", "student-team"]);
-  assert.equal(turn.consumedStageWhispers.length, 1);
-
-  const actorContext = await apiJson(`${baseUrl}/simulations/default/context/ceo`);
-  assert.match(actorContext.promptPreview, /The board needs a clearer operating picture/);
-  assert.doesNotMatch(actorContext.promptPreview, /Keep the board panic private/);
-
-  const transcript = await apiJson(`${baseUrl}/simulations/default/transcript`);
-  assert.equal(transcript.transcript.length, 1);
-
-  const beliefs = await apiJson(`${baseUrl}/simulations/default/beliefs?actorId=ceo`);
-  assert.equal(beliefs.actorId, "ceo");
-  assert.ok(beliefs.currentBeliefs.length > 0);
-
-  const closure = await apiJson(`${baseUrl}/simulations/default/episodes/close`, {
-    method: "POST",
-    body: { label: "API smoke" }
-  });
-  assert.equal(closure.episode.label, "API smoke");
-  assert.ok(closure.memories.length > 0);
-
-  const memories = await apiJson(`${baseUrl}/simulations/default/memories`);
-  assert.ok(memories.memories.length > 0);
-
-  const exported = await apiJson(`${baseUrl}/packages/export`, {
-    method: "POST",
-    body: { targetDir: packageDir }
-  });
-  assert.equal(exported.manifest.simulationId, "default");
-});
-
-test("actor context includes subjective beliefs and accessible transcript only", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await initWorkspace(workspacePath, { template: "executive-interviews" });
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "executive-interviews",
-      compiled
-    });
-
-    store.appendTurn({
-      simulationId: "default",
-      actorId: "ceo",
-      text: "The board is worried about strategy drift.",
-      audience: ["ceo", "student-team"]
-    });
-
-    store.appendTurn({
-      simulationId: "default",
-      actorId: "coo",
-      text: "The supplier situation is worse than we are saying.",
-      audience: ["coo"]
-    });
-
-    const simulation = store.getSimulation("default");
-    assert.ok(simulation);
-
-    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "ceo");
-    assert.ok(actor);
-
-    const context = assembleActorContext({
-      simulation,
-      actor,
-      worlds: store.listCompiledRecords("default", "world"),
-      scenario: store.getCompiledRecord("default", "scenario", "executive-interviews"),
-      formats: store.listCompiledRecords("default", "format"),
-      beliefs: store.listBeliefs("default"),
-      turns: store.listAccessibleTurns("default", "ceo")
-    });
-
-    assert.equal(context.actor.id, "ceo");
-    assert.ok(context.subjective.beliefs.every((belief) => belief.holder === "ceo"));
-    assert.equal(context.subjective.transcript.length, 1);
-    assert.match(context.promptPreview, /The board is worried/);
-    assert.doesNotMatch(context.promptPreview, /supplier situation is worse/);
-    assert.doesNotMatch(context.promptPreview, /operations team is hiding a supplier reliability problem/);
-  } finally {
-    store.close();
-  }
-});
-
-test("actor context enforces subjective isolation without fixture source", () => {
-  const simulation: SimulationRecord = {
-    id: "test-sim",
-    sourceRoot: "/tmp/no-world-source",
-    scenarioId: "subjective-room",
-    createdAt: "2026-05-22T00:00:00.000Z"
-  };
-  const actor = entityRecord("alice");
-  const scenario = assetRecord("scenario", "subjective-room", [
-    "@alice knows the safe code is 1234. :canonical :hidden",
-    "@bob knows the vault is already empty. :canonical :hidden",
-    "Everyone sees the lobby is open. :canonical"
-  ].join("\n"));
-  const beliefs = [
-    beliefRecord("alice", "@alice believes @bob is nervous."),
-    beliefRecord("bob", "@bob believes @alice is distracted.")
-  ];
-  const visibleTurns: TranscriptTurn[] = [
-    turnRecord(1, "alice", "I will keep my part quiet.", ["alice"]),
-    turnRecord(3, "bob", "The lobby is open.", ["alice", "bob"])
-  ];
-
-  const context = assembleActorContext({
-    simulation,
-    actor,
-    worlds: [],
-    scenario,
-    formats: [],
-    beliefs,
-    turns: visibleTurns
-  });
-
-  assert.match(context.promptPreview, /safe code is 1234/);
-  assert.doesNotMatch(context.promptPreview, /vault is already empty/);
-  assert.match(context.promptPreview, /Everyone sees the lobby is open/);
-  assert.deepEqual(
-    context.subjective.beliefs.map((belief) => belief.propositionText),
-    ["@alice believes @bob is nervous."]
-  );
-  assert.deepEqual(
-    context.subjective.transcript.map((turn) => turn.id),
-    [1, 3]
-  );
-});
-
-test("actor context filters hidden scenario lines for other actors", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await initWorkspace(workspacePath, { template: "executive-interviews" });
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "executive-interviews",
-      compiled
-    });
-
-    const simulation = store.getSimulation("default");
-    assert.ok(simulation);
-
-    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "coo");
-    assert.ok(actor);
-
-    const context = assembleActorContext({
-      simulation,
-      actor,
-      worlds: store.listCompiledRecords("default", "world"),
-      scenario: store.getCompiledRecord("default", "scenario", "executive-interviews"),
-      formats: store.listCompiledRecords("default", "format"),
-      beliefs: store.listBeliefs("default"),
-      turns: []
-    });
-
-    assert.match(context.promptPreview, /operations team is hiding a supplier reliability problem/);
-    assert.doesNotMatch(context.promptPreview, /board is worried about strategy drift/);
-    assert.match(context.assets.scenario?.body || "", /operations team is hiding a supplier reliability problem/);
-    assert.doesNotMatch(context.assets.scenario?.body || "", /board is worried about strategy drift/);
-  } finally {
-    store.close();
-  }
-});
-
-test("actor context includes affiliation beliefs through transitive membership access", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await writeMembershipWorld(workspacePath);
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "membership-room",
-      compiled
-    });
-
-    assert.deepEqual(
-      store.listAccessLinks("default").map((link) => [link.member, link.container]),
-      [
-        ["alice", "inner-circle"],
-        ["inner-circle", "mafia"]
-      ]
-    );
-
-    const simulation = store.getSimulation("default");
-    assert.ok(simulation);
-
-    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "alice");
-    assert.ok(actor);
-
-    const actorContext = assembleActorContext({
-      simulation,
-      actor,
-      worlds: [],
-      scenario: store.getCompiledRecord("default", "scenario", "membership-room"),
-      formats: [],
-      beliefs: store.listBeliefs("default"),
-      accessLinks: store.listAccessLinks("default"),
-      surfaces: store.listSurfaces("default"),
-      observedEntityIds: ["inner-circle"],
-      turns: []
-    });
-
-    assert.deepEqual(
-      [...new Set(actorContext.subjective.beliefs.map((belief) => belief.holder))],
-      ["alice", "inner-circle", "mafia"]
-    );
-    assert.deepEqual(
-      uniqueProvenance(actorContext.subjective.beliefAccess.map((access) => access.provenance)),
-      [
-        {
-          mode: "held",
-          holder: "alice",
-          sourceHolder: "alice",
-          accessPath: ["alice"]
-        },
-        {
-          mode: "accessed_through_membership",
-          holder: "alice",
-          sourceHolder: "inner-circle",
-          accessPath: ["alice", "inner-circle"]
-        },
-        {
-          mode: "accessed_through_membership",
-          holder: "alice",
-          sourceHolder: "mafia",
-          accessPath: ["alice", "inner-circle", "mafia"]
-        }
-      ]
-    );
-    assert.match(actorContext.promptPreview, /held by @inner-circle; accessed through @alice -> @inner-circle/);
-    assert.match(actorContext.promptPreview, /held by @mafia; accessed through @alice -> @inner-circle -> @mafia/);
-    assert.match(actorContext.promptPreview, /@mafia treats the docks as controlled territory/);
-    assert.match(actorContext.promptPreview, /@alice usually appears watchful/);
-    assert.match(actorContext.promptPreview, /@inner-circle usually appears disciplined/);
-    assert.deepEqual(
-      actorContext.subjective.surfaces.map((surface) => surface.entity),
-      ["alice", "inner-circle"]
-    );
-  } finally {
-    store.close();
-  }
-});
-
-test("retained beliefs weaken when membership access is lost", () => {
-  assert.equal(weakenRetainedStrength(3), 1);
-  assert.equal(weakenRetainedStrength(1), 1);
-  assert.equal(weakenRetainedStrength(0), 0);
-  assert.equal(weakenRetainedStrength(-1), -1);
-  assert.equal(weakenRetainedStrength(-3), -1);
-
-  const sourceBelief = beliefRecord("mafia", "@mafia treats the docks as controlled territory.");
-  const retained = createRetainedBeliefDraft({
-    holder: "alice",
-    sourceBelief,
-    previousProvenance: {
-      mode: "accessed_through_membership",
-      holder: "alice",
-      sourceHolder: "mafia",
-      accessPath: ["alice", "inner-circle", "mafia"]
-    }
-  });
-
-  assert.equal(retained.holder, "alice");
-  assert.equal(retained.strength, 1);
-  assert.equal(retained.propositionText, sourceBelief.propositionText);
-  assert.deepEqual(retained.provenance, {
-    mode: "retained_after_access_loss",
-    holder: "alice",
-    sourceHolder: "mafia",
-    accessPath: ["alice", "inner-circle", "mafia"]
-  });
-});
-
-test("current belief resolution derives current, superseded, and conflicting beliefs", () => {
-  const older = beliefRecord("alice", "@alice believes @bob is reliable.", 1);
-  const current = beliefRecord("alice", "@alice believes @bob is reliable.", 3);
-  const conflicting = beliefRecord("alice", "@alice believes @bob is reliable.", -1);
-  const liveSource = beliefRecord("mafia", "@alice believes @bob is reliable.", -3);
-  const resolution = resolveCurrentBeliefs([
-    {
-      belief: older,
-      provenance: {
-        mode: "held",
-        holder: "alice",
-        sourceHolder: "alice",
-        accessPath: ["alice"]
-      }
     },
-    {
-      belief: conflicting,
-      provenance: {
-        mode: "held",
-        holder: "alice",
-        sourceHolder: "alice",
-        accessPath: ["alice"]
-      }
-    },
-    {
-      belief: current,
-      provenance: {
-        mode: "held",
-        holder: "alice",
-        sourceHolder: "alice",
-        accessPath: ["alice"]
-      }
-    },
-    {
-      belief: liveSource,
-      provenance: {
-        mode: "accessed_through_membership",
-        holder: "alice",
-        sourceHolder: "mafia",
-        accessPath: ["alice", "mafia"]
-      }
-    }
-  ]);
-
-  assert.ok(resolution.current.some((access) => access.belief === current));
-  assert.ok(resolution.current.some((access) => access.belief === liveSource));
-  assert.ok(resolution.superseded.some((access) => access.belief === older));
-  assert.ok(resolution.conflicting.some((access) => access.belief === conflicting));
-  assert.equal(resolution.groups.length, 2);
-});
-
-test("runtime access events override compiled membership links", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await writeMembershipWorld(workspacePath);
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "membership-room",
-      compiled
-    });
-
-    store.appendRuntimeAccessEvent({
-      simulationId: "default",
-      action: "revoke",
-      member: "inner-circle",
-      container: "mafia",
-      reason: "Inner Circle is cut off from Mafia logistics."
-    });
-
-    let effectiveLinks = store.listEffectiveAccessLinks("default");
-    assert.deepEqual(
-      effectiveLinks.map((link) => [link.member, link.container]),
-      [["alice", "inner-circle"]]
-    );
-
-    const simulation = store.getSimulation("default");
-    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "alice");
-    assert.ok(simulation);
-    assert.ok(actor);
-
-    const revokedContext = assembleActorContext({
-      simulation,
-      actor,
-      worlds: [],
-      scenario: store.getCompiledRecord("default", "scenario", "membership-room"),
-      formats: [],
-      beliefs: store.listBeliefs("default"),
-      accessLinks: effectiveLinks,
-      surfaces: store.listSurfaces("default"),
-      observedEntityIds: ["inner-circle"],
-      turns: []
-    });
-
-    assert.deepEqual(
-      [...new Set(revokedContext.subjective.beliefs.map((belief) => belief.holder))],
-      ["alice", "inner-circle"]
-    );
-    assert.doesNotMatch(revokedContext.promptPreview, /@mafia treats the docks as controlled territory/);
-
-    store.appendRuntimeAccessEvent({
-      simulationId: "default",
-      action: "grant",
-      member: "alice",
-      container: "mafia",
-      reason: "Alice receives direct emergency access."
-    });
-
-    effectiveLinks = store.listEffectiveAccessLinks("default");
-    assert.deepEqual(
-      effectiveLinks.map((link) => [link.member, link.container]),
-      [
-        ["alice", "inner-circle"],
-        ["alice", "mafia"]
-      ]
-    );
-
-    const grantedContext = assembleActorContext({
-      simulation,
-      actor,
-      worlds: [],
-      scenario: store.getCompiledRecord("default", "scenario", "membership-room"),
-      formats: [],
-      beliefs: store.listBeliefs("default"),
-      accessLinks: effectiveLinks,
-      surfaces: store.listSurfaces("default"),
-      observedEntityIds: ["mafia"],
-      turns: []
-    });
-
-    assert.deepEqual(
-      [...new Set(grantedContext.subjective.beliefs.map((belief) => belief.holder))],
-      ["alice", "inner-circle", "mafia"]
-    );
-    assert.match(grantedContext.promptPreview, /accessed through @alice -> @mafia/);
-  } finally {
-    store.close();
-  }
-});
-
-test("runtime access grants cannot create membership cycles", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await writeMembershipWorld(workspacePath);
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "membership-room",
-      compiled
-    });
-
-    assert.throws(
-      () =>
-        store.appendRuntimeAccessEvent({
-          simulationId: "default",
-          action: "grant",
-          member: "mafia",
-          container: "alice",
-          reason: "This would close an access cycle."
-        }),
-      /Runtime membership access cycle is invalid/
-    );
-  } finally {
-    store.close();
-  }
-
-  await assert.rejects(
-    () =>
-      runCli([
-        "access",
-        "grant",
-        "mafia",
-        "alice",
-        "--reason",
-        "This would close an access cycle.",
-        "--db",
-        dbPath,
-        "--json"
-      ]),
-    /Runtime membership access cycle is invalid/
   );
-});
-
-test("episode closure persists retained beliefs after membership access loss", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await writeMembershipWorld(workspacePath);
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "membership-room",
-      compiled
-    });
-
-    store.appendTurn({
-      simulationId: "default",
-      actorId: "alice",
-      text: "I am checking what the larger faction still knows.",
-      audience: ["alice"]
-    });
-
-    store.appendRuntimeAccessEvent({
-      simulationId: "default",
-      action: "revoke",
-      member: "inner-circle",
-      container: "mafia",
-      reason: "Inner Circle is cut off from Mafia logistics."
-    });
-
-    const closure = await closeEpisode({ store, simulationId: "default", label: "Access loss" });
-    const retainedDocksBelief = closure.retainedBeliefs.find((belief) => {
-      return belief.propositionText.includes("@mafia treats the docks as controlled territory");
-    });
-    assert.ok(retainedDocksBelief);
-    assert.equal(retainedDocksBelief.holder, "alice");
-    assert.equal(retainedDocksBelief.sourceHolder, "mafia");
-    assert.equal(retainedDocksBelief.strength, 1);
-    assert.deepEqual(retainedDocksBelief.accessPath, ["alice", "inner-circle", "mafia"]);
-
-    const simulation = store.getSimulation("default");
-    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "alice");
-    assert.ok(simulation);
-    assert.ok(actor);
-
-    const actorContext = assembleActorContext({
-      simulation,
-      actor,
-      worlds: [],
-      scenario: store.getCompiledRecord("default", "scenario", "membership-room"),
-      formats: [],
-      beliefs: store.listBeliefHistory("default"),
-      accessLinks: store.listEffectiveAccessLinks("default"),
-      surfaces: store.listSurfaces("default"),
-      turns: store.listAccessibleTurns("default", "alice")
-    });
-
-    assert.match(actorContext.promptPreview, /retained after losing access to @mafia/);
-    assert.match(actorContext.promptPreview, /@mafia treats the docks as controlled territory/);
-    assert.doesNotMatch(actorContext.promptPreview, /held by @mafia; accessed through/);
-  } finally {
-    store.close();
-  }
-});
-
-test("CLI access command records and lists runtime access events", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await writeMembershipWorld(workspacePath);
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "membership-room",
-      compiled
-    });
-  } finally {
-    store.close();
-  }
-
-  const revoke = await runCli([
-    "access",
-    "revoke",
-    "inner-circle",
-    "mafia",
-    "--reason",
-    "Inner Circle is cut off from Mafia logistics.",
-    "--db",
-    dbPath,
-    "--json"
-  ]);
-
-  assert.equal(revoke.event.action, "revoke");
-  assert.deepEqual(
-    revoke.effectiveAccessLinks.map((link: { member: string; container: string }) => [link.member, link.container]),
-    [["alice", "inner-circle"]]
-  );
-
-  const grant = await runCli([
-    "access",
-    "grant",
-    "alice",
-    "mafia",
-    "--reason",
-    "Alice receives direct emergency access.",
-    "--db",
-    dbPath,
-    "--json"
-  ]);
-
-  assert.equal(grant.event.action, "grant");
-
-  const list = await runCli(["access", "list", "--db", dbPath, "--json"]);
-  assert.deepEqual(
-    list.accessEvents.map((event: { action: string; member: string; container: string }) => [
-      event.action,
-      event.member,
-      event.container
-    ]),
-    [
-      ["revoke", "inner-circle", "mafia"],
-      ["grant", "alice", "mafia"]
-    ]
-  );
-  assert.deepEqual(
-    list.effectiveAccessLinks.map((link: { member: string; container: string }) => [link.member, link.container]),
-    [
-      ["alice", "inner-circle"],
-      ["alice", "mafia"]
-    ]
-  );
-});
-
-test("stage whispers are private one-turn context", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await initWorkspace(workspacePath, { template: "executive-interviews" });
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "executive-interviews",
-      compiled
-    });
-
-    store.createStageWhisper({
-      simulationId: "default",
-      targetActorId: "ceo",
-      text: "Do not reveal the board panic yet."
-    });
-
-    const simulation = store.getSimulation("default");
-    const ceo = store.getCompiledRecord<EntityRecord>("default", "entity", "ceo");
-    const coo = store.getCompiledRecord<EntityRecord>("default", "entity", "coo");
-    assert.ok(simulation);
-    assert.ok(ceo);
-    assert.ok(coo);
-
-    const ceoContext = assembleActorContext({
-      simulation,
-      actor: ceo,
-      worlds: [],
-      scenario: store.getCompiledRecord("default", "scenario", "executive-interviews"),
-      formats: [],
-      beliefs: store.listBeliefs("default"),
-      stageWhispers: store.listPendingStageWhispers("default", "ceo"),
-      turns: []
-    });
-
-    const cooContext = assembleActorContext({
-      simulation,
-      actor: coo,
-      worlds: [],
-      scenario: store.getCompiledRecord("default", "scenario", "executive-interviews"),
-      formats: [],
-      beliefs: store.listBeliefs("default"),
-      stageWhispers: store.listPendingStageWhispers("default", "coo"),
-      turns: []
-    });
-
-    assert.match(ceoContext.promptPreview, /Do not reveal the board panic yet/);
-    assert.doesNotMatch(cooContext.promptPreview, /Do not reveal the board panic yet/);
-
-    const turn = store.appendTurn({
-      simulationId: "default",
-      actorId: "ceo",
-      text: "I will be measured about what I say.",
-      audience: ["ceo", "student-team"]
-    });
-
-    assert.equal(store.listPendingStageWhispers("default", "ceo").length, 0);
-    assert.equal(store.listStageWhispers("default").at(0)?.consumedTurnId, turn.id);
-  } finally {
-    store.close();
-  }
-});
-
-test("first impressions are deterministic and created once from observed surfaces", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await writeMembershipWorld(workspacePath);
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "membership-room",
-      compiled
-    });
-
-    const created = ensureFirstImpressions({
-      store,
-      simulationId: "default",
-      observerId: "alice",
-      observedEntityIds: ["alice", "inner-circle", "mafia"]
-    });
-    const secondPass = ensureFirstImpressions({
-      store,
-      simulationId: "default",
-      observerId: "alice",
-      observedEntityIds: ["inner-circle", "mafia"]
-    });
-
-    assert.deepEqual(
-      created.map((impression) => [impression.observerId, impression.entityId, impression.strength]),
-      [
-        ["alice", "inner-circle", 1],
-        ["alice", "mafia", 1]
-      ]
-    );
-    assert.equal(secondPass.length, 0);
-    assert.equal(store.listFirstImpressions("default").length, 2);
-
-    const simulation = store.getSimulation("default");
-    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "alice");
-    assert.ok(simulation);
-    assert.ok(actor);
-
-    const actorContext = assembleActorContext({
-      simulation,
-      actor,
-      worlds: [],
-      scenario: store.getCompiledRecord("default", "scenario", "membership-room"),
-      formats: [],
-      beliefs: store.listBeliefHistory("default"),
-      accessLinks: store.listEffectiveAccessLinks("default"),
-      surfaces: store.listSurfaces("default"),
-      observedEntityIds: ["inner-circle", "mafia"],
-      turns: []
-    });
-
-    assert.match(actorContext.promptPreview, /first impression of @inner-circle/);
-    assert.match(actorContext.promptPreview, /@alice forms a first impression that @inner-circle usually appears disciplined/);
-  } finally {
-    store.close();
-  }
-});
-
-test("CLI context automatically persists first impressions", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await writeMembershipWorld(workspacePath);
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "membership-room",
-      compiled
-    });
-  } finally {
-    store.close();
-  }
-
-  await runCli(["audience", "add", "inner-circle", "--db", dbPath, "--json"]);
-  const actorContext = await runCli(["context", "alice", "--db", dbPath, "--json"]);
-  assert.match(actorContext.promptPreview, /first impression of @inner-circle/);
-
-  const beliefs = await runCli(["beliefs", "--db", dbPath, "--json"]);
-  assert.ok(
-    beliefs.beliefs.some((belief: { entityId?: string; observerId?: string }) => {
-      return belief.observerId === "alice" && belief.entityId === "inner-circle";
-    })
-  );
-});
-
-test("CLI whisper command stores and turn command consumes stage whispers", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await initWorkspace(workspacePath, { template: "executive-interviews" });
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "executive-interviews",
-      compiled
-    });
-  } finally {
-    store.close();
-  }
-
-  const stored = await runCli([
-    "whisper",
-    "ceo",
-    "--text",
-    "Keep the board panic private.",
-    "--db",
-    dbPath,
-    "--json"
-  ]);
-
-  assert.equal(stored.whisper.targetActorId, "ceo");
-
-  const contextBeforeTurn = await runCli(["context", "ceo", "--db", dbPath, "--json"]);
-  assert.match(contextBeforeTurn.promptPreview, /Keep the board panic private/);
-
-  const turn = await runCli([
-    "turn",
-    "ceo",
-    "--manual",
-    "I will keep the room calm.",
-    "--db",
-    dbPath,
-    "--json"
-  ]);
-
-  assert.equal(turn.consumedStageWhispers.length, 1);
-
-  const contextAfterTurn = await runCli(["context", "ceo", "--db", dbPath, "--json"]);
-  assert.doesNotMatch(contextAfterTurn.promptPreview, /Keep the board panic private/);
-
-  const inlineTurn = await runCli([
-    "turn",
-    "coo",
-    "--manual",
-    "I will not mention supplier risk yet.",
-    "--whisper",
-    "Deflect supplier questions.",
-    "--db",
-    dbPath,
-    "--json"
-  ]);
-
-  assert.equal(inlineTurn.consumedStageWhispers.length, 1);
-  assert.equal(inlineTurn.consumedStageWhispers.at(0)?.text, "Deflect supplier questions.");
-});
-
-test("audience events define default turn audience", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await initWorkspace(workspacePath, { template: "executive-interviews" });
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "executive-interviews",
-      compiled
-    });
-
-    store.appendAudienceEvent({
-      simulationId: "default",
-      action: "add",
-      actorId: "student-team",
-      reason: "Students enter the room."
-    });
-    store.appendAudienceEvent({
-      simulationId: "default",
-      action: "add",
-      actorId: "coo",
-      reason: "COO observes."
-    });
-    store.appendAudienceEvent({
-      simulationId: "default",
-      action: "deactivate",
-      actorId: "coo",
-      reason: "COO takes a private call."
-    });
-
-    assert.deepEqual(store.listActiveAudienceIds("default"), ["student-team"]);
-
-    const turn = store.appendTurn({
-      simulationId: "default",
-      actorId: "ceo",
-      text: "We should keep this simple.",
-      audience: ["ceo", ...store.listActiveAudienceIds("default")]
-    });
-
-    assert.deepEqual(turn.audience, ["ceo", "student-team"]);
-    assert.equal(store.listAccessibleTurns("default", "coo").length, 0);
-    assert.equal(store.listAccessibleTurns("default", "student-team").length, 1);
-  } finally {
-    store.close();
-  }
-});
-
-test("CLI audience command controls default turn audience", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await initWorkspace(workspacePath, { template: "executive-interviews" });
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "executive-interviews",
-      compiled
-    });
-  } finally {
-    store.close();
-  }
-
-  await runCli(["audience", "add", "student-team", "--db", dbPath, "--json"]);
-  await runCli(["audience", "add", "coo", "--db", dbPath, "--json"]);
-  await runCli(["audience", "deactivate", "coo", "--db", dbPath, "--json"]);
-
-  const list = await runCli(["audience", "list", "--db", dbPath, "--json"]);
-  assert.deepEqual(list.activeAudience, ["student-team"]);
-
-  const turn = await runCli([
-    "turn",
-    "ceo",
-    "--manual",
-    "We should keep this focused.",
-    "--db",
-    dbPath,
-    "--json"
-  ]);
-
-  assert.deepEqual(turn.turn.audience, ["ceo", "student-team"]);
-
-  const override = await runCli([
-    "turn",
-    "coo",
-    "--manual",
-    "I am speaking only to the CEO.",
-    "--audience",
-    "ceo",
-    "--db",
-    dbPath,
-    "--json"
-  ]);
-
-  assert.deepEqual(override.turn.audience, ["coo", "ceo"]);
-});
-
-test("CLI export and import round trip source and runtime state", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-  const packageDir = path.join(root, "package");
-  const importedWorldPath = path.join(root, "imported-world");
-  const importedDbPath = path.join(root, "imported-runtime.sqlite");
-
-  await initWorkspace(workspacePath, { template: "executive-interviews" });
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "executive-interviews",
-      compiled
-    });
-    store.appendTurn({
-      simulationId: "default",
-      actorId: "ceo",
-      text: "The board needs a clearer operating picture.",
-      audience: ["ceo", "student-team"]
-    });
-  } finally {
-    store.close();
-  }
-
-  const exported = await runCli(["export", packageDir, "--db", dbPath, "--json"]);
-  assert.equal(exported.manifest.simulationId, "default");
-  assert.equal(exported.manifest.schemaVersion, 1);
-
-  const imported = await runCli([
-    "import",
-    packageDir,
-    "--world",
-    importedWorldPath,
-    "--db",
-    importedDbPath,
-    "--json"
-  ]);
-  assert.equal(imported.manifest.scenarioId, "executive-interviews");
-
-  const importedStore = await openRuntimeStore(importedDbPath).open();
-  try {
-    const simulation = importedStore.getSimulation("default");
-    assert.ok(simulation);
-    assert.equal(simulation.scenarioId, "executive-interviews");
-    assert.equal(importedStore.listAccessibleTurns("default", "ceo").length, 1);
-  } finally {
-    importedStore.close();
-  }
-
-  const importedCompiled = await compileWorkspace(importedWorldPath);
-  assert.equal(importedCompiled.entities.length, 7);
-});
-
-test("CLI export sanitizes source secrets", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-  const packageDir = path.join(root, "package");
-
-  await initWorkspace(workspacePath);
-  await writeFile(
-    path.join(workspacePath, "models", "secret-hosted.yaml"),
-    `---
-id: secret-hosted
-provider: gateway
-model: hosted-model
-api_key: sk-test-secret
-api_key_env: HOSTED_API_KEY
----
-`
-  );
-  await writeFile(path.join(workspacePath, ".env"), "HOSTED_API_KEY=sk-env-secret\n");
-  await writeFile(path.join(workspacePath, "private.pem"), "-----BEGIN PRIVATE KEY-----\nsecret\n");
-
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "scenario",
-      compiled
-    });
-  } finally {
-    store.close();
-  }
-
-  await runCli(["export", packageDir, "--db", dbPath, "--json"]);
-
-  const exportedModel = await readFile(
-    path.join(packageDir, "source", "models", "secret-hosted.yaml"),
-    "utf8"
-  );
-  assert.doesNotMatch(exportedModel, /sk-test-secret/);
-  assert.match(exportedModel, /api_key: \[redacted\]/);
-  assert.match(exportedModel, /api_key_env: HOSTED_API_KEY/);
-
-  await assert.rejects(
-    () => readFile(path.join(packageDir, "source", ".env"), "utf8"),
-    /ENOENT/
-  );
-  await assert.rejects(
-    () => readFile(path.join(packageDir, "source", "private.pem"), "utf8"),
-    /ENOENT/
-  );
-});
-
-test("CLI inspection commands list transcript memories and beliefs", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await initWorkspace(workspacePath, { template: "executive-interviews" });
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "executive-interviews",
-      compiled
-    });
-  } finally {
-    store.close();
-  }
-
-  await runCli([
-    "turn",
-    "ceo",
-    "--manual",
-    "The board needs a clearer operating picture.",
-    "--audience",
-    "ceo,student-team",
-    "--db",
-    dbPath,
-    "--json"
-  ]);
-
-  const transcript = await runCli(["transcript", "--db", dbPath, "--json"]);
-  assert.equal(transcript.transcript.length, 1);
-  assert.equal(transcript.transcript.at(0)?.actorId, "ceo");
-
-  await runCli(["close-episode", "--label", "Inspection beat", "--db", dbPath, "--json"]);
-
-  const memories = await runCli(["memories", "--db", dbPath, "--json"]);
-  assert.ok(memories.memories.length >= 1);
-  assert.match(memories.memories.at(0)?.text, /board needs a clearer operating picture/);
-  assert.ok(Array.isArray(memories.longTermMemories));
-
-  const beliefs = await runCli(["beliefs", "--db", dbPath, "--json"]);
-  assert.ok(beliefs.beliefs.length > compiled.beliefs.length);
-
-  const currentBeliefs = await runCli(["beliefs", "ceo", "--db", dbPath, "--json"]);
-  assert.equal(currentBeliefs.actorId, "ceo");
-  assert.ok(currentBeliefs.currentBeliefs.length > 0);
-  assert.ok(Array.isArray(currentBeliefs.supersededBeliefs));
-});
-
-test("episode closure writes deterministic memories from accessible turns", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await initWorkspace(workspacePath, { template: "executive-interviews" });
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "executive-interviews",
-      compiled
-    });
-
-    store.appendTurn({
-      simulationId: "default",
-      actorId: "ceo",
-      text: "The board is worried about strategy drift.",
-      audience: ["ceo", "student-team"]
-    });
-
-    store.appendTurn({
-      simulationId: "default",
-      actorId: "coo",
-      text: "The supplier situation is worse than we are saying.",
-      audience: ["coo"]
-    });
-
-    const closure = await closeEpisode({ store, simulationId: "default", label: "Opening interviews" });
-    const ceoMemory = closure.memories.find((memory) => memory.actorId === "ceo");
-    const cooMemory = closure.memories.find((memory) => memory.actorId === "coo");
-
-    assert.equal(closure.episode.label, "Opening interviews");
-    assert.ok(ceoMemory);
-    assert.ok(cooMemory);
-    assert.match(ceoMemory.text, /board is worried/);
-    assert.doesNotMatch(ceoMemory.text, /supplier situation is worse/);
-    assert.match(cooMemory.text, /supplier situation is worse/);
-    assert.equal(store.listEpisodeMemories("default").length, 2);
-    assert.equal(closure.extractedBeliefs.length, 2);
-    assert.equal(store.listExtractedBeliefs("default").length, 2);
-    assert.ok(
-      closure.extractedBeliefs.some((belief) => {
-        return belief.holder === "ceo" && belief.propositionText.includes("accessible turn");
-      })
-    );
-  } finally {
-    store.close();
-  }
-});
-
-test("episode closure only processes turns since the previous closure", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await initWorkspace(workspacePath, { template: "executive-interviews" });
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "executive-interviews",
-      compiled
-    });
-
-    store.appendTurn({
-      simulationId: "default",
-      actorId: "ceo",
-      text: "First episode concern: the board is worried about strategy drift.",
-      audience: ["ceo", "student-team"]
-    });
-
-    const firstClosure = await closeEpisode({ store, simulationId: "default", label: "First beat" });
-    assert.equal(firstClosure.memories.length, 1);
-    assert.equal(store.listUnclosedTurns("default").length, 0);
-
-    store.appendTurn({
-      simulationId: "default",
-      actorId: "ceo",
-      text: "Second episode concern: the pricing story is becoming harder to defend.",
-      audience: ["ceo", "student-team"]
-    });
-
-    const secondClosure = await closeEpisode({ store, simulationId: "default", label: "Second beat" });
-    const secondCeoMemory = secondClosure.memories.find((memory) => memory.actorId === "ceo");
-
-    assert.ok(secondCeoMemory);
-    assert.match(secondCeoMemory.text, /Second episode concern/);
-    assert.doesNotMatch(secondCeoMemory.text, /First episode concern/);
-    assert.equal(secondCeoMemory.sourceTurnIds.length, 1);
-    assert.equal(store.listUnclosedTurns("default").length, 0);
-
-    await assert.rejects(
-      () => closeEpisode({ store, simulationId: "default", label: "Empty beat" }),
-      /No unclosed turns/
-    );
-  } finally {
-    store.close();
-  }
-});
-
-test("episode closure can use injected AI-style generation", async (context) => {
-  const root = await createRepoLocalRunRoot(context);
-  const workspacePath = path.join(root, "workspace");
-  const dbPath = path.join(root, "runtime.sqlite");
-
-  await initWorkspace(workspacePath, { template: "executive-interviews" });
-  const compiled = await compileWorkspace(workspacePath);
-  const store = await openRuntimeStore(dbPath).open();
-
-  try {
-    store.saveSimulation({
-      id: "default",
-      sourceRoot: compiled.sourceRoot,
-      scenarioId: "executive-interviews",
-      compiled
-    });
-
-    store.appendTurn({
-      simulationId: "default",
-      actorId: "ceo",
-      text: "The board is worried about strategy drift.",
-      audience: ["ceo", "student-team"]
-    });
-
-    const closure = await closeEpisode({
-      store,
-      simulationId: "default",
-      label: "Opening interviews",
-      generator: {
-        writeMemory({ actor, context }) {
-          assert.equal(context.actor.id, actor.id);
-          assert.match(context.promptPreview, /The board is worried/);
-          return `I am ${actor.id}, and I now think the board pressure matters.`;
-        },
-        writeLongTermMemory({ actor, context, memory }) {
-          assert.equal(context.actor.id, actor.id);
-          assert.match(memory.text, /board pressure matters/);
-          return `I should remember that board pressure now shapes how I answer.`;
-        },
-        extractBeliefs({ actor, memory }) {
-          return [
-            {
-              strength: 3,
-              propositionText: `@${actor.id} treats board pressure as important after memory ${memory.id}.`
-            },
-            {
-              strength: 99,
-              propositionText: `@${actor.id} has an overconfident normalized belief.`
-            }
-          ];
-        }
-      }
-    });
-
-    assert.equal(closure.memories.length, 1);
-    assert.equal(closure.longTermMemories.length, 1);
-    assert.equal(closure.extractedBeliefs.length, 2);
-    assert.ok(closure.memories.every((memory) => memory.text.includes("board pressure matters")));
-    assert.equal(store.listLongTermMemories("default", "ceo").length, 1);
-    assert.ok(closure.extractedBeliefs.every((belief) => belief.strength === 3));
-    assert.equal(store.listFirstImpressions("default").length, 1);
-    assert.equal(store.listBeliefHistory("default").length, compiled.beliefs.length + closure.extractedBeliefs.length + 1);
-
-    const simulation = store.getSimulation("default");
-    const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "ceo");
-    assert.ok(simulation);
-    assert.ok(actor);
-
-    const actorContext = assembleActorContext({
-      simulation,
-      actor,
-      worlds: [],
-      scenario: store.getCompiledRecord("default", "scenario", "executive-interviews"),
-      formats: [],
-      beliefs: store.listBeliefHistory("default"),
-      longTermMemories: store.listLongTermMemories("default", "ceo"),
-      turns: []
-    });
-
-    assert.match(actorContext.promptPreview, /Long-Term Memories/);
-    assert.match(actorContext.promptPreview, /board pressure now shapes/);
-  } finally {
-    store.close();
-  }
 });
 
 async function createRepoLocalRunRoot(context: test.TestContext) {
@@ -1863,7 +330,7 @@ name: Membership Room
 ---
 
 Everyone is meeting in the back room. :canonical
-`
+`,
     ],
     [
       "entities/alice/IDENTITY.md",
@@ -1875,15 +342,15 @@ visibility: public
 ---
 
 @alice is testing membership context.
-`
+`,
     ],
     [
       "entities/alice/BELIEFS.md",
-      "@alice treats her own assignment as urgent. :+3\n"
+      "@alice treats her own assignment as urgent. :+3\n",
     ],
     [
       "entities/alice/SURFACE.md",
-      "@alice usually appears watchful. :surface:in_person :+3\n"
+      "@alice usually appears watchful. :surface:in_person :+3\n",
     ],
     [
       "entities/inner-circle/IDENTITY.md",
@@ -1895,15 +362,15 @@ visibility: public
 ---
 
 @inner-circle is a nested group.
-`
+`,
     ],
     [
       "entities/inner-circle/BELIEFS.md",
-      "@inner-circle treats the password as changed. :+3\n"
+      "@inner-circle treats the password as changed. :+3\n",
     ],
     [
       "entities/inner-circle/SURFACE.md",
-      "@inner-circle usually appears disciplined. :surface:in_person :+3\n"
+      "@inner-circle usually appears disciplined. :surface:in_person :+3\n",
     ],
     [
       "entities/mafia/IDENTITY.md",
@@ -1915,15 +382,15 @@ visibility: public
 ---
 
 @mafia is a larger faction.
-`
+`,
     ],
     [
       "entities/mafia/BELIEFS.md",
-      "@mafia treats the docks as controlled territory. :+3\n"
+      "@mafia treats the docks as controlled territory. :+3\n",
     ],
     [
       "entities/mafia/SURFACE.md",
-      "@mafia usually appears untouchable. :surface:in_person :+3\n"
+      "@mafia usually appears untouchable. :surface:in_person :+3\n",
     ],
     [
       "connections/alice-inner-circle.md",
@@ -1934,7 +401,7 @@ entities: [alice, inner-circle]
 ---
 
 @inner-circle gives @alice access. :access:member
-`
+`,
     ],
     [
       "connections/inner-circle-mafia.md",
@@ -1945,12 +412,14 @@ entities: [inner-circle, mafia]
 ---
 
 This connection gives @inner-circle access to @mafia knowledge. :access:member
-`
-    ]
+`,
+    ],
   ]);
 
   for (const relativePath of files.keys()) {
-    await mkdir(path.dirname(path.join(root, relativePath)), { recursive: true });
+    await mkdir(path.dirname(path.join(root, relativePath)), {
+      recursive: true,
+    });
   }
 
   for (const [relativePath, content] of files.entries()) {
@@ -1959,30 +428,15 @@ This connection gives @inner-circle access to @mafia knowledge. :access:member
 }
 
 async function runCli(args: string[]): Promise<any> {
-  const result = await execFileAsync(process.execPath, ["src/cli/index.ts", ...args], {
-    cwd: process.cwd()
-  });
+  const result = await execFileAsync(
+    process.execPath,
+    ["src/cli/index.ts", ...args],
+    {
+      cwd: process.cwd(),
+    },
+  );
 
   return JSON.parse(result.stdout);
-}
-
-async function apiJson(
-  url: string,
-  options: { method?: string; body?: Record<string, unknown> } = {}
-): Promise<any> {
-  const init: RequestInit = { method: options.method || "GET" };
-  if (options.body) {
-    init.headers = { "content-type": "application/json" };
-    init.body = JSON.stringify(options.body);
-  }
-
-  const response = await fetch(url, init);
-  const body = await response.json();
-  if (!response.ok) {
-    throw new Error(JSON.stringify(body));
-  }
-
-  return body;
 }
 
 function modelRecord(metadata: AssetRecord["metadata"]): AssetRecord {
@@ -1995,66 +449,8 @@ function modelRecord(metadata: AssetRecord["metadata"]): AssetRecord {
       id: "local-openai-compatible",
       provider: "openai-compatible",
       model: "llama3.1",
-      ...metadata
+      ...metadata,
     },
-    body: ""
+    body: "",
   };
-}
-
-function entityRecord(id: string): EntityRecord {
-  return {
-    id,
-    kind: "agent",
-    name: id,
-    visibility: "public",
-    folder: `entities/${id}`,
-    files: []
-  };
-}
-
-function assetRecord(kind: AssetRecord["kind"], id: string, body: string): AssetRecord {
-  return {
-    id,
-    kind,
-    name: id,
-    path: `${kind}s/${id}.md`,
-    metadata: { id },
-    body
-  };
-}
-
-function beliefRecord(holder: string, propositionText: string, strength = 3) {
-  return {
-    holder,
-    strength,
-    propositionText,
-    mentions: [],
-    sourceSpan: {
-      file: "inline",
-      line: 1,
-      quote: propositionText
-    }
-  };
-}
-
-function turnRecord(id: number, actorId: string, text: string, audience: string[]): TranscriptTurn {
-  return {
-    id,
-    simulationId: "test-sim",
-    actorId,
-    text,
-    audience,
-    episodeId: null,
-    createdAt: "2026-05-22T00:00:00.000Z"
-  };
-}
-
-function uniqueProvenance<TValue extends { mode: string; sourceHolder: string }>(values: TValue[]): TValue[] {
-  const seen = new Set<string>();
-  return values.filter((value) => {
-    const key = `${value.mode}:${value.sourceHolder}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }

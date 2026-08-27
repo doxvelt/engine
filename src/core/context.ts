@@ -1,4 +1,5 @@
 import { resolveCurrentBeliefs } from "./beliefs.ts";
+import { resolveAccessPaths } from "./access-graph.ts";
 import type {
   AccessLinkRecord,
   ActorContext,
@@ -11,7 +12,7 @@ import type {
   SubjectiveBeliefAccess,
   SubjectiveBeliefRecord,
   SurfaceRecord,
-  TranscriptTurn
+  TranscriptTurn,
 } from "./types.ts";
 
 export function assembleActorContext({
@@ -28,7 +29,7 @@ export function assembleActorContext({
   currentAudience = [actor.id, ...observedEntityIds],
   turns = [],
   stageWhispers = [],
-  diagnostics = []
+  diagnostics = [],
 }: {
   simulation: SimulationRecord;
   actor: EntityRecord;
@@ -45,23 +46,35 @@ export function assembleActorContext({
   stageWhispers?: StageWhisperRecord[];
   diagnostics?: DiagnosticRecord[];
 }): ActorContext {
-  const accessibleWorlds = worlds.map((world) => filterAssetForActor(world, actor));
-  const accessibleScenario = scenario ? filterAssetForActor(scenario, actor) : null;
-  const beliefHistoryAccess = resolveBeliefAccess(actor.id, beliefs, accessLinks);
+  const accessibleWorlds = worlds.map((world) =>
+    filterAssetForActor(world, actor),
+  );
+  const accessibleScenario = scenario
+    ? filterAssetForActor(scenario, actor)
+    : null;
+  const beliefHistoryAccess = resolveBeliefAccess(
+    actor.id,
+    beliefs,
+    accessLinks,
+  );
   const beliefResolution = resolveCurrentBeliefs(beliefHistoryAccess);
-  const projectedSurfaces = resolveProjectedSurfaces(actor.id, surfaces, observedEntityIds);
+  const projectedSurfaces = resolveProjectedSurfaces(
+    actor.id,
+    surfaces,
+    observedEntityIds,
+  );
 
   return {
     simulation: {
       id: simulation.id,
       scenarioId: simulation.scenarioId,
-      sourceRoot: simulation.sourceRoot
+      sourceRoot: simulation.sourceRoot,
     },
     actor,
     assets: {
       worlds: accessibleWorlds,
       scenario: accessibleScenario,
-      formats
+      formats,
     },
     subjective: {
       beliefs: beliefResolution.current.map((access) => access.belief),
@@ -72,7 +85,7 @@ export function assembleActorContext({
       surfaces: projectedSurfaces,
       transcript: turns,
       stageWhispers,
-      currentAudience
+      currentAudience,
     },
     diagnostics,
     promptPreview: buildPromptPreview({
@@ -85,8 +98,8 @@ export function assembleActorContext({
       surfaces: projectedSurfaces,
       currentAudience,
       turns,
-      stageWhispers
-    })
+      stageWhispers,
+    }),
   };
 }
 
@@ -100,7 +113,7 @@ function buildPromptPreview({
   surfaces,
   currentAudience,
   turns,
-  stageWhispers
+  stageWhispers,
 }: {
   actor: EntityRecord;
   worlds: AssetRecord[];
@@ -116,14 +129,16 @@ function buildPromptPreview({
   const sections = [
     `# Actor\n${actor.name} (${actor.id}, ${actor.kind})`,
     renderAssets("World", worlds),
-    scenario ? renderAsset("Scenario", scenario) : "# Scenario\nNo scenario selected.",
+    scenario
+      ? renderAsset("Scenario", scenario)
+      : "# Scenario\nNo scenario selected.",
     renderAssets("Format", formats),
     renderBeliefs(beliefResolution),
     renderLongTermMemories(longTermMemories),
     renderSurfaces(surfaces),
     renderCurrentAudience(actor.id, currentAudience),
     renderStageWhispers(stageWhispers),
-    renderTranscript(turns)
+    renderTranscript(turns),
   ];
 
   return sections.filter(Boolean).join("\n\n");
@@ -138,44 +153,50 @@ function renderAsset(label: string, asset: AssetRecord): string {
   return `# ${label}: ${asset.name}\n${asset.body || "(No body text.)"}`;
 }
 
-function filterAssetForActor(asset: AssetRecord, actor: EntityRecord): AssetRecord {
+function filterAssetForActor(
+  asset: AssetRecord,
+  actor: EntityRecord,
+): AssetRecord {
   return {
     ...asset,
     body: asset.body
       .split(/\r?\n/)
       .filter((line) => isLineVisibleToActor(line, actor))
-      .join("\n")
+      .join("\n"),
   };
 }
 
 function isLineVisibleToActor(line: string, actor: EntityRecord): boolean {
   if (!line.includes(":hidden")) return true;
-  return line.includes(`@${actor.id}`);
+  const holder = line.match(/@([a-zA-Z0-9_-]+)/)?.[1];
+  return holder === actor.id;
 }
 
 export function resolveBeliefAccess(
   actorId: string,
   beliefs: SubjectiveBeliefRecord[],
-  accessLinks: AccessLinkRecord[]
+  accessLinks: AccessLinkRecord[],
 ): SubjectiveBeliefAccess[] {
-  const accessPaths = resolveMembershipPaths(actorId, accessLinks);
+  const accessPaths = resolveAccessPaths(actorId, accessLinks);
   const directAccess: SubjectiveBeliefAccess[] = beliefs
     .filter((belief) => belief.holder === actorId)
     .map((belief) => ({
       belief,
-      provenance: provenanceForDirectBelief(actorId, belief)
+      provenance: provenanceForDirectBelief(actorId, belief),
     }));
 
   const membershipAccess: SubjectiveBeliefAccess[] = beliefs
-    .filter((belief) => belief.holder !== actorId && accessPaths.has(belief.holder))
+    .filter(
+      (belief) => belief.holder !== actorId && accessPaths.has(belief.holder),
+    )
     .map((belief) => ({
       belief,
       provenance: {
         mode: "accessed_through_membership",
         holder: actorId,
         sourceHolder: belief.holder,
-        accessPath: accessPaths.get(belief.holder) || [actorId, belief.holder]
-      }
+        accessPath: accessPaths.get(belief.holder) || [actorId, belief.holder],
+      },
     }));
 
   return [...directAccess, ...membershipAccess];
@@ -183,14 +204,14 @@ export function resolveBeliefAccess(
 
 function provenanceForDirectBelief(
   actorId: string,
-  belief: SubjectiveBeliefRecord
+  belief: SubjectiveBeliefRecord,
 ): SubjectiveBeliefAccess["provenance"] {
   if ("sourceHolder" in belief && "accessPath" in belief) {
     return {
       mode: "retained_after_access_loss",
       holder: actorId,
       sourceHolder: belief.sourceHolder,
-      accessPath: belief.accessPath
+      accessPath: belief.accessPath,
     };
   }
 
@@ -199,7 +220,7 @@ function provenanceForDirectBelief(
       mode: "observed",
       holder: actorId,
       sourceHolder: belief.entityId,
-      accessPath: [actorId, belief.entityId]
+      accessPath: [actorId, belief.entityId],
     };
   }
 
@@ -207,42 +228,24 @@ function provenanceForDirectBelief(
     mode: "held",
     holder: actorId,
     sourceHolder: belief.holder,
-    accessPath: [actorId]
+    accessPath: [actorId],
   };
-}
-
-function resolveMembershipPaths(actorId: string, accessLinks: AccessLinkRecord[]): Map<string, string[]> {
-  const paths = new Map<string, string[]>();
-  const queue = [{ holder: actorId, path: [actorId] }];
-
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current) break;
-
-    for (const link of accessLinks) {
-      if (link.mode !== "member" || link.member !== current.holder) continue;
-      if (paths.has(link.container) || link.container === actorId) continue;
-
-      const path = [...current.path, link.container];
-      paths.set(link.container, path);
-      queue.push({ holder: link.container, path });
-    }
-  }
-
-  return paths;
 }
 
 function resolveProjectedSurfaces(
   actorId: string,
   surfaces: SurfaceRecord[],
-  observedEntityIds: string[]
+  observedEntityIds: string[],
 ): SurfaceRecord[] {
   const observed = new Set([actorId, ...observedEntityIds]);
   return surfaces.filter((surface) => observed.has(surface.entity));
 }
 
-function renderBeliefs(beliefResolution: ActorContext["subjective"]["beliefResolution"]): string {
-  if (beliefResolution.current.length === 0) return "# Current Subjective Beliefs\nNone.";
+function renderBeliefs(
+  beliefResolution: ActorContext["subjective"]["beliefResolution"],
+): string {
+  if (beliefResolution.current.length === 0)
+    return "# Current Subjective Beliefs\nNone.";
 
   const currentLines = beliefResolution.current.map(renderBeliefAccess);
   const conflictLines = beliefResolution.conflicting.map(renderBeliefAccess);
@@ -263,7 +266,7 @@ function renderBeliefAccess(access: SubjectiveBeliefAccess): string {
         ? ` (first impression of @${access.provenance.sourceHolder})`
         : access.provenance.mode === "retained_after_access_loss"
           ? ` (retained after losing access to @${access.provenance.sourceHolder}; old path ${renderAccessPath(access.provenance.accessPath)})`
-      : "";
+          : "";
   return `- [${formatStrength(access.belief.strength)}]${source} ${access.belief.propositionText}`;
 }
 
@@ -278,27 +281,31 @@ function renderSurfaces(surfaces: SurfaceRecord[]): string {
   if (surfaces.length === 0) return "# Projected Surfaces\nNone.";
 
   const lines = surfaces.map((surface) => {
-    const channels = surface.channels.length > 0 ? ` [${surface.channels.join(",")}]` : "";
+    const channels =
+      surface.channels.length > 0 ? ` [${surface.channels.join(",")}]` : "";
     return `- @${surface.entity}${channels}: ${surface.text}`;
   });
 
   return `# Projected Surfaces\n${lines.join("\n")}`;
 }
 
-function renderCurrentAudience(actorId: string, currentAudience: string[]): string {
+function renderCurrentAudience(
+  actorId: string,
+  currentAudience: string[],
+): string {
   const audience = [...new Set(currentAudience)];
   const listeners = audience.filter((id) => id !== actorId);
   if (listeners.length === 0) {
     return [
       "# Current Turn Audience",
       `Only @${actorId} is in the audience for this turn.`,
-      "Write as if this is private self-directed speech, narration, notes, or internal reflection unless the stage whisper or scenario says otherwise."
+      "Write as if this is private self-directed speech, narration, notes, or internal reflection unless the stage whisper or scenario says otherwise.",
     ].join("\n");
   }
 
   return [
     "# Current Turn Audience",
-    `@${actorId} is speaking where these entities can hear or observe this turn: ${listeners.map((id) => `@${id}`).join(", ")}.`
+    `@${actorId} is speaking where these entities can hear or observe this turn: ${listeners.map((id) => `@${id}`).join(", ")}.`,
   ].join("\n");
 }
 
@@ -314,7 +321,8 @@ function renderStageWhispers(stageWhispers: StageWhisperRecord[]): string {
 }
 
 function renderTranscript(turns: TranscriptTurn[]): string {
-  if (turns.length === 0) return "# Accessible Transcript\nNo accessible turns yet.";
+  if (turns.length === 0)
+    return "# Accessible Transcript\nNo accessible turns yet.";
 
   const lines = turns.map((turn) => {
     return `${turn.actorId}: ${turn.text}`;

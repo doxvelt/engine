@@ -1,75 +1,60 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import { compileWorkspace } from "../src/core/compiler.ts";
-import { assembleActorContext } from "../src/core/context.ts";
-import { closeEpisode } from "../src/core/episode.ts";
-import { initWorkspace } from "../src/core/init.ts";
-import type { EntityRecord } from "../src/core/types.ts";
-import { openRuntimeStore } from "../src/store/sqlite.ts";
+import { closeBranchEpisode } from "../src/core/branch-episode.ts";
+import {
+  commitManualTurn,
+  inspectActorContext,
+  startBranchSimulation,
+} from "../src/core/branch-kernel.ts";
+import { openBranchStore } from "../src/store/branch-sqlite.ts";
 
-const root = path.resolve(".doxvelt", "smoke-runs");
-await mkdir(root, { recursive: true });
-
-const runRoot = await mkdtemp(path.join(root, "run-"));
-const workspacePath = path.join(runRoot, "workspace");
-const dbPath = path.join(runRoot, "runtime.sqlite");
-
-await initWorkspace(workspacePath, { template: "executive-interviews" });
-const compiled = await compileWorkspace(workspacePath);
-
-const store = await openRuntimeStore(dbPath).open();
-
+const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-smoke-"));
+const store = await openBranchStore(path.join(root, "runtime.sqlite")).open();
 try {
-  store.saveSimulation({
-    id: "default",
-    sourceRoot: compiled.sourceRoot,
+  const started = await startBranchSimulation(store, {
+    ownerScope: "local",
+    simulationId: "smoke",
+    workspacePath: path.resolve("examples/executive-interviews"),
     scenarioId: "executive-interviews",
-    compiled
+    branchId: "main",
+    commandId: "smoke-start",
   });
-
-  const actors = store.listActors("default");
-  if (actors.length !== 6) {
-    throw new Error(`Expected 6 actors, found ${actors.length}.`);
-  }
-
-  store.appendTurn({
-    simulationId: "default",
-    actorId: "ceo",
-    text: "We need to understand what is really going on.",
-    audience: ["ceo", "student-team"]
+  const turn = commitManualTurn(store, {
+    ownerScope: "local",
+    simulationId: "smoke",
+    branchId: "main",
+    expectedHead: started.root.id,
+    commandId: "smoke-turn",
+    payload: {
+      actorId: "ceo",
+      text: "We need to understand what is really going on.",
+      audience: ["student-team"],
+    },
   });
-
-  const simulation = store.getSimulation("default");
-  if (!simulation) throw new Error("Expected simulation to exist.");
-
-  const actor = store.getCompiledRecord<EntityRecord>("default", "entity", "ceo");
-  if (!actor) throw new Error("Expected actor to exist.");
-
-  const context = assembleActorContext({
-    simulation,
-    actor,
-    worlds: store.listCompiledRecords("default", "world"),
-    scenario: store.getCompiledRecord("default", "scenario", "executive-interviews"),
-    formats: store.listCompiledRecords("default", "format"),
-    beliefs: store.listBeliefs("default"),
-    turns: store.listAccessibleTurns("default", "ceo")
+  const context = inspectActorContext(store, {
+    ownerScope: "local",
+    simulationId: "smoke",
+    branchId: "main",
+    actorId: "student-team",
   });
-
-  if (!context.promptPreview.includes("We need to understand what is really going on.")) {
-    throw new Error("Expected context preview to include the accessible manual turn.");
-  }
-
-  const closure = await closeEpisode({ store, simulationId: "default", label: "Smoke episode" });
-  if (closure.memories.length === 0) {
-    throw new Error("Expected closeEpisode to create at least one memory.");
-  }
-
-  if (closure.extractedBeliefs.length === 0) {
-    throw new Error("Expected closeEpisode to create at least one extracted belief.");
-  }
+  if (!context.promptPreview.includes("really going on"))
+    throw new Error("Subjective transcript projection failed.");
+  const closure = await closeBranchEpisode(store, {
+    ownerScope: "local",
+    simulationId: "smoke",
+    branchId: "main",
+    expectedHead: turn.commit.id,
+    commandId: "smoke-close",
+    payload: { label: "Smoke episode" },
+  });
+  if (
+    !closure.closure.memories.length ||
+    !closure.closure.extractedBeliefs.length
+  )
+    throw new Error("Branch closure projection failed.");
 } finally {
   store.close();
-  await rm(runRoot, { recursive: true, force: true });
+  await rm(root, { recursive: true, force: true });
 }
-
-console.log(`smoke ok (${path.relative(process.cwd(), runRoot).replaceAll("\\", "/")})`);
+console.log("smoke ok (branch-aware manual kernel)");
