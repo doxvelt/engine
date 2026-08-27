@@ -492,3 +492,88 @@ export type ActorContext = {
   diagnostics: DiagnosticRecord[];
   promptPreview: string;
 };
+
+export type RuntimeProfileRef = {
+  id: string;
+  version: string;
+};
+
+export type PromptPolicyRef = {
+  id: string;
+  version: string;
+};
+
+export type OutputSchemaRef = {
+  id: string;
+  digest: string;
+};
+
+export type DraftStageWhisperSnapshot = {
+  id: string;
+  text: string;
+};
+
+export type NormalizedRuntimeUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
+
+export type RuntimeStopReason =
+  | "stop"
+  | "length"
+  | "tool_use"
+  | "error"
+  | "aborted"
+  | "other";
+
+export type DraftRuntimeProvenance = {
+  adapter: { id: string; version: string };
+  runtimeProfile: RuntimeProfileRef;
+  providerId: string | null;
+  modelId: string | null;
+  usage: NormalizedRuntimeUsage;
+  stopReason: RuntimeStopReason | null;
+  terminalStatus: "completed" | "failed";
+};
+
+export type ActorTurnDraftArtifact = {
+  text: string;
+  digest: string;
+  provenance: DraftRuntimeProvenance;
+};
+
+export type ActorTurnDraftFailure = {
+  code: "runtime_failure" | "invalid_stream";
+  message: string;
+  provenance: DraftRuntimeProvenance;
+};
+
+export type ActorTurnDraftStatus = "generating" | "ready" | "failed" | "discarded";
+
+export type ActorTurnDraftRecord = {
+  id: string;
+  ownerScope: string;
+  simulationId: string;
+  generationCommandId: string;
+  branchId: string;
+  basisHeadCommitId: string;
+  contentRevisionId: string;
+  actorId: string;
+  audience: string[];
+  stageWhispers: DraftStageWhisperSnapshot[];
+  runtimeProfile: RuntimeProfileRef;
+  promptPolicy: PromptPolicyRef;
+  outputSchema: OutputSchemaRef;
+  skillDigests: string[];
+  capabilityGrant: [];
+  context: unknown;
+  contextHash: string;
+  prompt: string;
+  promptHash: string;
+  status: ActorTurnDraftStatus;
+  artifact: ActorTurnDraftArtifact | null;
+  failure: ActorTurnDraftFailure | null;
+  createdAt: string;
+  updatedAt: string;
+};
