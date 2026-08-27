@@ -2,7 +2,11 @@
 
 This document defines the boundary between Doxvelt and any model/agent harness.
 
-Pi Agent Harness is the preferred candidate for the first adapter. Pi is not the domain engine, persistence model, memory system, or authorization boundary.
+The Pi runtime spike is **VALIDATED** for a first adapter built from explicit
+`pi-ai` `Models` collections and a fresh low-level `pi-agent-core` `Agent` per
+candidate. `AgentHarness` v2 remains an unfinished scaffold and is not the
+selected runtime. Pi is not the domain engine, persistence model, memory system,
+or authorization boundary.
 
 ## Why A Harness
 
@@ -70,11 +74,13 @@ Credentials are not part of the profile. The same profile may resolve through a 
 
 ## Pi Adapter
 
-The first spike should prefer:
+The first adapter uses:
 
 - `@earendil-works/pi-ai` for provider/model/auth mechanics;
 - `@earendil-works/pi-agent-core` for the tool loop and runtime events;
-- an in-memory Pi agent state rebuilt from Doxvelt context for each accepted branch head;
+- a fresh in-memory `Agent` rebuilt from Doxvelt context for every generated
+  candidate and its draft transaction, including regenerations from the same
+  canonical branch head;
 - explicit custom tools backed only by the Capability Broker;
 - explicit skill resources supplied by Doxvelt.
 
@@ -86,7 +92,10 @@ Do not make Pi sessions authoritative. In particular:
 - do not persist one independent Pi truth per actor;
 - do not rely on Pi tool side effects for canonical state.
 
-A long-lived Pi worker may retain model catalogs, auth state, provider connections, and safe caches. Its conversational state is disposable.
+A long-lived Pi worker may retain model catalogs, auth state, provider
+connections, and safe caches. Its conversational state is candidate-scoped and
+disposable: abort, rejection, or regeneration discards the entire `Agent` and
+draft transaction before another candidate starts.
 
 ## Model And Auth Boundary
 
@@ -264,18 +273,22 @@ Thinking traces remain provider-sensitive diagnostic data and are not character 
 - OAuth refresh failure is an account/runtime failure, not an actor event.
 - Runtime failure may be retried with another model without changing branch state until a response is accepted.
 
-## Pi Adoption Spike
+## Pi Adoption Spike Result
 
-Pi earns the adapter if a disposable spike demonstrates:
+The bounded spike passed these adoption gates:
 
 1. One actor turn through OAuth-backed OpenAI Codex.
 2. One turn through an API-key or local OpenAI-compatible provider.
 3. Context supplied entirely by Doxvelt, not Pi session history.
 4. A read capability and staged mutating capability.
 5. Abort/regenerate without leaked world effects.
-6. Explicit curated skill loading with global discovery disabled.
+6. Explicit Doxvelt-owned tools with coding/project/global discovery absent.
 7. No filesystem, shell, credential, or unrestricted network capability.
-8. Recorded provider/model/skill/tool provenance.
+8. Recorded provider/model/tool/usage provenance, with skill and prompt digests
+   assigned to the Doxvelt adapter contract.
 9. Equivalent Doxvelt output contracts across providers.
 
-Do not rebase the product on Pi before this spike passes. Do not build a competing provider/auth layer while the spike remains viable.
+The durable evidence and exact selected composition are recorded in
+[Pi Runtime Spike](../spikes/PI_RUNTIME_SPIKE.md). Slice 3 may now implement that
+bounded adapter; it must not expand Pi into Doxvelt's domain or persistence
+model, nor build a competing provider/auth layer.

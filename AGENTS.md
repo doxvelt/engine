@@ -38,31 +38,37 @@ Local-first means no hosted Doxvelt account is required. It does not mean host f
 
 Do not introduce simultaneous multi-agent turns in the architectural MVP. Alternative responses belong on sibling branches, not in a reconciliation step.
 
-## Current Prototype
+## Current Implementation
 
-The current implementation includes:
+Slices 1 and 2 of the architectural MVP are implemented:
 
-- `src/core`: source compiler, context assembly, hard-turn engine, and episode closure;
-- `src/store`: linear SQLite runtime store;
-- `src/ai`: Vercel AI SDK/OpenAI-compatible generation path;
-- `src/cli`: local CLI wrapper;
-- `src/local-api`: local HTTP API;
-- `src/local-ui`: Nuxt/Nuxt UI workbench;
+- `src/core`: immutable content revisions, branch-linked commands/events, pure
+  projections, stable message perceptions, memory operations, and closure-job
+  application services;
+- `src/store`: SQLite adapter with atomic branch writes, append-only memory-job
+  transitions, detached closure results, and logical schema-v5 import/export;
+- `src/ai`: legacy Vercel AI SDK/OpenAI-compatible draft generation, preserved
+  until the Slice 3 adapter owns and replaces that path;
+- `src/cli`: supported manual play and inspection surface;
+- `src/local-api`: supported branch, context, memory-operation, and memory-job API;
+- `src/local-ui`: usable Home/Studio authoring surfaces; Stage still targets the obsolete mutation contract;
 - `design-system`: canonical product UI language;
-- behavior-heavy tests in `tests/`.
+- `.github/workflows/ci.yml` and behavior-heavy tests: Linux lint, typecheck, runtime tests, smoke, and production UI build.
 
-Preserve the proven concepts and acceptance behavior. Replace runtime code only where target semantics demand it. Do not perform a preparatory purge.
+Preserve the accepted branch, perception, memory, and portability behavior.
+Replace a path only when the next slice owns it; do not maintain parallel
+engines.
 
-Known target conflicts include:
+Known next gaps are:
 
-- destructive simulation reset;
-- linear turn and episode tables without branch ancestry;
-- direct SQLite `RuntimeStore` imports in core functions;
-- context reads that persist first impressions;
-- non-transactional episode closure;
-- deployment credentials/endpoints embedded in portable source;
-- arbitrary filesystem paths crossing the HTTP boundary;
-- page-local duplicated contracts and orchestration.
+- runtime-neutral model contracts and deployment-owned runtime profiles;
+- a bounded adapter for the validated `pi-ai` `Models` plus
+  `pi-agent-core` `Agent` composition;
+- staged, authorized Doxvelt capability calls with abort/regenerate isolation;
+- migration of Stage to branch/head/command/draft/memory-job contracts;
+- a real background worker policy for pending jobs beyond explicit local invocation;
+- one-command container packaging and public-readiness documentation;
+- migration of authored `models/` endpoint metadata into deployment-owned runtime profiles.
 
 ## Design System And Nuxt
 
@@ -155,7 +161,11 @@ Memory writers propose structured operations. Doxvelt validates and commits them
 
 ## Agent Runtime And Security
 
-Pi Agent Harness is the preferred adapter candidate, not a committed foundation until its spike passes.
+The Pi spike is **VALIDATED**. Implement the first adapter with explicit
+`pi-ai` `Models` collections and a fresh low-level `pi-agent-core` `Agent` per
+candidate. Do not use `AgentHarness` v2 while its runtime operations remain an
+unfinished scaffold, and do not inherit `pi-coding-agent` defaults or resource
+discovery.
 
 Prefer `pi-ai` and `pi-agent-core` with:
 

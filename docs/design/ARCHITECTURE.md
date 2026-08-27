@@ -153,7 +153,10 @@ Exposes a provider-neutral Doxvelt port for:
 - curated skill discovery;
 - usage, cost, and model metadata.
 
-Pi Agent Harness is the preferred candidate for the first adapter because its AI and agent-core packages are general-purpose, TypeScript-native, provider-rich, and OAuth-capable. Pi must earn adoption through a bounded spike; Doxvelt domain types must not depend on Pi types.
+The bounded spike validated explicit `pi-ai` `Models` collections plus a fresh
+low-level `pi-agent-core` `Agent` per candidate as the first adapter composition.
+Do not use the unfinished `AgentHarness` v2 or inherit `pi-coding-agent` defaults.
+Doxvelt domain types must not depend on Pi types.
 
 See [Agent Runtime and Security](AGENT_RUNTIME.md).
 
