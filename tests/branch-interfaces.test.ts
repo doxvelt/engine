@@ -412,6 +412,42 @@ test("local API preserves source, play, closure, export, and pure branch project
     await fetch(`${base}/simulations/api/memories?branchId=main`)
   ).json()) as any;
   assert.ok(memories.memories.length > 0);
+  assert.ok(memories.operations.length > 0);
+  const operation = memories.operations[0];
+  const revision = await post("/simulations/api/memories/revise", {
+    branchId: "main",
+    expectedHead: closure.commit.id,
+    commandId: "api-revise-memory",
+    actorId: operation.actorId,
+    memoryId: operation.memoryId,
+    revisesOperationId: operation.id,
+    content: "Corrected API memory",
+  });
+  const revisedMemories = (await (
+    await fetch(`${base}/simulations/api/memories?branchId=main`)
+  ).json()) as any;
+  assert.equal(
+    revisedMemories.memories.find((item: any) => item.id === operation.memoryId).text,
+    "Corrected API memory",
+  );
+  const badRevision = await fetch(`${base}/simulations/api/memories/revise`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      branchId: "main", expectedHead: revision.commit.id,
+      commandId: "api-bad-memory", actorId: operation.actorId,
+      memoryId: operation.memoryId, revisesOperationId: "stale", content: "bad",
+    }),
+  });
+  assert.equal(badRevision.status, 400);
+  await post("/simulations/api/memories/retract", {
+    branchId: "main",
+    expectedHead: revision.commit.id,
+    commandId: "api-retract-memory",
+    actorId: operation.actorId,
+    memoryId: operation.memoryId,
+    retractsOperationId: revisedMemories.operations.at(-1).id,
+  });
   const exported = await post("/packages/export", {
     simulationId: "api",
     targetDir: path.join(root, "api-package"),

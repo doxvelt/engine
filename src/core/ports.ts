@@ -33,6 +33,19 @@ export type RuntimeEffectsPayload = {
   accessChanges?: ManualTurnPayload["accessChanges"];
 };
 
+export type ReviseMemoryPayload = {
+  actorId: string;
+  memoryId: string;
+  revisesOperationId: string;
+  content: string;
+};
+
+export type RetractMemoryPayload = {
+  actorId: string;
+  memoryId: string;
+  retractsOperationId: string;
+};
+
 export type StageWhisperCommand = {
   ownerScope: string;
   simulationId: string;
@@ -90,6 +103,8 @@ export type RecordedCommand =
   | ({ kind: "turn"; payload: ManualTurnPayload } & BranchMutation)
   | ({ kind: "effects"; payload: RuntimeEffectsPayload } & BranchMutation)
   | ({ kind: "closure"; payload: { label?: string | null } } & BranchMutation)
+  | ({ kind: "revise_memory"; payload: ReviseMemoryPayload } & BranchMutation)
+  | ({ kind: "retract_memory"; payload: RetractMemoryPayload } & BranchMutation)
   | ({
       kind: "edit" | "regenerate";
       sourceBranchId: string;

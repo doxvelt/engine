@@ -17,6 +17,7 @@ import {
   unwrapRecordedOutcome,
 } from "./domain-rules.ts";
 import { deriveRetainedBeliefs } from "./retained-beliefs.ts";
+import { legacyClosureOperations, projectPerceptions } from "./memory-operations.ts";
 import {
   assertRecordedCommandOutcome,
   assertRecordedOutcomeIdentity,
@@ -88,6 +89,13 @@ export function validateSimulationArchive(archive: SimulationArchive): void {
       );
     for (const event of commit.events) validateRuntimeEvent(event);
   }
+  const operationIds = archive.commits.flatMap((commit) => commit.events.flatMap(
+    (event) => event.type === "memory_operation" ? [event.operation.id]
+      : event.type === "episode_closed" ? (event.closure.memoryOperations || []).map((item) => item.id)
+      : [],
+  ));
+  if (new Set(operationIds).size !== operationIds.length)
+    throw new Error("Simulation archive contains duplicate memory operation IDs.");
   for (const branch of archive.branches) {
     validateBranchRecord(branch);
     if (
@@ -346,7 +354,7 @@ function validateCanonicalCommandInput(
   if (
     ![
       "start", "turn", "effects", "closure", "edit", "regenerate", "fork",
-      "whisper",
+      "whisper", "revise_memory", "retract_memory",
     ].includes(String(input.kind)) ||
     input.ownerScope !== archive.simulation.ownerScope ||
     input.simulationId !== archive.simulation.id ||
@@ -368,7 +376,7 @@ function validateCanonicalCommandInput(
   const result = unwrapRecordedOutcome(command.result) as Record<string, unknown>;
   if (input.kind === "start")
     validateStartInput(archive, command, decodedInput, result);
-  else if (["turn", "effects", "closure", "edit", "regenerate"].includes(
+  else if (["turn", "effects", "closure", "edit", "regenerate", "revise_memory", "retract_memory"].includes(
     String(input.kind),
   ))
     validateCommitInput(archive, command, decodedInput, result);
@@ -446,6 +454,7 @@ function validateCommitInput(
     (commit.kind === "turn" && !["turn", "edit", "regenerate"].includes(commandKind)) ||
     (commit.kind === "effects" && commandKind !== "effects") ||
     (commit.kind === "episode_closure" && commandKind !== "closure")
+    || (commit.kind === "memory" && !["revise_memory", "retract_memory"].includes(commandKind))
   )
     throw invalidCommandResult(command.commandId, "command kind mismatch");
   if (commit.kind === "turn")
@@ -461,6 +470,8 @@ function validateCommitInput(
     validateEffectsInput(archive, command.commandId, input, result, commit);
   else if (commit.kind === "episode_closure")
     validateClosureInput(archive, command.commandId, input, result, commit);
+  else if (commit.kind === "memory")
+    validateMemoryInput(archive, command.commandId, input, result, commit, commandKind);
   else throw invalidCommandResult(command.commandId, "unsupported commit input");
 }
 
@@ -910,13 +921,32 @@ function validateClosureIntegrity(
     const expectedSourceTurnIds = openTurns
       .filter((turn) => turn.message.audience.includes(memory.actorId))
       .map((turn) => turn.message.id);
+    const expectedPerceptions = projectPerceptions(
+      openTurns.map((turn) => turn.commit),
+    ).filter((item) => item.actorId === memory.actorId);
     if (
       !actor || !canHoldEpisodeMemory(actor) ||
+      !memory.text.trim() ||
       memory.id !== domainId("episode_memory", commandId, memory.actorId) ||
       memory.episodeId !== episodeId ||
       memory.simulationId !== archive.simulation.id ||
       new Set(memory.sourceTurnIds).size !== memory.sourceTurnIds.length ||
-      stableStringify(memory.sourceTurnIds) !== stableStringify(expectedSourceTurnIds)
+      stableStringify(memory.sourceTurnIds) !== stableStringify(expectedSourceTurnIds) ||
+      closure.memoryOperations !== undefined && (
+        memory.sourcePerceptionIds === undefined ||
+        memory.sourceEventIds === undefined ||
+        memory.sourceMessageVersionIds === undefined
+      ) ||
+      memory.sourcePerceptionIds !== undefined &&
+        stableStringify(memory.sourcePerceptionIds) !==
+          stableStringify(expectedPerceptions.map((item) => item.id)) ||
+      memory.sourceEventIds !== undefined &&
+        stableStringify(memory.sourceEventIds) !==
+          stableStringify(expectedPerceptions.map((item) => item.sourceEventId)) ||
+      memory.sourceMessageVersionIds !== undefined &&
+        stableStringify(memory.sourceMessageVersionIds) !== stableStringify(
+          expectedPerceptions.map((item) => item.sourceMessageVersionId),
+        )
     )
       throw invalidCommandResult(commandId, "episode memory provenance mismatch");
     addUniqueClosureId(commandId, recordIds, memory.id);
@@ -924,7 +954,7 @@ function validateClosureIntegrity(
   for (const memory of closure.longTermMemories) {
     const source = memories.get(memory.episodeMemoryId);
     if (
-      !source || source.actorId !== memory.actorId ||
+      !source || source.actorId !== memory.actorId || !memory.text.trim() ||
       memory.id !== domainId("long_memory", commandId, memory.actorId) ||
       memory.episodeId !== episodeId ||
       memory.simulationId !== archive.simulation.id
@@ -961,6 +991,141 @@ function validateClosureIntegrity(
     throw invalidCommandResult(commandId, "retained belief set mismatch");
   for (const belief of closure.retainedBeliefs)
     addUniqueClosureId(commandId, recordIds, belief.id);
+  if (closure.memoryOperations) {
+    const allPerceptions = new Map(projectPerceptions(ancestry).map((item) => [item.id, item]));
+    const expectedIds = new Set([
+      ...closure.memories.map((memory) => memory.id),
+      ...closure.longTermMemories.map((memory) => memory.id),
+    ]);
+    if (closure.memoryOperations.length !== expectedIds.size)
+      throw invalidCommandResult(commandId, "closure memory operation set mismatch");
+    for (const operation of closure.memoryOperations) {
+      if (!expectedIds.has(operation.memoryId))
+        throw invalidCommandResult(commandId, "closure memory operation target mismatch");
+      validateMemoryOperationBasis(archive, commit, operation, allPerceptions);
+      if (
+        operation.basisCommitId !== commit.parentCommitId ||
+        operation.closureCommitId !== commit.id ||
+        operation.producer.mode !== "episode_closure" ||
+        operation.producer.commandId !== commandId
+      ) throw invalidCommandResult(commandId, "closure memory operation provenance mismatch");
+      const episodeMemory = closure.memories.find((item) => item.id === operation.memoryId);
+      const longMemory = closure.longTermMemories.find((item) => item.id === operation.memoryId);
+      const sourceMemory = episodeMemory || (longMemory
+        ? closure.memories.find((item) => item.id === longMemory.episodeMemoryId)
+        : null);
+      if (
+        !sourceMemory ||
+        stableStringify(operation.sourcePerceptionIds) !==
+          stableStringify(sourceMemory.sourcePerceptionIds) ||
+        stableStringify(operation.sourceEventIds) !==
+          stableStringify(sourceMemory.sourceEventIds) ||
+        stableStringify(operation.sourceMessageVersionIds) !==
+          stableStringify(sourceMemory.sourceMessageVersionIds)
+      ) throw invalidCommandResult(commandId, "memory operation source set mismatch");
+      if (episodeMemory) {
+        if (
+          operation.type !== "asserted" || operation.memoryKind !== "episode" ||
+          operation.content !== episodeMemory.text ||
+          operation.id !== domainId("memory_operation", commit.id, episodeMemory.id, "asserted")
+        ) throw invalidCommandResult(commandId, "episode assertion mismatch");
+      } else if (
+        !longMemory || operation.type !== "consolidated" ||
+        operation.memoryKind !== "long_term" || operation.content !== longMemory.text ||
+        operation.episodeMemoryId !== longMemory.episodeMemoryId ||
+        operation.id !== domainId("memory_operation", commit.id, longMemory.id, "consolidated")
+      ) throw invalidCommandResult(commandId, "long-term consolidation mismatch");
+    }
+  }
+}
+
+function validateMemoryInput(
+  archive: SimulationArchive,
+  commandId: string,
+  input: Record<string, unknown>,
+  result: Record<string, unknown>,
+  commit: CommitRecord,
+  commandKind: string,
+): void {
+  assertExactInput(commandId, input, [
+    "ownerScope", "simulationId", "branchId", "expectedHead", "commandId", "payload",
+  ]);
+  if (!isRecord(input.payload) || !isRecord(result.branch))
+    throw invalidCommandResult(commandId, "invalid memory input");
+  const payload = input.payload;
+  const revision = commandKind === "revise_memory";
+  assertExactInput(commandId, payload, revision
+    ? ["actorId", "memoryId", "revisesOperationId", "content"]
+    : ["actorId", "memoryId", "retractsOperationId"]);
+  if (
+    input.branchId !== result.branch.id ||
+    input.expectedHead !== commit.parentCommitId ||
+    commit.events.length !== 1 ||
+    commit.events[0]?.type !== "memory_operation"
+  ) throw invalidCommandResult(commandId, "memory command basis mismatch");
+  const operation = commit.events[0].operation;
+  const ancestry = ancestryThrough(archive.commits, commit.parentCommitId);
+  const operations = ancestry.flatMap((item) => [
+    ...legacyClosureOperations(item),
+    ...item.events.filter((event) => event.type === "memory_operation")
+      .map((event) => event.type === "memory_operation" ? event.operation : neverValue()),
+  ]);
+  const current = operations.filter((item) => item.memoryId === payload.memoryId).at(-1);
+  const target = revision ? payload.revisesOperationId : payload.retractsOperationId;
+  if (
+    !current || current.type === "retracted" ||
+    current.id !== target || current.actorId !== payload.actorId ||
+    operation.memoryId !== current.memoryId || operation.actorId !== current.actorId ||
+    operation.memoryKind !== current.memoryKind ||
+    stableStringify(operation.sourcePerceptionIds) !==
+      stableStringify(current.sourcePerceptionIds) ||
+    stableStringify(operation.sourceEventIds) !==
+      stableStringify(current.sourceEventIds) ||
+    stableStringify(operation.sourceMessageVersionIds) !==
+      stableStringify(current.sourceMessageVersionIds) ||
+    operation.basisCommitId !== commit.parentCommitId ||
+    operation.closureCommitId !== null || operation.producer.mode !== "manual" ||
+    operation.producer.commandId !== commandId ||
+    operation.id !== domainId("memory_operation", archive.simulation.ownerScope, archive.simulation.id, commandId)
+  ) throw invalidCommandResult(commandId, "memory operation chain mismatch");
+  if (revision) {
+    const content = requiredInputString(commandId, payload, "content").trim();
+    if (!content || operation.type !== "revised" || operation.content !== content || operation.revisesOperationId !== current.id)
+      throw invalidCommandResult(commandId, "memory revision mismatch");
+  } else if (operation.type !== "retracted" || operation.retractsOperationId !== current.id)
+    throw invalidCommandResult(commandId, "memory retraction mismatch");
+  validateMemoryOperationBasis(
+    archive, commit, operation,
+    new Map(projectPerceptions(ancestry).map((item) => [item.id, item])),
+  );
+}
+
+function validateMemoryOperationBasis(
+  archive: SimulationArchive,
+  commit: CommitRecord,
+  operation: Extract<RuntimeEvent, { type: "memory_operation" }>["operation"],
+  perceptions: Map<string, ReturnType<typeof projectPerceptions>[number]>,
+): void {
+  requireArchiveActor(archive, commit.commandId, operation.actorId);
+  if (
+    operation.simulationId !== archive.simulation.id ||
+    operation.createdAt !== commit.createdAt ||
+    !isAncestor(archive.commits, operation.basisCommitId, commit.parentCommitId || commit.id) ||
+    new Set(operation.sourcePerceptionIds).size !== operation.sourcePerceptionIds.length ||
+    new Set(operation.sourceEventIds).size !== operation.sourceEventIds.length ||
+    new Set(operation.sourceMessageVersionIds).size !== operation.sourceMessageVersionIds.length
+  ) throw invalidCommandResult(commit.commandId, "memory operation basis mismatch");
+  const sources = operation.sourcePerceptionIds.map((id) => perceptions.get(id));
+  if (sources.some((item) => !item || item.actorId !== operation.actorId))
+    throw invalidCommandResult(commit.commandId, "memory perception provenance mismatch");
+  if (
+    stableStringify(sources.map((item) => item!.sourceEventId)) !== stableStringify(operation.sourceEventIds) ||
+    stableStringify(sources.map((item) => item!.sourceMessageVersionId)) !== stableStringify(operation.sourceMessageVersionIds)
+  ) throw invalidCommandResult(commit.commandId, "memory source provenance mismatch");
+}
+
+function neverValue(): never {
+  throw new Error("Unreachable runtime event.");
 }
 
 function addUniqueClosureId(commandId: string, ids: Set<string>, id: string): void {
@@ -1098,7 +1263,7 @@ function validateCommitRecord(value: unknown): void {
   stringsOf(commit, ["id", "ownerScope", "simulationId", "commandId", "createdAt"], "commit");
   if (commit.parentCommitId !== null && typeof commit.parentCommitId !== "string")
     invalid("commit parent");
-  if (!["root", "turn", "effects", "episode_closure"].includes(String(commit.kind)))
+  if (!["root", "turn", "effects", "episode_closure", "memory"].includes(String(commit.kind)))
     invalid("commit kind");
   if (!Array.isArray(commit.events)) invalid("commit events");
 }
@@ -1167,6 +1332,9 @@ function validateRuntimeEvent(value: unknown): void {
   } else if (value.type === "episode_closed") {
     exact(value, ["type", "closure"], "closure event");
     validateClosure(value.closure);
+  } else if (value.type === "memory_operation") {
+    exact(value, ["type", "operation"], "memory operation event");
+    validateMemoryOperation(value.operation);
   } else invalid("runtime event type");
 }
 
@@ -1194,6 +1362,7 @@ function validateClosure(value: unknown): void {
       "longTermMemories",
       "extractedBeliefs",
       "retainedBeliefs",
+      ...(isRecord(value) && Object.hasOwn(value, "memoryOperations") ? ["memoryOperations"] : []),
     ],
     "closure",
   );
@@ -1216,6 +1385,8 @@ function validateClosure(value: unknown): void {
     "extracted beliefs",
   );
   arrayOf(closure.retainedBeliefs, validateRetainedBelief, "retained beliefs");
+  if (closure.memoryOperations !== undefined)
+    arrayOf(closure.memoryOperations, validateMemoryOperation, "memory operations");
 }
 
 function validateEpisodeMemory(value: unknown): void {
@@ -1229,11 +1400,45 @@ function validateEpisodeMemory(value: unknown): void {
       "text",
       "sourceTurnIds",
       "createdAt",
+      ...(isRecord(value) && Object.hasOwn(value, "sourcePerceptionIds") ? ["sourcePerceptionIds"] : []),
+      ...(isRecord(value) && Object.hasOwn(value, "sourceEventIds") ? ["sourceEventIds"] : []),
+      ...(isRecord(value) && Object.hasOwn(value, "sourceMessageVersionIds") ? ["sourceMessageVersionIds"] : []),
     ],
     "episode memory",
     ["id", "episodeId", "simulationId", "actorId", "text", "createdAt"],
   );
   stringArray((value as Record<string, unknown>).sourceTurnIds, "source turn IDs");
+  const memory = value as Record<string, unknown>;
+  for (const key of ["sourcePerceptionIds", "sourceEventIds", "sourceMessageVersionIds"])
+    if (memory[key] !== undefined) stringArray(memory[key], key);
+}
+function validateMemoryOperation(value: unknown): void {
+  if (!isRecord(value)) invalid("memory operation");
+  const type = value.type;
+  oneOf(type, ["asserted", "consolidated", "revised", "retracted"], "memory operation type");
+  const common = [
+    "id", "memoryId", "simulationId", "actorId", "memoryKind", "type",
+    "basisCommitId", "closureCommitId", "sourcePerceptionIds", "sourceEventIds",
+    "sourceMessageVersionIds", "producer", "createdAt",
+  ];
+  const tail = type === "consolidated" ? ["content", "episodeMemoryId"]
+    : type === "revised" ? ["content", "revisesOperationId"]
+    : type === "retracted" ? ["retractsOperationId"] : ["content"];
+  exact(value, [...common, ...tail], "memory operation");
+  stringsOf(value, ["id", "memoryId", "simulationId", "actorId", "basisCommitId", "createdAt"], "memory operation");
+  oneOf(value.memoryKind, ["episode", "long_term"], "memory kind");
+  nullableString(value.closureCommitId, "closure commit");
+  stringArray(value.sourcePerceptionIds, "source perceptions");
+  stringArray(value.sourceEventIds, "source events");
+  stringArray(value.sourceMessageVersionIds, "source message versions");
+  if (type !== "retracted" && typeof value.content !== "string") invalid("memory content");
+  if (type === "consolidated" && typeof value.episodeMemoryId !== "string") invalid("episode memory ID");
+  if (type === "revised" && typeof value.revisesOperationId !== "string") invalid("revised operation ID");
+  if (type === "retracted" && typeof value.retractsOperationId !== "string") invalid("retracted operation ID");
+  exact(value.producer, ["mode", "commandId"], "memory producer");
+  const producer = value.producer as Record<string, unknown>;
+  oneOf(producer.mode, ["episode_closure", "manual", "legacy_closure"], "memory producer mode");
+  stringsOf(producer, ["commandId"], "memory producer");
 }
 function validateLongMemory(value: unknown): void {
   record(

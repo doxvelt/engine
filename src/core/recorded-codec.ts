@@ -11,7 +11,7 @@ export function decodeRecordedCommand(value: unknown): RecordedCommand {
   const command = record(value, "recorded command");
   const kind = enumString(command.kind, "recorded command kind", [
     "start", "turn", "effects", "closure", "edit", "regenerate", "fork",
-    "whisper",
+    "whisper", "revise_memory", "retract_memory",
   ] as const);
   if (kind === "start") decodeStartCommand(command);
   else if (kind === "turn") decodeTurnCommand(command, false);
@@ -19,6 +19,8 @@ export function decodeRecordedCommand(value: unknown): RecordedCommand {
     decodeTurnCommand(command, true);
   else if (kind === "effects") decodeEffectsCommand(command);
   else if (kind === "closure") decodeClosureCommand(command);
+  else if (kind === "revise_memory" || kind === "retract_memory")
+    decodeMemoryCommand(command, kind);
   else if (kind === "fork") decodeForkCommand(command);
   else decodeWhisperCommand(command);
   return command as RecordedCommand;
@@ -97,7 +99,7 @@ export function assertRecordedOutcomeIdentity(
     return;
   }
   if (outcome.kind === "commit") {
-    if (!["turn", "effects", "closure", "edit", "regenerate"].includes(
+    if (!["turn", "effects", "closure", "edit", "regenerate", "revise_memory", "retract_memory"].includes(
       command.kind,
     )) fail();
     const commitCommand = command as Extract<
@@ -133,6 +135,26 @@ export function assertRecordedOutcomeIdentity(
     outcome.whisper.branchId !== whisperCommand.branchId ||
     outcome.whisper.commandId !== whisperCommand.commandId
   ) fail();
+}
+
+function decodeMemoryCommand(
+  command: RecordValue,
+  kind: "revise_memory" | "retract_memory",
+): void {
+  exact(command, [
+    "kind", "ownerScope", "simulationId", "branchId", "expectedHead",
+    "commandId", "payload",
+  ]);
+  strings(command, [
+    "ownerScope", "simulationId", "branchId", "expectedHead", "commandId",
+  ]);
+  const payload = record(command.payload, "memory command payload");
+  exact(payload, kind === "revise_memory"
+    ? ["actorId", "memoryId", "revisesOperationId", "content"]
+    : ["actorId", "memoryId", "retractsOperationId"]);
+  strings(payload, kind === "revise_memory"
+    ? ["actorId", "memoryId", "revisesOperationId", "content"]
+    : ["actorId", "memoryId", "retractsOperationId"]);
 }
 
 function decodeStartCommand(command: RecordValue): void {
@@ -460,7 +482,7 @@ function decodeCommit(value: unknown): void {
   strings(commit, ["id", "ownerScope", "simulationId", "commandId", "createdAt"]);
   nullableString(commit.parentCommitId, "parentCommitId");
   enumString(commit.kind, "commit kind", [
-    "root", "turn", "effects", "episode_closure",
+    "root", "turn", "effects", "episode_closure", "memory",
   ]);
   for (const event of array(commit.events, "commit events")) {
     decodeRuntimeEvent(event);
@@ -472,6 +494,7 @@ function decodeRuntimeEvent(value: unknown): void {
   const type = enumString(event.type, "runtime event type", [
     "message_accepted", "audience_changed", "access_changed",
     "first_impression_formed", "stage_whisper_consumed", "episode_closed",
+    "memory_operation",
   ] as const);
   if (type === "message_accepted") {
     exact(event, ["type", "message"]);
@@ -495,9 +518,12 @@ function decodeRuntimeEvent(value: unknown): void {
   } else if (type === "stage_whisper_consumed") {
     exact(event, ["type", "whisperId", "targetActorId", "text"]);
     strings(event, ["whisperId", "targetActorId", "text"]);
-  } else {
+  } else if (type === "episode_closed") {
     exact(event, ["type", "closure"]);
     decodeClosure(event.closure);
+  } else {
+    exact(event, ["type", "operation"]);
+    decodeMemoryOperation(event.operation);
   }
 }
 
@@ -521,7 +547,7 @@ function decodeClosure(value: unknown): void {
   exact(closure, [
     "episode", "memories", "longTermMemories", "extractedBeliefs",
     "retainedBeliefs",
-  ]);
+  ], ["memoryOperations"]);
   const episode = record(closure.episode, "episode");
   exact(episode, ["id", "simulationId", "commitId", "label", "closedAt"]);
   strings(episode, ["id", "simulationId", "commitId", "closedAt"]);
@@ -534,6 +560,9 @@ function decodeClosure(value: unknown): void {
     decodeExtractedBelief(item);
   for (const item of array(closure.retainedBeliefs, "retained beliefs"))
     decodeRetainedBelief(item);
+  if (closure.memoryOperations !== undefined)
+    for (const item of array(closure.memoryOperations, "memory operations"))
+      decodeMemoryOperation(item);
 }
 
 function decodeEpisodeMemory(value: unknown): void {
@@ -541,11 +570,43 @@ function decodeEpisodeMemory(value: unknown): void {
   exact(memory, [
     "id", "episodeId", "simulationId", "actorId", "text", "sourceTurnIds",
     "createdAt",
-  ]);
+  ], ["sourcePerceptionIds", "sourceEventIds", "sourceMessageVersionIds"]);
   strings(memory, [
     "id", "episodeId", "simulationId", "actorId", "text", "createdAt",
   ]);
   stringArray(memory.sourceTurnIds, "source turn IDs");
+  for (const key of ["sourcePerceptionIds", "sourceEventIds", "sourceMessageVersionIds"])
+    if (memory[key] !== undefined) stringArray(memory[key], key);
+}
+
+function decodeMemoryOperation(value: unknown): void {
+  const operation = record(value, "memory operation");
+  const type = enumString(operation.type, "memory operation type", [
+    "asserted", "consolidated", "revised", "retracted",
+  ] as const);
+  const common = [
+    "id", "memoryId", "simulationId", "actorId", "memoryKind", "type",
+    "basisCommitId", "closureCommitId", "sourcePerceptionIds",
+    "sourceEventIds", "sourceMessageVersionIds", "producer", "createdAt",
+  ];
+  const tail = type === "consolidated" ? ["content", "episodeMemoryId"]
+    : type === "revised" ? ["content", "revisesOperationId"]
+    : type === "retracted" ? ["retractsOperationId"] : ["content"];
+  exact(operation, [...common, ...tail]);
+  strings(operation, ["id", "memoryId", "simulationId", "actorId", "basisCommitId", "createdAt"]);
+  nullableString(operation.closureCommitId, "closureCommitId");
+  enumString(operation.memoryKind, "memory kind", ["episode", "long_term"]);
+  stringArray(operation.sourcePerceptionIds, "source perception IDs");
+  stringArray(operation.sourceEventIds, "source event IDs");
+  stringArray(operation.sourceMessageVersionIds, "source message-version IDs");
+  if (type !== "retracted") string(operation.content, "memory content");
+  if (type === "consolidated") string(operation.episodeMemoryId, "episode memory ID");
+  if (type === "revised") string(operation.revisesOperationId, "revised operation ID");
+  if (type === "retracted") string(operation.retractsOperationId, "retracted operation ID");
+  const producer = record(operation.producer, "memory producer");
+  exact(producer, ["mode", "commandId"]);
+  enumString(producer.mode, "memory producer mode", ["episode_closure", "manual", "legacy_closure"]);
+  string(producer.commandId, "memory producer command ID");
 }
 
 function decodeLongMemory(value: unknown): void {
