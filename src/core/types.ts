@@ -206,7 +206,7 @@ export type BranchRecord = {
   createdAt: string;
 };
 
-export type CommitKind = "root" | "turn" | "effects" | "episode_closure";
+export type CommitKind = "root" | "turn" | "effects" | "episode_closure" | "memory";
 
 export type CommitRecord = {
   id: string;
@@ -257,7 +257,8 @@ export type RuntimeEvent =
       targetActorId: string;
       text: string;
     }
-  | { type: "episode_closed"; closure: EpisodeClosure };
+  | { type: "episode_closed"; closure: EpisodeClosure }
+  | { type: "memory_operation"; operation: MemoryOperation };
 
 export type CommandEnvelope<TPayload> = {
   ownerScope: string;
@@ -315,6 +316,9 @@ export type EpisodeMemoryRecord = {
   actorId: string;
   text: string;
   sourceTurnIds: string[];
+  sourcePerceptionIds?: string[];
+  sourceEventIds?: string[];
+  sourceMessageVersionIds?: string[];
   createdAt: string;
 };
 
@@ -327,6 +331,52 @@ export type LongTermMemoryRecord = {
   text: string;
   createdAt: string;
 };
+
+export type PerceptionRecord = {
+  id: string;
+  simulationId: string;
+  actorId: string;
+  sourceCommitId: string;
+  sourceEventId: string;
+  sourceMessageVersionId: string;
+  createdAt: string;
+};
+
+export type MemoryKind = "episode" | "long_term";
+export type MemoryProducer = {
+  mode: "episode_closure" | "manual" | "legacy_closure";
+  commandId: string;
+};
+type MemoryOperationBase = {
+  id: string;
+  memoryId: string;
+  simulationId: string;
+  actorId: string;
+  memoryKind: MemoryKind;
+  basisCommitId: string;
+  closureCommitId: string | null;
+  sourcePerceptionIds: string[];
+  sourceEventIds: string[];
+  sourceMessageVersionIds: string[];
+  producer: MemoryProducer;
+  createdAt: string;
+};
+export type MemoryOperation =
+  | (MemoryOperationBase & { type: "asserted"; content: string })
+  | (MemoryOperationBase & {
+      type: "consolidated";
+      content: string;
+      episodeMemoryId: string;
+    })
+  | (MemoryOperationBase & {
+      type: "revised";
+      content: string;
+      revisesOperationId: string;
+    })
+  | (MemoryOperationBase & {
+      type: "retracted";
+      retractsOperationId: string;
+    });
 
 export type ExtractedBeliefRecord = {
   id: string;
@@ -377,6 +427,7 @@ export type EpisodeClosure = {
   longTermMemories: LongTermMemoryRecord[];
   extractedBeliefs: ExtractedBeliefRecord[];
   retainedBeliefs: RetainedBeliefRecord[];
+  memoryOperations?: MemoryOperation[];
 };
 
 export type ActorContext = {

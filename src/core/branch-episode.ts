@@ -23,6 +23,7 @@ import type {
   EpisodeMemoryRecord,
   ExtractedBeliefRecord,
   LongTermMemoryRecord,
+  MemoryOperation,
   RetainedBeliefRecord,
   TranscriptTurn,
 } from "./types.ts";
@@ -125,6 +126,7 @@ export async function closeBranchEpisode(
   const longTermMemories: LongTermMemoryRecord[] = [];
   const extractedBeliefs: ExtractedBeliefRecord[] = [];
   const retainedBeliefs: RetainedBeliefRecord[] = [];
+  const memoryOperations: MemoryOperation[] = [];
   const actors = revision.compiled.entities.filter(
     canHoldEpisodeMemory,
   );
@@ -141,20 +143,31 @@ export async function closeBranchEpisode(
       actorId: actor.id,
       turns: accessibleTurns,
     });
+    const perceptions = projection.perceptions.filter(
+      (item) => item.actorId === actor.id && openCommitIds.has(item.sourceCommitId),
+    );
+    const memoryText = (
+      await generator.writeMemory({
+        actor,
+        context,
+        turns: accessibleTurns,
+        label: command.payload.label || null,
+      })
+    ).trim();
+    if (!memoryText)
+      throw new DomainValidationError("Episode memory content is empty.");
     const memory: EpisodeMemoryRecord = {
       id: id("episode_memory", command.commandId, actor.id),
       episodeId,
       simulationId: command.simulationId,
       actorId: actor.id,
-      text: (
-        await generator.writeMemory({
-          actor,
-          context,
-          turns: accessibleTurns,
-          label: command.payload.label || null,
-        })
-      ).trim(),
+      text: memoryText,
       sourceTurnIds: accessibleTurns.map((item) => item.id),
+      sourcePerceptionIds: perceptions.map((item) => item.id),
+      sourceEventIds: perceptions.map((item) => item.sourceEventId),
+      sourceMessageVersionIds: perceptions.map(
+        (item) => item.sourceMessageVersionId,
+      ),
       createdAt,
     };
     memories.push(memory);
@@ -209,6 +222,7 @@ export async function closeBranchEpisode(
     longTermMemories,
     extractedBeliefs,
     retainedBeliefs,
+    memoryOperations,
   };
   const commit = {
     id: id(
@@ -226,6 +240,44 @@ export async function closeBranchEpisode(
     createdAt,
   };
   closure.episode.commitId = commit.id;
+  for (const memory of memories) {
+    memoryOperations.push({
+      id: id("memory_operation", commit.id, memory.id, "asserted"),
+      memoryId: memory.id,
+      simulationId: command.simulationId,
+      actorId: memory.actorId,
+      memoryKind: "episode",
+      type: "asserted",
+      content: memory.text,
+      basisCommitId: command.expectedHead,
+      closureCommitId: commit.id,
+      sourcePerceptionIds: memory.sourcePerceptionIds || [],
+      sourceEventIds: memory.sourceEventIds || [],
+      sourceMessageVersionIds: memory.sourceMessageVersionIds || [],
+      producer: { mode: "episode_closure", commandId: command.commandId },
+      createdAt,
+    });
+  }
+  for (const memory of longTermMemories) {
+    const episodeMemory = memories.find((item) => item.id === memory.episodeMemoryId)!;
+    memoryOperations.push({
+      id: id("memory_operation", commit.id, memory.id, "consolidated"),
+      memoryId: memory.id,
+      simulationId: command.simulationId,
+      actorId: memory.actorId,
+      memoryKind: "long_term",
+      type: "consolidated",
+      content: memory.text,
+      episodeMemoryId: memory.episodeMemoryId,
+      basisCommitId: command.expectedHead,
+      closureCommitId: commit.id,
+      sourcePerceptionIds: episodeMemory.sourcePerceptionIds || [],
+      sourceEventIds: episodeMemory.sourceEventIds || [],
+      sourceMessageVersionIds: episodeMemory.sourceMessageVersionIds || [],
+      producer: { mode: "episode_closure", commandId: command.commandId },
+      createdAt,
+    });
+  }
   return {
     ...repository.appendCommit({
       branchId: command.branchId,

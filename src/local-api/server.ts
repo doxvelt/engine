@@ -19,6 +19,7 @@ import {
   startBranchSimulation,
 } from "../core/branch-kernel.ts";
 import { compileWorkspace } from "../core/compiler.ts";
+import { retractMemory, reviseMemory } from "../core/memory-operations.ts";
 import { initWorkspace } from "../core/init.ts";
 import { loadModelRecord } from "../core/models.ts";
 import {
@@ -150,6 +151,29 @@ export async function handleLocalApiRequest(
           simulationId,
         ).compiled.entities.filter((item) => item.kind !== "artifact"),
       });
+    if (method === "POST" && parts[2] === "memories" && parts[3] === "revise") {
+      const body = await bodyOf(request);
+      return send(response, 200, reviseMemory(store, {
+        ...envelope(body, ownerScope, simulationId),
+        payload: {
+          actorId: required(body, "actorId"),
+          memoryId: required(body, "memoryId"),
+          revisesOperationId: required(body, "revisesOperationId"),
+          content: required(body, "content"),
+        },
+      }));
+    }
+    if (method === "POST" && parts[2] === "memories" && parts[3] === "retract") {
+      const body = await bodyOf(request);
+      return send(response, 200, retractMemory(store, {
+        ...envelope(body, ownerScope, simulationId),
+        payload: {
+          actorId: required(body, "actorId"),
+          memoryId: required(body, "memoryId"),
+          retractsOperationId: required(body, "retractsOperationId"),
+        },
+      }));
+    }
     if (method === "GET" && parts[2] === "context" && parts[3]) {
       const q = query(url, simulation);
       const head = projectBranch(store, q).branch.headCommitId;
@@ -541,6 +565,8 @@ function sendProjection(
       branch: p.branch,
       memories: p.episodeMemories,
       longTermMemories: p.longTermMemories,
+      operations: p.memoryOperations,
+      perceptions: p.perceptions,
     });
   return send(response, 200, { branch: p.branch, branches });
 }

@@ -7,6 +7,13 @@ import {
 import { assembleActorContext } from "./context.ts";
 import { prepareCompiledRevision } from "./content-revision.ts";
 import {
+  foldMemoryOperations,
+  legacyClosureOperations,
+  operationToEpisodeMemory,
+  operationToLongTermMemory,
+  projectPerceptions,
+} from "./memory-operations.ts";
+import {
   buildAccessEvents,
   buildAudienceEvents,
   buildManualMessage,
@@ -41,9 +48,11 @@ import type {
   EpisodeMemoryRecord,
   FirstImpressionRecord,
   LongTermMemoryRecord,
+  MemoryOperation,
   MessageVersionRecord,
   ProjectionQuery,
   RuntimeEvent,
+  PerceptionRecord,
   StageWhisperRecord,
   SubjectiveBeliefRecord,
   TranscriptTurn,
@@ -78,6 +87,8 @@ export type BranchProjection = {
   episodeClosures: EpisodeClosure[];
   episodeMemories: EpisodeMemoryRecord[];
   longTermMemories: LongTermMemoryRecord[];
+  perceptions: PerceptionRecord[];
+  memoryOperations: MemoryOperation[];
 };
 
 export async function startBranchSimulation(
@@ -635,6 +646,7 @@ export function projectBranch(
   const episodeClosures: EpisodeClosure[] = [];
   const episodeMemories: EpisodeMemoryRecord[] = [];
   const longTermMemories: LongTermMemoryRecord[] = [];
+  const memoryOperations: MemoryOperation[] = [];
   for (const commit of commits)
     for (const event of commit.events) {
       switch (event.type) {
@@ -682,17 +694,36 @@ export function projectBranch(
               turn.episodeId = event.closure.episode.id;
           }
           episodeClosures.push(event.closure);
-          episodeMemories.push(...event.closure.memories);
-          longTermMemories.push(...event.closure.longTermMemories);
+          memoryOperations.push(...legacyClosureOperations(commit));
           beliefs.push(
             ...event.closure.extractedBeliefs,
             ...event.closure.retainedBeliefs,
           );
           break;
+        case "memory_operation":
+          memoryOperations.push(event.operation);
+          break;
         default:
           assertNever(event);
       }
     }
+  const activeMemories = foldMemoryOperations(memoryOperations).active;
+  const originalEpisodeMemories = episodeClosures.flatMap((item) => item.memories);
+  const originalLongTermMemories = episodeClosures.flatMap(
+    (item) => item.longTermMemories,
+  );
+  episodeMemories.push(...activeMemories
+    .filter((operation) => operation.memoryKind === "episode")
+    .map((operation) => operationToEpisodeMemory(
+      operation,
+      originalEpisodeMemories.find((item) => item.id === operation.memoryId),
+    )));
+  longTermMemories.push(...activeMemories
+    .filter((operation) => operation.memoryKind === "long_term")
+    .map((operation) => operationToLongTermMemory(
+      operation,
+      originalLongTermMemories.find((item) => item.id === operation.memoryId),
+    )));
   return {
     branch: { ...branch, headCommitId: selectedHead },
     head: commits.at(-1)!,
@@ -705,6 +736,8 @@ export function projectBranch(
     episodeClosures,
     episodeMemories,
     longTermMemories,
+    perceptions: projectPerceptions(commits),
+    memoryOperations,
   };
 }
 
