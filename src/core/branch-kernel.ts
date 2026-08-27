@@ -647,6 +647,14 @@ export function projectBranch(
   const episodeMemories: EpisodeMemoryRecord[] = [];
   const longTermMemories: LongTermMemoryRecord[] = [];
   const memoryOperations: MemoryOperation[] = [];
+  const detachedOperations = repository.listDetachedMemoryOperations(
+    query.ownerScope, query.simulationId,
+  );
+  const completedClosureResults = new Map(
+    repository.listMemoryJobs(query.ownerScope, query.simulationId)
+      .filter((job) => job.status === "completed" && job.result)
+      .map((job) => [job.closureCommitId, job.result!]),
+  );
   for (const commit of commits)
     for (const event of commit.events) {
       switch (event.type) {
@@ -688,18 +696,25 @@ export function projectBranch(
         }
         case "stage_whisper_consumed":
           break;
-        case "episode_closed":
+        case "episode_closed": {
+          const closure = structuredClone(
+            completedClosureResults.get(commit.id) || event.closure,
+          );
           for (const turn of transcript) {
             if (turn.episodeId === null)
-              turn.episodeId = event.closure.episode.id;
+              turn.episodeId = closure.episode.id;
           }
-          episodeClosures.push(event.closure);
-          memoryOperations.push(...legacyClosureOperations(commit));
+          episodeClosures.push(closure);
+          const late = detachedOperations.filter(
+            (operation) => operation.closureCommitId === commit.id,
+          );
+          memoryOperations.push(...(late.length ? late : legacyClosureOperations(commit)));
           beliefs.push(
-            ...event.closure.extractedBeliefs,
-            ...event.closure.retainedBeliefs,
+            ...closure.extractedBeliefs,
+            ...closure.retainedBeliefs,
           );
           break;
+        }
         case "memory_operation":
           memoryOperations.push(event.operation);
           break;

@@ -9,6 +9,7 @@ import { retractMemory, reviseMemory } from "../src/core/memory-operations.ts";
 import { BranchConflictError, CommandIdentityError, DomainValidationError } from "../src/core/ports.ts";
 import { validateSimulationArchive } from "../src/core/archive-verifier.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
+import { completedArchiveAsSchemaV4 } from "./archive-test-helpers.ts";
 
 const workspace = path.resolve("examples/executive-interviews");
 
@@ -58,7 +59,7 @@ test("perceptions and closure operations carry stable complete subjective proven
   assert.equal(projection.memoryOperations.length, closed.closure.memoryOperations!.length);
 });
 
-test("closure rejects empty generated memory without moving the branch", async (t) => {
+test("closure failure preserves its checkpoint and a retryable failed job", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-empty-memory-"));
   const store = await openBranchStore(path.join(root, "runtime.sqlite")).open();
   t.after(async () => { store.close(); await rm(root, { recursive: true, force: true }); });
@@ -78,10 +79,8 @@ test("closure rejects empty generated memory without moving the branch", async (
     writeMemory() { return "   "; },
     extractBeliefs() { return []; },
   }), /memory content is empty/);
-  assert.equal(
-    store.getBranch("owner-a", "empty-memory", "main")?.headCommitId,
-    turn.commit.id,
-  );
+  assert.notEqual(store.getBranch("owner-a", "empty-memory", "main")?.headCommitId, turn.commit.id);
+  assert.equal(store.listMemoryJobs("owner-a", "empty-memory")[0]?.status, "failed");
 });
 
 test("revision and retraction are immutable branch-local idempotent operations", async (t) => {
@@ -176,7 +175,7 @@ test("revision and retraction are immutable branch-local idempotent operations",
   );
 });
 
-test("memory operation archives round trip and reject forged causal chains atomically", async (t) => {
+test("legacy embedded memory operation archives reject forged causal chains", async (t) => {
   const { store, closed } = await fixture(t);
   const initial = projectBranch(store, { ownerScope: "owner-a", simulationId: "memory-sim", branchId: "main" });
   const operation = initial.memoryOperations.find((item) => item.memoryKind === "episode")!;
@@ -187,12 +186,14 @@ test("memory operation archives round trip and reject forged causal chains atomi
       revisesOperationId: operation.id, content: "portable revision",
     },
   });
-  const archive = store.exportSimulation("owner-a", "memory-sim");
-  validateSimulationArchive(archive);
+  const archive = completedArchiveAsSchemaV4(
+    store.exportSimulation("owner-a", "memory-sim"),
+  );
+  validateSimulationArchive(structuredClone(archive));
   const targetRoot = await mkdtemp(path.join(os.tmpdir(), "doxvelt-memory-import-"));
   const target = await openBranchStore(path.join(targetRoot, "runtime.sqlite")).open();
   t.after(async () => { target.close(); await rm(targetRoot, { recursive: true, force: true }); });
-  target.importSimulation(archive);
+  target.importSimulation(structuredClone(archive));
   assert.deepEqual(
     projectBranch(target, {
       ownerScope: "owner-a", simulationId: "memory-sim", branchId: "main",

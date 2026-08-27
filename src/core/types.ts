@@ -378,6 +378,39 @@ export type MemoryOperation =
       retractsOperationId: string;
     });
 
+export type MemoryJobStatus = "pending" | "running" | "failed" | "completed";
+export type MemoryJobResult = EpisodeClosure;
+export type MemoryJobTransition = {
+  id: string;
+  jobId: string;
+  ownerScope: string;
+  simulationId: string;
+  attempt: number;
+  status: "running" | "failed" | "completed";
+  resultFingerprint: string | null;
+  result: MemoryJobResult | null;
+  error: string | null;
+  createdAt: string;
+};
+export type MemoryJobRecord = {
+  id: string;
+  ownerScope: string;
+  simulationId: string;
+  originBranchId: string;
+  episodeId: string;
+  closureCommitId: string;
+  basisHeadCommitId: string;
+  commandId: string;
+  label: string | null;
+  status: MemoryJobStatus;
+  attemptCount: number;
+  resultFingerprint: string | null;
+  result: MemoryJobResult | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ExtractedBeliefRecord = {
   id: string;
   episodeId: string;

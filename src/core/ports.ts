@@ -5,6 +5,10 @@ import type {
   ContentRevisionRecord,
   SimulationRecord,
   StageWhisperRecord,
+  MemoryJobRecord,
+  MemoryOperation,
+  MemoryJobResult,
+  MemoryJobTransition,
 } from "./types.ts";
 
 export type ManualTurnPayload = {
@@ -137,7 +141,7 @@ export type RecordedOutcome =
   | { kind: "whisper"; whisper: StageWhisperRecord };
 
 export type SimulationArchive = {
-  schemaVersion: 4;
+  schemaVersion: 4 | 5;
   contentRevision: ContentRevisionRecord;
   simulation: SimulationRecord;
   branches: BranchRecord[];
@@ -150,7 +154,12 @@ export type SimulationArchive = {
     result: RecordedOutcome;
     createdAt: string;
   }>;
+  memoryJobs?: MemoryJobRecord[];
+  detachedMemoryOperations?: MemoryOperation[];
+  memoryJobTransitions?: MemoryJobTransition[];
 };
+
+export type ClosureRequestInput = AppendCommitInput & { job: MemoryJobRecord };
 
 export interface SimulationRepository {
   createContentRevision(
@@ -195,6 +204,24 @@ export interface SimulationRepository {
     commit: CommitRecord;
     replayed: boolean;
   };
+  requestClosure(input: ClosureRequestInput): {
+    branch: BranchRecord; commit: CommitRecord; job: MemoryJobRecord; replayed: boolean;
+  };
+  getMemoryJob(ownerScope: string, simulationId: string, jobId: string): MemoryJobRecord | null;
+  listMemoryJobs(ownerScope: string, simulationId: string): MemoryJobRecord[];
+  listMemoryJobTransitions(
+    ownerScope: string,
+    simulationId: string,
+    jobId?: string,
+  ): MemoryJobTransition[];
+  listDetachedMemoryOperations(ownerScope: string, simulationId: string): MemoryOperation[];
+  startMemoryJob(ownerScope: string, simulationId: string, jobId: string): MemoryJobRecord;
+  completeMemoryJob(
+    job: MemoryJobRecord,
+    result: MemoryJobResult,
+    resultFingerprint: string,
+  ): MemoryJobRecord;
+  failMemoryJob(job: MemoryJobRecord, error: string): MemoryJobRecord;
   createBranch(input: {
     ownerScope: string;
     simulationId: string;
@@ -253,6 +280,13 @@ export class CommandIdentityError extends Error {
       `Command identity ${commandId} was already used with different input.`,
     );
     this.name = "CommandIdentityError";
+  }
+}
+
+export class MemoryJobConflictError extends Error {
+  constructor(jobId: string) {
+    super(`Memory job is already running: ${jobId}`);
+    this.name = "MemoryJobConflictError";
   }
 }
 

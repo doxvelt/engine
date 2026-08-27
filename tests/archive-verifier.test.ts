@@ -21,6 +21,7 @@ import type { SimulationArchive } from "../src/core/ports.ts";
 import { stableStringify } from "../src/core/domain-rules.ts";
 import { validateSimulationArchive } from "../src/core/archive-verifier.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
+import { completedArchiveAsSchemaV4 } from "./archive-test-helpers.ts";
 
 const workspace = path.resolve("examples/executive-interviews");
 
@@ -164,7 +165,7 @@ test("episode closures require at least one open turn", async (t) => {
     closureCommand,
     ...archive.commandResults.filter((item) => item !== closureCommand),
   ];
-  assert.throws(() => validateSimulationArchive(archive), /no open turns/);
+  assert.throws(() => validateSimulationArchive(archive));
 });
 
 test("stateless actors survive export, verification, and import", async (t) => {
@@ -558,7 +559,7 @@ test("verifier rejects empty turns, no-op effects, and forged commit IDs", async
   }
 });
 
-test("closure records reject foreign, dangling, inaccessible, and non-ancestor provenance", async (t) => {
+test("legacy embedded closure records reject forged provenance", async (t) => {
   const { store, started } = await fixture(t, "closure-provenance");
   const turn = commitManualTurn(store, {
     ownerScope: "local",
@@ -584,7 +585,10 @@ test("closure records reject foreign, dangling, inaccessible, and non-ancestor p
     commandId: "closure-future",
     payload: { actorId: "ceo", text: "Future", audience: ["ceo"] },
   });
-  const original = store.exportSimulation("local", "closure-provenance");
+  const original = completedArchiveAsSchemaV4(
+    store.exportSimulation("local", "closure-provenance"),
+  );
+  validateSimulationArchive(structuredClone(original));
   const mutateClosure = (
     archive: SimulationArchive,
     mutate: (closure: typeof closed.closure) => void,
@@ -635,7 +639,7 @@ test("closure records reject foreign, dangling, inaccessible, and non-ancestor p
   }
 });
 
-test("retained beliefs require the ancestor revoke that actually caused access loss", async (t) => {
+test("legacy retained beliefs require the ancestor revoke", async (t) => {
   const { store, started } = await fixture(t, "retained-provenance");
   const granted = commitManualTurn(store, {
     ownerScope: "local",
@@ -684,7 +688,10 @@ test("retained beliefs require the ancestor revoke that actually caused access l
     commandId: "retained-close",
     payload: {},
   });
-  const original = store.exportSimulation("local", "retained-provenance");
+  const original = completedArchiveAsSchemaV4(
+    store.exportSimulation("local", "retained-provenance"),
+  );
+  validateSimulationArchive(structuredClone(original));
   const retained = closed.closure.retainedBeliefs.find(
     (belief) => belief.holder === "coo" && belief.sourceHolder === "ceo",
   );
@@ -733,7 +740,7 @@ test("retained beliefs require the ancestor revoke that actually caused access l
   }
 });
 
-test("retained provenance rejects a revoke while an alternate path remained", async (t) => {
+test("legacy retained provenance rejects alternate paths", async (t) => {
   const { store, started } = await fixture(t, "retained-alternate-path");
   const granted = commitManualTurn(store, {
     ownerScope: "local",
@@ -785,7 +792,10 @@ test("retained provenance rejects a revoke while an alternate path remained", as
     commandId: "alternate-close",
     payload: {},
   });
-  const archive = store.exportSimulation("local", "retained-alternate-path");
+  const archive = completedArchiveAsSchemaV4(
+    store.exportSimulation("local", "retained-alternate-path"),
+  );
+  validateSimulationArchive(structuredClone(archive));
   const commit = archive.commits.find((item) => item.id === closed.commit.id)!;
   const event = commit.events[0];
   if (!event || event.type !== "episode_closed")

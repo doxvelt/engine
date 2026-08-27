@@ -1,5 +1,5 @@
+import { createHash } from "node:crypto";
 import {
-  fingerprintCommand,
   assertExpectedBranchHead,
   inspectActorContext,
   projectBranch,
@@ -7,24 +7,27 @@ import {
 import {
   canHoldEpisodeMemory,
   domainId,
+  fingerprintCommand,
   recordCommand,
+  stableStringify,
   unwrapRecordedOutcome,
 } from "./domain-rules.ts";
 import { deriveRetainedBeliefs, runtimeEventId } from "./retained-beliefs.ts";
-import type { SimulationRepository } from "./ports.ts";
-import { DomainNotFoundError, DomainValidationError } from "./ports.ts";
+import {
+  DomainNotFoundError,
+  DomainValidationError,
+  type SimulationRepository,
+} from "./ports.ts";
 import type {
   ActorContext,
-  BranchRecord,
   CommandEnvelope,
-  CommitRecord,
   EntityRecord,
   EpisodeClosure,
   EpisodeMemoryRecord,
   ExtractedBeliefRecord,
   LongTermMemoryRecord,
+  MemoryJobRecord,
   MemoryOperation,
-  RetainedBeliefRecord,
   TranscriptTurn,
 } from "./types.ts";
 
@@ -53,184 +56,82 @@ export type EpisodeClosureGenerator = {
   ): Promise<ExtractedBeliefCandidate[]> | ExtractedBeliefCandidate[];
 };
 
-export async function closeBranchEpisode(
+export function requestEpisodeClosure(
   repository: SimulationRepository,
   command: CommandEnvelope<{ label?: string | null }>,
-  generator: EpisodeClosureGenerator = deterministicEpisodeClosureGenerator,
 ) {
-  command = {
+  const normalized = {
     ...command,
-    payload: { ...command.payload, label: command.payload.label?.trim() || null },
+    payload: { label: command.payload.label?.trim() || null },
   };
-  const recorded = recordCommand("closure", command);
+  const recorded = recordCommand("closure", normalized);
   const commandFingerprint = fingerprintCommand(recorded);
-  const recordedReplay = repository.replayCommand(
+  const replay = repository.replayCommand(
     command.ownerScope,
     command.simulationId,
     command.commandId,
     commandFingerprint,
   );
-  const replay = recordedReplay
-    ? unwrapRecordedOutcome(recordedReplay) as {
-        branch: BranchRecord;
-        commit: CommitRecord;
-      }
-    : null;
   if (replay) {
-    const event = replay.commit.events.find(
-      (item) => item.type === "episode_closed",
+    const prior = unwrapRecordedOutcome(replay) as {
+      branch: import("./types.ts").BranchRecord;
+      commit: import("./types.ts").CommitRecord;
+    };
+    const job = repository.getMemoryJob(
+      command.ownerScope,
+      command.simulationId,
+      domainId(
+        "memory_job",
+        command.ownerScope,
+        command.simulationId,
+        command.commandId,
+      ),
     );
-    if (!event || event.type !== "episode_closed")
-      throw new Error("Replayed closure command has no closure event.");
-    return { ...replay, replayed: true, closure: event.closure };
+    if (!job) throw new Error("Replayed closure has no memory job.");
+    return { ...prior, job, replayed: true };
   }
-  assertExpectedBranchHead(repository, command);
+  assertExpectedBranchHead(repository, normalized);
   const projection = projectBranch(repository, {
-    ownerScope: command.ownerScope,
-    simulationId: command.simulationId,
-    branchId: command.branchId,
-    head: command.expectedHead,
+    ...normalized,
+    head: normalized.expectedHead,
   });
-  const lastClosureIndex = projection.commits.findLastIndex((commit) =>
-    commit.events.some((event) => event.type === "episode_closed"),
+  const lastClosure = projection.commits.findLastIndex(
+    (commit) => commit.kind === "episode_closure",
   );
-  const openCommitIds = new Set(
-    projection.commits.slice(lastClosureIndex + 1).map((item) => item.id),
-  );
-  const turns = projection.transcript.filter(
-    (turn) => turn.commitId && openCommitIds.has(turn.commitId),
-  );
-  if (!turns.length)
+  if (
+    !projection.commits
+      .slice(lastClosure + 1)
+      .some((commit) =>
+        commit.events.some((event) => event.type === "message_accepted"),
+      )
+  )
     throw new DomainValidationError(
       `No unclosed turns to close for simulation: ${command.simulationId}`,
     );
-  const simulation = repository.getSimulation(
+  const createdAt = new Date().toISOString();
+  const commitId = domainId(
+    "commit",
     command.ownerScope,
     command.simulationId,
+    command.commandId,
   );
-  if (!simulation)
-    throw new DomainNotFoundError(
-      `Simulation not found: ${command.simulationId}`,
-    );
-  const revision = repository.getContentRevision(
-    command.ownerScope,
-    simulation.contentRevisionId,
-  );
-  if (!revision)
-    throw new DomainNotFoundError(
-      `Content revision not found: ${simulation.contentRevisionId}`,
-    );
-  const episodeId = id("episode", command.commandId);
-  const createdAt = new Date().toISOString();
-  const memories: EpisodeMemoryRecord[] = [];
-  const longTermMemories: LongTermMemoryRecord[] = [];
-  const extractedBeliefs: ExtractedBeliefRecord[] = [];
-  const retainedBeliefs: RetainedBeliefRecord[] = [];
-  const memoryOperations: MemoryOperation[] = [];
-  const actors = revision.compiled.entities.filter(
-    canHoldEpisodeMemory,
-  );
-  for (const actor of actors) {
-    const accessibleTurns = turns.filter((turn) =>
-      turn.audience.includes(actor.id),
-    );
-    if (!accessibleTurns.length) continue;
-    const context = inspectActorContext(repository, {
-      ownerScope: command.ownerScope,
-      simulationId: command.simulationId,
-      branchId: command.branchId,
-      head: command.expectedHead,
-      actorId: actor.id,
-      turns: accessibleTurns,
-    });
-    const perceptions = projection.perceptions.filter(
-      (item) => item.actorId === actor.id && openCommitIds.has(item.sourceCommitId),
-    );
-    const memoryText = (
-      await generator.writeMemory({
-        actor,
-        context,
-        turns: accessibleTurns,
-        label: command.payload.label || null,
-      })
-    ).trim();
-    if (!memoryText)
-      throw new DomainValidationError("Episode memory content is empty.");
-    const memory: EpisodeMemoryRecord = {
-      id: id("episode_memory", command.commandId, actor.id),
-      episodeId,
-      simulationId: command.simulationId,
-      actorId: actor.id,
-      text: memoryText,
-      sourceTurnIds: accessibleTurns.map((item) => item.id),
-      sourcePerceptionIds: perceptions.map((item) => item.id),
-      sourceEventIds: perceptions.map((item) => item.sourceEventId),
-      sourceMessageVersionIds: perceptions.map(
-        (item) => item.sourceMessageVersionId,
-      ),
-      createdAt,
-    };
-    memories.push(memory);
-    const longText = (
-      await generator.writeLongTermMemory?.({ actor, context, memory })
-    )?.trim();
-    if (longText)
-      longTermMemories.push({
-        id: id("long_memory", command.commandId, actor.id),
-        episodeId,
-        episodeMemoryId: memory.id,
-        simulationId: command.simulationId,
-        actorId: actor.id,
-        text: longText,
-        createdAt,
-      });
-    for (const candidate of await generator.extractBeliefs({ actor, context, memory })) {
-      if (!candidate.propositionText.trim()) continue;
-      const index = extractedBeliefs.filter(
-        (belief) => belief.holder === actor.id,
-      ).length;
-      extractedBeliefs.push({
-        id: id("belief", command.commandId, actor.id, String(index)),
-        episodeId,
-        memoryId: memory.id,
-        simulationId: command.simulationId,
-        holder: actor.id,
-        strength: normalizeStrength(candidate.strength),
-        propositionText: candidate.propositionText.trim(),
-        createdAt,
-      });
-    }
-  }
-  retainedBeliefs.push(...deriveRetainedBeliefs({
-    simulationId: command.simulationId,
-    commandId: command.commandId,
-    episodeId,
-    createdAt,
-    entities: revision.compiled.entities,
-    initialBeliefs: revision.compiled.beliefs,
-    initialAccessLinks: revision.compiled.accessLinks,
-    ancestry: projection.commits,
-  }));
+  const episodeId = domainId("episode", command.commandId);
   const closure: EpisodeClosure = {
     episode: {
       id: episodeId,
       simulationId: command.simulationId,
-      label: command.payload.label || null,
+      commitId,
+      label: normalized.payload.label,
       closedAt: createdAt,
     },
-    memories,
-    longTermMemories,
-    extractedBeliefs,
-    retainedBeliefs,
-    memoryOperations,
+    memories: [],
+    longTermMemories: [],
+    extractedBeliefs: [],
+    retainedBeliefs: [],
+    memoryOperations: [],
   };
   const commit = {
-    id: id(
-      "commit",
-      command.ownerScope,
-      command.simulationId,
-      command.commandId,
-    ),
+    id: commitId,
     ownerScope: command.ownerScope,
     simulationId: command.simulationId,
     parentCommitId: command.expectedHead,
@@ -239,64 +140,297 @@ export async function closeBranchEpisode(
     events: [{ type: "episode_closed" as const, closure }],
     createdAt,
   };
-  closure.episode.commitId = commit.id;
-  for (const memory of memories) {
-    memoryOperations.push({
-      id: id("memory_operation", commit.id, memory.id, "asserted"),
-      memoryId: memory.id,
-      simulationId: command.simulationId,
-      actorId: memory.actorId,
-      memoryKind: "episode",
-      type: "asserted",
-      content: memory.text,
-      basisCommitId: command.expectedHead,
-      closureCommitId: commit.id,
-      sourcePerceptionIds: memory.sourcePerceptionIds || [],
-      sourceEventIds: memory.sourceEventIds || [],
-      sourceMessageVersionIds: memory.sourceMessageVersionIds || [],
-      producer: { mode: "episode_closure", commandId: command.commandId },
-      createdAt,
-    });
+  const job: MemoryJobRecord = {
+    id: domainId(
+      "memory_job",
+      command.ownerScope,
+      command.simulationId,
+      command.commandId,
+    ),
+    ownerScope: command.ownerScope,
+    simulationId: command.simulationId,
+    originBranchId: command.branchId,
+    episodeId,
+    closureCommitId: commitId,
+    basisHeadCommitId: command.expectedHead,
+    commandId: command.commandId,
+    label: normalized.payload.label,
+    status: "pending",
+    attemptCount: 0,
+    resultFingerprint: null,
+    result: null,
+    lastError: null,
+    createdAt,
+    updatedAt: createdAt,
+  };
+  return repository.requestClosure({
+    branchId: command.branchId,
+    expectedHead: command.expectedHead,
+    commandInput: recorded,
+    commandFingerprint,
+    commit,
+    job,
+  });
+}
+
+export async function runEpisodeMemoryJob(
+  repository: SimulationRepository,
+  input: { ownerScope: string; simulationId: string; jobId: string },
+  generator: EpisodeClosureGenerator = deterministicEpisodeClosureGenerator,
+) {
+  const existing = repository.getMemoryJob(
+    input.ownerScope,
+    input.simulationId,
+    input.jobId,
+  );
+  if (!existing)
+    throw new DomainNotFoundError(`Memory job not found: ${input.jobId}`);
+  if (existing.status === "completed")
+    return {
+      job: existing,
+      operations: repository
+        .listDetachedMemoryOperations(input.ownerScope, input.simulationId)
+        .filter(
+          (operation) => operation.closureCommitId === existing.closureCommitId,
+        ),
+      closure: existing.result!,
+      replayed: true,
+    };
+  const job = repository.startMemoryJob(
+    input.ownerScope,
+    input.simulationId,
+    input.jobId,
+  );
+  try {
+    const generated = await generate(repository, job, generator);
+    const fingerprint = createHash("sha256")
+      .update(stableStringify(generated.closure))
+      .digest("hex");
+    return {
+      job: repository.completeMemoryJob(job, generated.closure, fingerprint),
+      operations: generated.operations,
+      closure: generated.closure,
+      replayed: false,
+    };
+  } catch (error) {
+    repository.failMemoryJob(
+      job,
+      error instanceof Error ? error.message : String(error),
+    );
+    throw error;
   }
-  for (const memory of longTermMemories) {
-    const episodeMemory = memories.find((item) => item.id === memory.episodeMemoryId)!;
-    memoryOperations.push({
-      id: id("memory_operation", commit.id, memory.id, "consolidated"),
-      memoryId: memory.id,
-      simulationId: command.simulationId,
-      actorId: memory.actorId,
-      memoryKind: "long_term",
-      type: "consolidated",
-      content: memory.text,
-      episodeMemoryId: memory.episodeMemoryId,
-      basisCommitId: command.expectedHead,
-      closureCommitId: commit.id,
-      sourcePerceptionIds: episodeMemory.sourcePerceptionIds || [],
-      sourceEventIds: episodeMemory.sourceEventIds || [],
-      sourceMessageVersionIds: episodeMemory.sourceMessageVersionIds || [],
-      producer: { mode: "episode_closure", commandId: command.commandId },
-      createdAt,
+}
+
+async function generate(
+  repository: SimulationRepository,
+  job: MemoryJobRecord,
+  generator: EpisodeClosureGenerator,
+) {
+  const projection = projectBranch(repository, {
+    ownerScope: job.ownerScope,
+    simulationId: job.simulationId,
+    branchId: job.originBranchId,
+    head: job.basisHeadCommitId,
+  });
+  const lastClosure = projection.commits.findLastIndex(
+    (commit) => commit.kind === "episode_closure",
+  );
+  const openIds = new Set(
+    projection.commits.slice(lastClosure + 1).map((commit) => commit.id),
+  );
+  const turns = projection.transcript.filter(
+    (turn) => turn.commitId && openIds.has(turn.commitId),
+  );
+  const simulation = repository.getSimulation(job.ownerScope, job.simulationId);
+  if (!simulation)
+    throw new DomainNotFoundError(`Simulation not found: ${job.simulationId}`);
+  const revision = repository.getContentRevision(
+    job.ownerScope,
+    simulation.contentRevisionId,
+  );
+  if (!revision)
+    throw new DomainNotFoundError(
+      `Content revision not found: ${simulation.contentRevisionId}`,
+    );
+  const memories: EpisodeMemoryRecord[] = [],
+    longTermMemories: LongTermMemoryRecord[] = [],
+    extractedBeliefs: ExtractedBeliefRecord[] = [],
+    operations: MemoryOperation[] = [];
+  for (const actor of revision.compiled.entities.filter(canHoldEpisodeMemory)) {
+    const perceptions = projection.perceptions.filter(
+      (p) => p.actorId === actor.id && openIds.has(p.sourceCommitId),
+    );
+    if (!perceptions.length) continue;
+    const accessibleTurns = turns.filter((turn) =>
+      perceptions.some(
+        (p) => p.sourceMessageVersionId === turn.messageVersionId,
+      ),
+    );
+    const context = inspectActorContext(repository, {
+      ownerScope: job.ownerScope,
+      simulationId: job.simulationId,
+      branchId: job.originBranchId,
+      head: job.basisHeadCommitId,
+      actorId: actor.id,
+      turns: accessibleTurns,
     });
+    const text = (
+      await generator.writeMemory({
+        actor,
+        context,
+        turns: accessibleTurns,
+        label: job.label,
+      })
+    ).trim();
+    if (!text)
+      throw new DomainValidationError("Episode memory content is empty.");
+    const memory: EpisodeMemoryRecord = {
+      id: domainId("episode_memory", job.commandId, actor.id),
+      episodeId: job.episodeId,
+      simulationId: job.simulationId,
+      actorId: actor.id,
+      text,
+      sourceTurnIds: accessibleTurns.map((t) => t.id),
+      sourcePerceptionIds: perceptions.map((p) => p.id),
+      sourceEventIds: perceptions.map((p) => p.sourceEventId),
+      sourceMessageVersionIds: perceptions.map((p) => p.sourceMessageVersionId),
+      createdAt: job.createdAt,
+    };
+    memories.push(memory);
+    operations.push(makeOperation(job, memory, "asserted", text));
+    const longText = (
+      await generator.writeLongTermMemory?.({ actor, context, memory })
+    )?.trim();
+    if (longText) {
+      const long = {
+        id: domainId("long_memory", job.commandId, actor.id),
+        episodeId: job.episodeId,
+        episodeMemoryId: memory.id,
+        simulationId: job.simulationId,
+        actorId: actor.id,
+        text: longText,
+        createdAt: job.createdAt,
+      };
+      longTermMemories.push(long);
+      operations.push(
+        makeOperation(job, memory, "consolidated", longText, long.id),
+      );
+    }
+    for (const candidate of await generator.extractBeliefs({
+      actor,
+      context,
+      memory,
+    }))
+      if (candidate.propositionText.trim())
+        extractedBeliefs.push({
+          id: domainId(
+            "belief",
+            job.commandId,
+            actor.id,
+            String(
+              extractedBeliefs.filter((b) => b.holder === actor.id).length,
+            ),
+          ),
+          episodeId: job.episodeId,
+          memoryId: memory.id,
+          simulationId: job.simulationId,
+          holder: actor.id,
+          strength: normalizeStrength(candidate.strength),
+          propositionText: candidate.propositionText.trim(),
+          createdAt: job.createdAt,
+        });
   }
+  const retainedBeliefs = deriveRetainedBeliefs({
+    simulationId: job.simulationId,
+    commandId: job.commandId,
+    episodeId: job.episodeId,
+    createdAt: job.createdAt,
+    entities: revision.compiled.entities,
+    initialBeliefs: revision.compiled.beliefs,
+    initialAccessLinks: revision.compiled.accessLinks,
+    ancestry: projection.commits,
+  });
   return {
-    ...repository.appendCommit({
-      branchId: command.branchId,
-      expectedHead: command.expectedHead,
-      commandInput: recorded,
-      commandFingerprint,
-      commit,
-    }),
-    closure,
+    operations,
+    closure: {
+      episode: {
+        id: job.episodeId,
+        simulationId: job.simulationId,
+        commitId: job.closureCommitId,
+        label: job.label,
+        closedAt: job.createdAt,
+      },
+      memories,
+      longTermMemories,
+      extractedBeliefs,
+      retainedBeliefs,
+      memoryOperations: operations,
+    } as EpisodeClosure,
   };
 }
-export { runtimeEventId };
 
+function makeOperation(
+  job: MemoryJobRecord,
+  memory: EpisodeMemoryRecord,
+  type: "asserted" | "consolidated",
+  content: string,
+  memoryId = memory.id,
+): MemoryOperation {
+  const base = {
+    id: domainId("memory_operation", job.closureCommitId, memoryId, type),
+    memoryId,
+    simulationId: job.simulationId,
+    actorId: memory.actorId,
+    memoryKind:
+      type === "asserted" ? ("episode" as const) : ("long_term" as const),
+    basisCommitId: job.basisHeadCommitId,
+    closureCommitId: job.closureCommitId,
+    sourcePerceptionIds: memory.sourcePerceptionIds || [],
+    sourceEventIds: memory.sourceEventIds || [],
+    sourceMessageVersionIds: memory.sourceMessageVersionIds || [],
+    producer: { mode: "episode_closure" as const, commandId: job.commandId },
+    createdAt: job.createdAt,
+  };
+  return type === "asserted"
+    ? { ...base, type, content }
+    : { ...base, type, content, episodeMemoryId: memory.id };
+}
+
+export async function closeBranchEpisode(
+  repository: SimulationRepository,
+  command: CommandEnvelope<{ label?: string | null }>,
+  generator = deterministicEpisodeClosureGenerator,
+) {
+  const requested = requestEpisodeClosure(repository, command);
+  const run = await runEpisodeMemoryJob(
+    repository,
+    {
+      ownerScope: command.ownerScope,
+      simulationId: command.simulationId,
+      jobId: requested.job.id,
+    },
+    generator,
+  );
+  const closure =
+    run.closure ||
+    projectBranch(repository, {
+      ownerScope: command.ownerScope,
+      simulationId: command.simulationId,
+      branchId: command.branchId,
+      head: requested.commit.id,
+    }).episodeClosures.at(-1)!;
+  return {
+    ...requested,
+    job: run.job,
+    closure,
+    replayed: requested.replayed && run.replayed,
+  };
+}
+
+export { runtimeEventId };
 export const deterministicEpisodeClosureGenerator: EpisodeClosureGenerator = {
   writeMemory({ actor, turns, label }) {
-    const lines = turns
-      .map((turn) => `${turn.actorId}: ${turn.text}`)
-      .join(" ");
-    return `I am @${actor.id}. ${label ? `In ${label}, ` : ""}I remember ${lines}`;
+    return `I am @${actor.id}. ${label ? `In ${label}, ` : ""}I remember ${turns.map((t) => `${t.actorId}: ${t.text}`).join(" ")}`;
   },
   extractBeliefs({ memory }) {
     return [
@@ -308,12 +442,5 @@ export const deterministicEpisodeClosureGenerator: EpisodeClosureGenerator = {
   },
 };
 function normalizeStrength(value: number) {
-  if (value >= 3) return 3;
-  if (value > 0) return 1;
-  if (value <= -3) return -3;
-  if (value < 0) return -1;
-  return 0;
-}
-function id(kind: string, ...parts: string[]) {
-  return domainId(kind, ...parts);
+  return value >= 3 ? 3 : value > 0 ? 1 : value <= -3 ? -3 : value < 0 ? -1 : 0;
 }

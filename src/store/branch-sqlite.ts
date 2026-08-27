@@ -28,7 +28,9 @@ import {
   CommandIdentityError,
   DomainNotFoundError,
   DomainValidationError,
+  MemoryJobConflictError,
   type AppendCommitInput,
+  type ClosureRequestInput,
   type CreateContentRevisionInput,
   type CreateSimulationInput,
   type RecordedCommand,
@@ -45,6 +47,10 @@ import type {
   ContentRevisionRecord,
   SimulationRecord,
   StageWhisperRecord,
+  MemoryJobRecord,
+  MemoryOperation,
+  MemoryJobResult,
+  MemoryJobTransition,
 } from "../core/types.ts";
 
 export function openBranchStore(
@@ -104,7 +110,33 @@ export class SqliteSimulationRepository implements SimulationRepository {
         target_actor_id TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL,
         UNIQUE(owner_scope, simulation_id, command_id)
       );
+      CREATE TABLE IF NOT EXISTS memory_jobs (
+        id TEXT PRIMARY KEY, owner_scope TEXT NOT NULL, simulation_id TEXT NOT NULL,
+        origin_branch_id TEXT NOT NULL, episode_id TEXT NOT NULL,
+        closure_commit_id TEXT NOT NULL UNIQUE, basis_head_commit_id TEXT NOT NULL,
+        command_id TEXT NOT NULL, label TEXT, status TEXT NOT NULL,
+        attempt_count INTEGER NOT NULL, result_fingerprint TEXT, result_json TEXT,
+        last_error TEXT,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        UNIQUE(owner_scope, simulation_id, command_id),
+        FOREIGN KEY(closure_commit_id) REFERENCES commits(id),
+        FOREIGN KEY(basis_head_commit_id) REFERENCES commits(id)
+      );
+      CREATE TABLE IF NOT EXISTS detached_memory_operations (
+        id TEXT PRIMARY KEY, owner_scope TEXT NOT NULL, simulation_id TEXT NOT NULL,
+        job_id TEXT NOT NULL, operation_json TEXT NOT NULL,
+        FOREIGN KEY(job_id) REFERENCES memory_jobs(id)
+      );
+      CREATE TABLE IF NOT EXISTS memory_job_transitions (
+        id TEXT PRIMARY KEY, job_id TEXT NOT NULL, owner_scope TEXT NOT NULL,
+        simulation_id TEXT NOT NULL, attempt INTEGER NOT NULL, status TEXT NOT NULL,
+        result_fingerprint TEXT, result_json TEXT, error TEXT, created_at TEXT NOT NULL,
+        UNIQUE(job_id, attempt, status), FOREIGN KEY(job_id) REFERENCES memory_jobs(id)
+      );
     `);
+    const jobColumns = this.db.prepare("PRAGMA table_info(memory_jobs)").all() as Array<{ name: string }>;
+    if (!jobColumns.some((column) => column.name === "result_json"))
+      this.db.exec("ALTER TABLE memory_jobs ADD COLUMN result_json TEXT");
     return this;
   }
 
@@ -471,6 +503,119 @@ export class SqliteSimulationRepository implements SimulationRepository {
     });
   }
 
+  requestClosure(input: ClosureRequestInput) {
+    return this.transaction(() => {
+      const prior = this.readCommand(input.commit.ownerScope, input.commit.simulationId,
+        input.commit.commandId, input.commandFingerprint);
+      if (prior) {
+        const result = unwrapRecordedOutcome(prior) as { branch: BranchRecord; commit: CommitRecord };
+        const job = this.getMemoryJob(input.commit.ownerScope, input.commit.simulationId, input.job.id);
+        if (!job) throw new Error("Replayed closure has no memory job.");
+        return { ...result, job, replayed: true };
+      }
+      const branch = this.getBranch(input.commit.ownerScope, input.commit.simulationId, input.branchId);
+      if (!branch) throw new DomainNotFoundError(`Branch not found: ${input.branchId}`);
+      if (branch.headCommitId !== input.expectedHead)
+        throw new BranchConflictError(input.expectedHead, branch.headCommitId);
+      if (input.commit.parentCommitId !== input.expectedHead)
+        throw new Error("Commit parent must equal the expected branch head.");
+      this.insertCommit(input.commit);
+      const changed = this.sql().prepare("UPDATE branches SET head_commit_id = ? WHERE owner_scope = ? AND simulation_id = ? AND id = ? AND head_commit_id = ?")
+        .run(input.commit.id, input.commit.ownerScope, input.commit.simulationId, input.branchId, input.expectedHead);
+      if (changed.changes !== 1)
+        throw new BranchConflictError(
+          input.expectedHead,
+          this.getBranch(
+            input.commit.ownerScope,
+            input.commit.simulationId,
+            input.branchId,
+          )?.headCommitId || "missing",
+        );
+      this.insertMemoryJob(input.job);
+      const result = { branch: { ...branch, headCommitId: input.commit.id }, commit: input.commit };
+      this.writeCommand(input.commit.ownerScope, input.commit.simulationId, input.commit.commandId,
+        input.commandInput, input.commandFingerprint, recordCommitOutcome(result));
+      return { ...result, job: input.job, replayed: false };
+    });
+  }
+
+  getMemoryJob(ownerScope: string, simulationId: string, jobId: string): MemoryJobRecord | null {
+    const row = this.sql().prepare("SELECT * FROM memory_jobs WHERE owner_scope = ? AND simulation_id = ? AND id = ?")
+      .get(ownerScope, simulationId, jobId);
+    return row ? deriveMemoryJob(rowToMemoryJob(row), this.listMemoryJobTransitions(
+      ownerScope, simulationId, jobId,
+    )) : null;
+  }
+  listMemoryJobs(ownerScope: string, simulationId: string): MemoryJobRecord[] {
+    return this.sql().prepare("SELECT * FROM memory_jobs WHERE owner_scope = ? AND simulation_id = ? ORDER BY created_at, id")
+      .all(ownerScope, simulationId).map((row: any) => deriveMemoryJob(
+        rowToMemoryJob(row), this.listMemoryJobTransitions(ownerScope, simulationId, row.id),
+      ));
+  }
+  listMemoryJobTransitions(
+    ownerScope: string, simulationId: string, jobId?: string,
+  ): MemoryJobTransition[] {
+    const where = jobId ? " AND job_id = ?" : "";
+    const values = jobId ? [ownerScope, simulationId, jobId] : [ownerScope, simulationId];
+    return this.sql().prepare(`SELECT * FROM memory_job_transitions
+      WHERE owner_scope = ? AND simulation_id = ?${where}
+      ORDER BY job_id, attempt, CASE status WHEN 'running' THEN 0 ELSE 1 END,
+               created_at, id`)
+      .all(...values).map(rowToMemoryJobTransition);
+  }
+  listDetachedMemoryOperations(ownerScope: string, simulationId: string): MemoryOperation[] {
+    return this.sql().prepare("SELECT operation_json FROM detached_memory_operations WHERE owner_scope = ? AND simulation_id = ? ORDER BY rowid")
+      .all(ownerScope, simulationId).map((row: any) => JSON.parse(row.operation_json));
+  }
+  startMemoryJob(ownerScope: string, simulationId: string, jobId: string): MemoryJobRecord {
+    return this.transaction(() => {
+      const job = this.getMemoryJob(ownerScope, simulationId, jobId);
+      if (!job) throw new DomainNotFoundError(`Memory job not found: ${jobId}`);
+      if (job.status === "completed") return job;
+      if (job.status === "running") throw new MemoryJobConflictError(jobId);
+      const attempt = job.attemptCount + 1;
+      this.insertMemoryJobTransition({
+        id: domainId("memory_job_transition", job.id, String(attempt), "running"),
+        jobId: job.id, ownerScope, simulationId, attempt, status: "running",
+        resultFingerprint: null, result: null, error: null, createdAt: now(),
+      });
+      return this.getMemoryJob(ownerScope, simulationId, jobId)!;
+    });
+  }
+  completeMemoryJob(job: MemoryJobRecord, result: MemoryJobResult, resultFingerprint: string): MemoryJobRecord {
+    return this.transaction(() => {
+      const current = this.getMemoryJob(job.ownerScope, job.simulationId, job.id);
+      if (!current) throw new DomainNotFoundError(`Memory job not found: ${job.id}`);
+      if (current.status === "completed") return current;
+      if (current.status !== "running") throw new DomainValidationError(`Memory job is not running: ${job.id}`);
+      for (const operation of result.memoryOperations || [])
+        this.sql().prepare("INSERT INTO detached_memory_operations VALUES (?, ?, ?, ?, ?)")
+          .run(operation.id, job.ownerScope, job.simulationId, job.id, JSON.stringify(operation));
+      this.insertMemoryJobTransition({
+        id: domainId("memory_job_transition", job.id, String(current.attemptCount), "completed"),
+        jobId: job.id, ownerScope: job.ownerScope, simulationId: job.simulationId,
+        attempt: current.attemptCount, status: "completed", resultFingerprint,
+        result: structuredClone(result), error: null, createdAt: now(),
+      });
+      return this.getMemoryJob(job.ownerScope, job.simulationId, job.id)!;
+    });
+  }
+  failMemoryJob(job: MemoryJobRecord, error: string): MemoryJobRecord {
+    return this.transaction(() => {
+      const current = this.getMemoryJob(job.ownerScope, job.simulationId, job.id);
+      if (!current) throw new DomainNotFoundError(`Memory job not found: ${job.id}`);
+      if (current.status !== "running")
+        throw new DomainValidationError(`Memory job is not running: ${job.id}`);
+      this.insertMemoryJobTransition({
+        id: domainId("memory_job_transition", job.id, String(current.attemptCount), "failed"),
+        jobId: job.id, ownerScope: job.ownerScope, simulationId: job.simulationId,
+        attempt: current.attemptCount, status: "failed", resultFingerprint: null,
+        result: null, error: safeMemoryJobError(error), createdAt: now(),
+      });
+      return this.getMemoryJob(job.ownerScope, job.simulationId, job.id)!;
+    });
+  }
+
   createBranch(input: {
     ownerScope: string;
     simulationId: string;
@@ -688,14 +833,20 @@ export class SqliteSimulationRepository implements SimulationRepository {
       )
       .all(ownerScope, simulationId)
       .map(rowToStageWhisper);
+    const memoryJobs = this.listMemoryJobs(ownerScope, simulationId);
+    const memoryJobTransitions = this.listMemoryJobTransitions(ownerScope, simulationId);
+    const detachedMemoryOperations = this.listDetachedMemoryOperations(ownerScope, simulationId);
     return {
-      schemaVersion: 4,
+      schemaVersion: 5,
       contentRevision,
       simulation,
       branches,
       commits,
       stageWhispers,
       commandResults,
+      memoryJobs,
+      memoryJobTransitions,
+      detachedMemoryOperations,
     };
   }
 
@@ -752,6 +903,15 @@ export class SqliteSimulationRepository implements SimulationRepository {
             JSON.stringify(command.result),
             command.createdAt,
           );
+      for (const job of archive.memoryJobs || []) this.insertMemoryJob(job);
+      for (const transition of archive.memoryJobTransitions || [])
+        this.insertMemoryJobTransition(transition);
+      for (const operation of archive.detachedMemoryOperations || []) {
+        const job = archive.memoryJobs?.find((item) => item.closureCommitId === operation.closureCommitId);
+        if (!job) throw new Error(`Detached memory operation has no job: ${operation.id}`);
+        this.sql().prepare("INSERT INTO detached_memory_operations VALUES (?, ?, ?, ?, ?)")
+          .run(operation.id, simulation.ownerScope, simulation.id, job.id, JSON.stringify(operation));
+      }
     });
   }
 
@@ -861,6 +1021,24 @@ export class SqliteSimulationRepository implements SimulationRepository {
         JSON.stringify(commit.events),
         commit.createdAt,
       );
+  }
+  private insertMemoryJob(job: MemoryJobRecord): void {
+    this.sql().prepare(`INSERT INTO memory_jobs
+      (id, owner_scope, simulation_id, origin_branch_id, episode_id,
+       closure_commit_id, basis_head_commit_id, command_id, label, status,
+       attempt_count, result_fingerprint, result_json, last_error, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(job.id, job.ownerScope, job.simulationId, job.originBranchId, job.episodeId,
+        job.closureCommitId, job.basisHeadCommitId, job.commandId, job.label, "pending",
+        0, null, null, null, job.createdAt, job.createdAt);
+  }
+  private insertMemoryJobTransition(transition: MemoryJobTransition): void {
+    this.sql().prepare("INSERT INTO memory_job_transitions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(transition.id, transition.jobId, transition.ownerScope,
+        transition.simulationId, transition.attempt, transition.status,
+        transition.resultFingerprint,
+        transition.result ? JSON.stringify(transition.result) : null,
+        transition.error, transition.createdAt);
   }
   private findContentRevision(
     ownerScope: string,
@@ -1048,6 +1226,44 @@ function rowToStageWhisper(row: any): StageWhisperRecord {
     text: row.text,
     createdAt: row.created_at,
   };
+}
+function rowToMemoryJob(row: any): MemoryJobRecord {
+  return {
+    id: row.id, ownerScope: row.owner_scope, simulationId: row.simulation_id,
+    originBranchId: row.origin_branch_id, episodeId: row.episode_id,
+    closureCommitId: row.closure_commit_id, basisHeadCommitId: row.basis_head_commit_id,
+    commandId: row.command_id, label: row.label, status: row.status,
+    attemptCount: row.attempt_count, resultFingerprint: row.result_fingerprint,
+    result: row.result_json ? JSON.parse(row.result_json) : null,
+    lastError: row.last_error, createdAt: row.created_at, updatedAt: row.updated_at,
+  } as MemoryJobRecord;
+}
+function rowToMemoryJobTransition(row: any): MemoryJobTransition {
+  return {
+    id: row.id, jobId: row.job_id, ownerScope: row.owner_scope,
+    simulationId: row.simulation_id, attempt: row.attempt, status: row.status,
+    resultFingerprint: row.result_fingerprint,
+    result: row.result_json ? JSON.parse(row.result_json) : null,
+    error: row.error, createdAt: row.created_at,
+  } as MemoryJobTransition;
+}
+function deriveMemoryJob(
+  request: MemoryJobRecord,
+  transitions: MemoryJobTransition[],
+): MemoryJobRecord {
+  const latest = transitions.at(-1);
+  if (!latest) return { ...request, status: "pending", attemptCount: 0,
+    resultFingerprint: null, result: null, lastError: null,
+    updatedAt: request.createdAt };
+  return {
+    ...request, status: latest.status, attemptCount: latest.attempt,
+    resultFingerprint: latest.resultFingerprint, result: latest.result,
+    lastError: latest.error, updatedAt: latest.createdAt,
+  };
+}
+
+function safeMemoryJobError(_error: string): string {
+  return "Memory generation failed.";
 }
 
 function decodeCommandRow(row: any): SimulationArchive["commandResults"][number] {
