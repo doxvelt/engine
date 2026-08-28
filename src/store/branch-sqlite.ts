@@ -32,6 +32,7 @@ import {
   type AppendCommitInput,
   type ClosureRequestInput,
   type CreateContentRevisionInput,
+  type ActorTurnDraftRepository,
   type CreateSimulationInput,
   type RecordedCommand,
   type RecordedOutcome,
@@ -47,6 +48,9 @@ import type {
   ContentRevisionRecord,
   SimulationRecord,
   StageWhisperRecord,
+  ActorTurnDraftArtifact,
+  ActorTurnDraftFailure,
+  ActorTurnDraftRecord,
   MemoryJobRecord,
   MemoryOperation,
   MemoryJobResult,
@@ -59,7 +63,8 @@ export function openBranchStore(
   return new SqliteSimulationRepository(path.resolve(dbPath));
 }
 
-export class SqliteSimulationRepository implements SimulationRepository {
+export class SqliteSimulationRepository
+  implements SimulationRepository, ActorTurnDraftRepository {
   private db: DatabaseSync | null = null;
   readonly dbPath: string;
   constructor(dbPath: string) {
@@ -109,6 +114,19 @@ export class SqliteSimulationRepository implements SimulationRepository {
         branch_id TEXT NOT NULL, expected_head TEXT NOT NULL, command_id TEXT NOT NULL,
         target_actor_id TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL,
         UNIQUE(owner_scope, simulation_id, command_id)
+      );
+      CREATE TABLE IF NOT EXISTS actor_turn_drafts (
+        id TEXT PRIMARY KEY, owner_scope TEXT NOT NULL, simulation_id TEXT NOT NULL,
+        generation_command_id TEXT NOT NULL, status TEXT NOT NULL,
+        draft_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        UNIQUE(owner_scope, simulation_id, generation_command_id)
+      );
+      CREATE TABLE IF NOT EXISTS actor_turn_draft_commands (
+        owner_scope TEXT NOT NULL, simulation_id TEXT NOT NULL, command_id TEXT NOT NULL,
+        kind TEXT NOT NULL, draft_id TEXT NOT NULL, fingerprint TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(owner_scope, simulation_id, command_id),
+        FOREIGN KEY(draft_id) REFERENCES actor_turn_drafts(id)
       );
       CREATE TABLE IF NOT EXISTS memory_jobs (
         id TEXT PRIMARY KEY, owner_scope TEXT NOT NULL, simulation_id TEXT NOT NULL,
@@ -999,6 +1017,113 @@ export class SqliteSimulationRepository implements SimulationRepository {
     return rows.map(rowToStageWhisper);
   }
 
+  reserveActorTurnDraft(input: {
+    draft: ActorTurnDraftRecord;
+    commandFingerprint: string;
+  }): { draft: ActorTurnDraftRecord; replayed: boolean } {
+    return this.transaction(() => {
+      const prior = this.readDraftCommand(
+        input.draft.ownerScope,
+        input.draft.simulationId,
+        input.draft.generationCommandId,
+        input.commandFingerprint,
+      );
+      if (prior) return { draft: prior, replayed: true };
+      const branch = this.getBranch(
+        input.draft.ownerScope,
+        input.draft.simulationId,
+        input.draft.branchId,
+      );
+      if (!branch)
+        throw new DomainNotFoundError(`Branch not found: ${input.draft.branchId}`);
+      if (branch.headCommitId !== input.draft.basisHeadCommitId)
+        throw new BranchConflictError(input.draft.basisHeadCommitId, branch.headCommitId);
+      this.insertActorTurnDraft(input.draft);
+      this.writeDraftCommand({
+        ownerScope: input.draft.ownerScope,
+        simulationId: input.draft.simulationId,
+        commandId: input.draft.generationCommandId,
+        kind: "generate",
+        draftId: input.draft.id,
+        fingerprint: input.commandFingerprint,
+      });
+      return { draft: input.draft, replayed: false };
+    });
+  }
+
+  getActorTurnDraft(
+    ownerScope: string,
+    simulationId: string,
+    draftId: string,
+  ): ActorTurnDraftRecord | null {
+    const row = this.sql().prepare(
+      "SELECT draft_json FROM actor_turn_drafts WHERE owner_scope = ? AND simulation_id = ? AND id = ?",
+    ).get(ownerScope, simulationId, draftId) as { draft_json: string } | undefined;
+    return row ? rowToActorTurnDraft(row) : null;
+  }
+
+  completeActorTurnDraft(
+    ownerScope: string,
+    simulationId: string,
+    draftId: string,
+    artifact: ActorTurnDraftArtifact,
+  ): ActorTurnDraftRecord {
+    return this.transitionActorTurnDraft(ownerScope, simulationId, draftId, "ready", artifact, null);
+  }
+
+  failActorTurnDraft(
+    ownerScope: string,
+    simulationId: string,
+    draftId: string,
+    failure: ActorTurnDraftFailure,
+  ): ActorTurnDraftRecord {
+    return this.transitionActorTurnDraft(ownerScope, simulationId, draftId, "failed", null, failure);
+  }
+
+  discardActorTurnDraft(input: {
+    ownerScope: string;
+    simulationId: string;
+    draftId: string;
+    commandId: string;
+    commandFingerprint: string;
+  }): { draft: ActorTurnDraftRecord; replayed: boolean } {
+    return this.transaction(() => {
+      const prior = this.readDraftCommand(
+        input.ownerScope,
+        input.simulationId,
+        input.commandId,
+        input.commandFingerprint,
+      );
+      if (prior) return { draft: prior, replayed: true };
+      const current = this.getActorTurnDraft(
+        input.ownerScope,
+        input.simulationId,
+        input.draftId,
+      );
+      if (!current)
+        throw new DomainNotFoundError(`Draft not found: ${input.draftId}`);
+      if (current.generationCommandId === input.commandId)
+        throw new DomainValidationError("Discard requires a distinct command ID.");
+      if (current.status !== "generating" && current.status !== "ready")
+        throw new DomainValidationError(`Draft cannot be discarded from ${current.status}.`);
+      const draft = { ...current, status: "discarded" as const, updatedAt: now() };
+      const changed = this.sql().prepare(
+        "UPDATE actor_turn_drafts SET status = ?, draft_json = ?, updated_at = ? WHERE id = ? AND owner_scope = ? AND simulation_id = ? AND status IN ('generating', 'ready')",
+      ).run(draft.status, JSON.stringify(draft), draft.updatedAt, draft.id, draft.ownerScope, draft.simulationId);
+      if (changed.changes !== 1)
+        throw new DomainValidationError("Draft terminal transition lost its compare-and-set race.");
+      this.writeDraftCommand({
+        ownerScope: input.ownerScope,
+        simulationId: input.simulationId,
+        commandId: input.commandId,
+        kind: "discard",
+        draftId: input.draftId,
+        fingerprint: input.commandFingerprint,
+      });
+      return { draft, replayed: false };
+    });
+  }
+
   replayCommand(
     ownerScope: string,
     simulationId: string,
@@ -1006,6 +1131,76 @@ export class SqliteSimulationRepository implements SimulationRepository {
     fingerprint: string,
   ): RecordedOutcome | null {
     return this.readCommand(ownerScope, simulationId, commandId, fingerprint);
+  }
+
+  private transitionActorTurnDraft(
+    ownerScope: string,
+    simulationId: string,
+    draftId: string,
+    status: "ready" | "failed",
+    artifact: ActorTurnDraftArtifact | null,
+    failure: ActorTurnDraftFailure | null,
+  ): ActorTurnDraftRecord {
+    return this.transaction(() => {
+      const current = this.getActorTurnDraft(ownerScope, simulationId, draftId);
+      if (!current) throw new DomainNotFoundError(`Draft not found: ${draftId}`);
+      if (current.status !== "generating")
+        throw new DomainValidationError(`Draft is not generating: ${draftId}`);
+      const draft: ActorTurnDraftRecord = {
+        ...current,
+        status,
+        artifact,
+        failure,
+        updatedAt: now(),
+      };
+      const changed = this.sql().prepare(
+        "UPDATE actor_turn_drafts SET status = ?, draft_json = ?, updated_at = ? WHERE id = ? AND owner_scope = ? AND simulation_id = ? AND status = 'generating'",
+      ).run(draft.status, JSON.stringify(draft), draft.updatedAt, draft.id, ownerScope, simulationId);
+      if (changed.changes !== 1)
+        throw new DomainValidationError("Draft terminal transition lost its compare-and-set race.");
+      return draft;
+    });
+  }
+
+  private insertActorTurnDraft(draft: ActorTurnDraftRecord): void {
+    this.sql().prepare(
+      "INSERT INTO actor_turn_drafts (id, owner_scope, simulation_id, generation_command_id, status, draft_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run(draft.id, draft.ownerScope, draft.simulationId, draft.generationCommandId,
+      draft.status, JSON.stringify(draft), draft.createdAt, draft.updatedAt);
+  }
+
+  private readDraftCommand(
+    ownerScope: string,
+    simulationId: string,
+    commandId: string,
+    fingerprint: string,
+  ): ActorTurnDraftRecord | null {
+    const canonical = this.sql().prepare(
+      "SELECT 1 FROM command_results WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?",
+    ).get(ownerScope, simulationId, commandId);
+    if (canonical) throw new CommandIdentityError(commandId);
+    const row = this.sql().prepare(
+      "SELECT fingerprint, draft_id FROM actor_turn_draft_commands WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?",
+    ).get(ownerScope, simulationId, commandId) as { fingerprint: string; draft_id: string } | undefined;
+    if (!row) return null;
+    if (row.fingerprint !== fingerprint) throw new CommandIdentityError(commandId);
+    const draft = this.getActorTurnDraft(ownerScope, simulationId, row.draft_id);
+    if (!draft) throw new DomainNotFoundError(`Draft not found: ${row.draft_id}`);
+    return draft;
+  }
+
+  private writeDraftCommand(input: {
+    ownerScope: string;
+    simulationId: string;
+    commandId: string;
+    kind: "generate" | "discard";
+    draftId: string;
+    fingerprint: string;
+  }): void {
+    this.sql().prepare(
+      "INSERT INTO actor_turn_draft_commands VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ).run(input.ownerScope, input.simulationId, input.commandId, input.kind,
+      input.draftId, input.fingerprint, now());
   }
 
   private insertCommit(commit: CommitRecord): void {
@@ -1100,6 +1295,10 @@ export class SqliteSimulationRepository implements SimulationRepository {
     commandId: string,
     fingerprint: string,
   ): RecordedOutcome | null {
+    const draftCommand = this.sql().prepare(
+      "SELECT 1 FROM actor_turn_draft_commands WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?",
+    ).get(ownerScope, simulationId, commandId);
+    if (draftCommand) throw new CommandIdentityError(commandId);
     const row = this.sql()
       .prepare(
         `SELECT command_id, canonical_input_json, fingerprint, result_json,
@@ -1213,6 +1412,9 @@ function rowToCommit(row: any): CommitRecord {
     events: JSON.parse(row.events_json),
     createdAt: row.created_at,
   };
+}
+function rowToActorTurnDraft(row: { draft_json: string }): ActorTurnDraftRecord {
+  return JSON.parse(row.draft_json) as ActorTurnDraftRecord;
 }
 function rowToStageWhisper(row: any): StageWhisperRecord {
   return {

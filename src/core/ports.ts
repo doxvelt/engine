@@ -5,6 +5,9 @@ import type {
   ContentRevisionRecord,
   SimulationRecord,
   StageWhisperRecord,
+  ActorTurnDraftArtifact,
+  ActorTurnDraftFailure,
+  ActorTurnDraftRecord,
   MemoryJobRecord,
   MemoryOperation,
   MemoryJobResult,
@@ -58,6 +61,32 @@ export type StageWhisperCommand = {
   commandId: string;
   targetActorId: string;
   text: string;
+};
+
+export type GenerateActorTurnDraftPayload = {
+  actorId: string;
+  audience: string[];
+  stageWhisperIds: string[];
+  runtimeProfile: { id: string; version: string };
+  promptPolicy: { id: string; version: string };
+  outputSchema: { id: string; digest: string };
+  skillDigests: string[];
+};
+
+export type GenerateActorTurnDraftCommand = {
+  ownerScope: string;
+  simulationId: string;
+  branchId: string;
+  expectedHead: string;
+  commandId: string;
+  payload: GenerateActorTurnDraftPayload;
+};
+
+export type DiscardActorTurnDraftCommand = {
+  ownerScope: string;
+  simulationId: string;
+  draftId: string;
+  commandId: string;
 };
 
 export type CreateContentRevisionInput = {
@@ -160,6 +189,37 @@ export type SimulationArchive = {
 };
 
 export type ClosureRequestInput = AppendCommitInput & { job: MemoryJobRecord };
+
+export interface ActorTurnDraftRepository {
+  reserveActorTurnDraft(input: {
+    draft: ActorTurnDraftRecord;
+    commandFingerprint: string;
+  }): { draft: ActorTurnDraftRecord; replayed: boolean };
+  getActorTurnDraft(
+    ownerScope: string,
+    simulationId: string,
+    draftId: string,
+  ): ActorTurnDraftRecord | null;
+  completeActorTurnDraft(
+    ownerScope: string,
+    simulationId: string,
+    draftId: string,
+    artifact: ActorTurnDraftArtifact,
+  ): ActorTurnDraftRecord;
+  failActorTurnDraft(
+    ownerScope: string,
+    simulationId: string,
+    draftId: string,
+    failure: ActorTurnDraftFailure,
+  ): ActorTurnDraftRecord;
+  discardActorTurnDraft(input: {
+    ownerScope: string;
+    simulationId: string;
+    draftId: string;
+    commandId: string;
+    commandFingerprint: string;
+  }): { draft: ActorTurnDraftRecord; replayed: boolean };
+}
 
 export interface SimulationRepository {
   createContentRevision(
