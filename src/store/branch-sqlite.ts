@@ -1037,6 +1037,12 @@ export class SqliteSimulationRepository
         input.commandFingerprint,
       );
       if (prior) return { draft: prior, replayed: true };
+      this.assertAcceptedDraftIdentityAvailable(
+        input.draft.ownerScope,
+        input.draft.simulationId,
+        input.draft.generationCommandId,
+        input.draft.id,
+      );
       const branch = this.getBranch(
         input.draft.ownerScope,
         input.draft.simulationId,
@@ -1379,6 +1385,33 @@ export class SqliteSimulationRepository
     const draft = this.getActorTurnDraft(ownerScope, simulationId, row.draft_id);
     if (!draft) throw new DomainNotFoundError(`Draft not found: ${row.draft_id}`);
     return draft;
+  }
+
+  private assertAcceptedDraftIdentityAvailable(
+    ownerScope: string,
+    simulationId: string,
+    generationCommandId: string,
+    draftId: string,
+  ): void {
+    const reserved = this.sql()
+      .prepare(
+        `SELECT command_id, canonical_input_json, fingerprint, result_json,
+                created_at FROM command_results
+         WHERE owner_scope = ? AND simulation_id = ?`,
+      )
+      .all(ownerScope, simulationId)
+      .map(decodeCommandRow)
+      .some((command) =>
+        command.canonicalInput.kind === "accept_draft" &&
+        (
+          command.canonicalInput.payload.generationCommandId ===
+            generationCommandId ||
+          command.canonicalInput.payload.draftId === draftId
+        ),
+      );
+    if (!reserved) return;
+    validateSimulationArchive(this.exportSimulation(ownerScope, simulationId));
+    throw new CommandIdentityError(generationCommandId);
   }
 
   private writeDraftCommand(input: {

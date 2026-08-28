@@ -179,6 +179,19 @@ test("legacy v4 and v5 archives reject generated receipts and provenance", async
   }
 });
 
+test("schema-v6 archives reject duplicate accepted draft identities", async (t) => {
+  const archive = await acceptedArchive(t);
+  const duplicate = structuredClone(acceptance(archive));
+  duplicate.commandId = "accept-duplicate";
+  duplicate.canonicalInput.commandId = duplicate.commandId;
+  duplicate.fingerprint = fingerprintCommand(duplicate.canonicalInput);
+  archive.commandResults.push(duplicate);
+  assert.throws(
+    () => validateSimulationArchive(archive),
+    /duplicate accepted draft identity/,
+  );
+});
+
 function acceptanceCommit(archive: SimulationArchive) {
   const commit = archive.commits.find((item) => item.commandId === "accept");
   if (!commit) throw new Error("missing acceptance commit");

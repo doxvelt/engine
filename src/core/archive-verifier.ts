@@ -150,11 +150,38 @@ export function validateSimulationArchive(archive: SimulationArchive): void {
       );
     }
   }
+  validateAcceptedDraftIdentityUniqueness(archive);
   validateCommandResults(archive);
   validateCanonicalProvenance(archive);
   replayAccessGraph(archive, topologicalCommits(archive.commits));
 }
 
+
+function validateAcceptedDraftIdentityUniqueness(
+  archive: SimulationArchive,
+): void {
+  if (archive.schemaVersion !== 6) return;
+  const generationCommandIds = new Set<string>();
+  const draftIds = new Set<string>();
+  for (const command of archive.commandResults) {
+    if (command.canonicalInput?.kind !== "accept_draft") continue;
+    let receipt: AcceptDraftReceipt;
+    try {
+      receipt = decodeAcceptDraftReceipt(command.canonicalInput.payload);
+    } catch {
+      continue;
+    }
+    if (
+      generationCommandIds.has(receipt.generationCommandId) ||
+      draftIds.has(receipt.draftId)
+    )
+      throw new Error(
+        "Simulation archive contains duplicate accepted draft identity.",
+      );
+    generationCommandIds.add(receipt.generationCommandId);
+    draftIds.add(receipt.draftId);
+  }
+}
 
 function validateLegacyArchive(archive: SimulationArchive): void {
   if (

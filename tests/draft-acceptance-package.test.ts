@@ -7,6 +7,7 @@ import { acceptActorTurnDraft, generateActorTurnDraft } from "../src/core/draft-
 import { commitManualTurn, startBranchSimulation } from "../src/core/branch-kernel.ts";
 import { validateSimulationArchive } from "../src/core/archive-verifier.ts";
 import { fingerprintCommand } from "../src/core/domain-rules.ts";
+import { CommandIdentityError } from "../src/core/ports.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
 import {
   exportSimulationPackage,
@@ -77,11 +78,39 @@ test("v6 generated edited and verbatim packages replay without draft rows or raw
       const receipt = archive.commandResults.find((item) => item.commandId === "accept");
       assert.ok(receipt?.canonicalInput.kind === "accept_draft", "acceptance receipt must exist");
       if (receipt?.canonicalInput.kind !== "accept_draft") continue;
-      assert.equal(store.getActorTurnDraft("local", simulationId, receipt.canonicalInput.payload.draftId), null);
+      const acceptanceInput = receipt.canonicalInput;
+      assert.equal(store.getActorTurnDraft("local", simulationId, acceptanceInput.payload.draftId), null);
       assert.equal(acceptActorTurnDraft(store, {
-        ownerScope: "local", simulationId, draftId: receipt.canonicalInput.payload.draftId,
+        ownerScope: "local", simulationId, draftId: acceptanceInput.payload.draftId,
         commandId: "accept", ...(finalText === undefined ? {} : { finalText }),
       }).replayed, true);
+      const runtime = new DeterministicFakeRuntime([
+        { type: "completed", text: "Must not run.", usage: { inputTokens: 1, outputTokens: 1 } },
+      ]);
+      const branch = store.getBranch("local", simulationId, acceptanceInput.branchId);
+      assert.ok(branch, "imported acceptance branch must exist");
+      await assert.rejects(
+        async () => generateActorTurnDraft(store, runtime, {
+          ownerScope: "local",
+          simulationId,
+          branchId: acceptanceInput.branchId,
+          expectedHead: branch.headCommitId,
+          commandId: acceptanceInput.payload.generationCommandId,
+          payload: {
+            actorId: acceptanceInput.payload.actorId,
+            audience: acceptanceInput.payload.audience,
+            stageWhisperIds: acceptanceInput.payload.stageWhispers.map(
+              (whisper) => whisper.id,
+            ),
+            runtimeProfile: acceptanceInput.payload.runtimeProfile,
+            promptPolicy: acceptanceInput.payload.promptPolicy,
+            outputSchema: acceptanceInput.payload.outputSchema,
+            skillDigests: acceptanceInput.payload.skillDigests,
+          },
+        }),
+        CommandIdentityError,
+      );
+      assert.equal(runtime.calls, 0);
     } finally { store.close(); }
   }
 });
