@@ -1,4 +1,5 @@
 import { DomainValidationError } from "./ports.ts";
+import { decodeAcceptDraftReceipt } from "./draft-contracts.ts";
 import type { ContentRevisionRecord } from "./types.ts";
 import type {
   RecordedCommand,
@@ -11,7 +12,7 @@ export function decodeRecordedCommand(value: unknown): RecordedCommand {
   const command = record(value, "recorded command");
   const kind = enumString(command.kind, "recorded command kind", [
     "start", "turn", "effects", "closure", "edit", "regenerate", "fork",
-    "whisper", "revise_memory", "retract_memory",
+    "whisper", "accept_draft", "revise_memory", "retract_memory",
   ] as const);
   if (kind === "start") decodeStartCommand(command);
   else if (kind === "turn") decodeTurnCommand(command, false);
@@ -22,6 +23,7 @@ export function decodeRecordedCommand(value: unknown): RecordedCommand {
   else if (kind === "revise_memory" || kind === "retract_memory")
     decodeMemoryCommand(command, kind);
   else if (kind === "fork") decodeForkCommand(command);
+  else if (kind === "accept_draft") decodeAcceptDraftCommand(command);
   else decodeWhisperCommand(command);
   return command as RecordedCommand;
 }
@@ -99,7 +101,7 @@ export function assertRecordedOutcomeIdentity(
     return;
   }
   if (outcome.kind === "commit") {
-    if (!["turn", "effects", "closure", "edit", "regenerate", "revise_memory", "retract_memory"].includes(
+    if (!["turn", "effects", "closure", "edit", "regenerate", "accept_draft", "revise_memory", "retract_memory"].includes(
       command.kind,
     )) fail();
     const commitCommand = command as Extract<
@@ -535,11 +537,24 @@ function decodeMessage(value: unknown): void {
   strings(message, ["id", "logicalMessageId", "actorId", "text"]);
   stringArray(message.audience, "message audience");
   const provenance = record(message.provenance, "message provenance");
-  exact(provenance, ["mode", "operation"]);
-  enumString(provenance.mode, "message mode", ["manual"]);
-  enumString(provenance.operation, "message operation", [
-    "turn", "edit", "regenerate",
-  ]);
+  const mode = enumString(provenance.mode, "message mode", [
+    "manual", "generated",
+  ] as const);
+  if (mode === "manual") {
+    exact(provenance, ["mode", "operation"]);
+    enumString(provenance.operation, "message operation", [
+      "turn", "edit", "regenerate",
+    ] as const);
+  } else {
+    exact(provenance, [
+      "mode", "operation", "sourceArtifactDigest", "finalTextSource",
+    ]);
+    enumString(provenance.operation, "generated message operation", ["turn"] as const);
+    string(provenance.sourceArtifactDigest, "generated source artifact digest");
+    enumString(provenance.finalTextSource, "generated final text source", [
+      "generated_verbatim", "acceptor_edited",
+    ] as const);
+  }
 }
 
 function decodeClosure(value: unknown): void {
@@ -753,4 +768,15 @@ function enumString<const T extends readonly string[]>(
   if (!allowed.includes(value))
     throw new DomainValidationError(`Persisted ${label} is invalid.`);
   return value as T[number];
+}
+
+function decodeAcceptDraftCommand(command: RecordValue): void {
+  exact(command, [
+    "kind", "ownerScope", "simulationId", "branchId", "expectedHead",
+    "commandId", "payload",
+  ]);
+  strings(command, [
+    "ownerScope", "simulationId", "branchId", "expectedHead", "commandId",
+  ]);
+  decodeAcceptDraftReceipt(command.payload);
 }

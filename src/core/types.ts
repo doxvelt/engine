@@ -206,7 +206,12 @@ export type BranchRecord = {
   createdAt: string;
 };
 
-export type CommitKind = "root" | "turn" | "effects" | "episode_closure" | "memory";
+export type CommitKind =
+  | "root"
+  | "turn"
+  | "effects"
+  | "episode_closure"
+  | "memory";
 
 export type CommitRecord = {
   id: string;
@@ -225,7 +230,14 @@ export type MessageVersionRecord = {
   actorId: string;
   text: string;
   audience: string[];
-  provenance: { mode: "manual"; operation: "turn" | "edit" | "regenerate" };
+  provenance:
+    | { mode: "manual"; operation: "turn" | "edit" | "regenerate" }
+    | {
+        mode: "generated";
+        operation: "turn";
+        sourceArtifactDigest: string;
+        finalTextSource: "generated_verbatim" | "acceptor_edited";
+      };
 };
 
 export type RuntimeEvent =
@@ -549,7 +561,12 @@ export type ActorTurnDraftFailure = {
   provenance: DraftRuntimeProvenance;
 };
 
-export type ActorTurnDraftStatus = "generating" | "ready" | "failed" | "discarded";
+export type ActorTurnDraftStatus =
+  | "generating"
+  | "ready"
+  | "failed"
+  | "discarded"
+  | "accepted";
 
 export type ActorTurnDraftRecord = {
   id: string;
@@ -576,4 +593,25 @@ export type ActorTurnDraftRecord = {
   failure: ActorTurnDraftFailure | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type AcceptDraftReceipt = {
+  receiptVersion: 1;
+  draftId: string;
+  generationCommandId: string;
+  contentRevisionId: string;
+  actorId: string;
+  audience: string[];
+  stageWhispers: DraftStageWhisperSnapshot[];
+  runtimeProfile: RuntimeProfileRef;
+  promptPolicy: PromptPolicyRef;
+  outputSchema: OutputSchemaRef;
+  skillDigests: string[];
+  capabilityGrant: [];
+  contextHash: string;
+  promptHash: string;
+  generatedArtifact: ActorTurnDraftArtifact;
+  accepted:
+    | { textSource: "generated_verbatim" }
+    | { textSource: "acceptor_edited"; text: string };
 };

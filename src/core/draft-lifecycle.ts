@@ -1,4 +1,12 @@
+export { acceptActorTurnDraft } from "./draft-acceptance.ts";
+
 import { createHash } from "node:crypto";
+import {
+  canonicalDraftContext,
+  decodeActorTurnDraftRecord,
+  MAX_RUNTIME_TEXT_CHARS,
+  requiredSafeIdentifier,
+} from "./draft-contracts.ts";
 import type {
   ActorTurnRuntime,
   AgentRuntimeEvent,
@@ -34,7 +42,6 @@ import type {
 } from "./types.ts";
 
 const MAX_RUNTIME_EVENTS = 10_000;
-const MAX_RUNTIME_TEXT_CHARS = 1_000_000;
 
 export type GenerateActorTurnDraftOptions = {
   signal?: AbortSignal;
@@ -114,10 +121,10 @@ export function generateActorTurnDraft(
     audience: normalized.payload.audience,
     stageWhispers: whispers,
   });
-  const portableContext = canonicalContext(context);
+  const portableContext = canonicalDraftContext(context);
   const prompt = context.promptPreview;
   const createdAt = new Date().toISOString();
-  const draft: ActorTurnDraftRecord = {
+  const draft = decodeActorTurnDraftRecord({
     id: draftId,
     ownerScope: normalized.ownerScope,
     simulationId: normalized.simulationId,
@@ -142,7 +149,7 @@ export function generateActorTurnDraft(
     failure: null,
     createdAt,
     updatedAt: createdAt,
-  };
+  });
   const reserved = repository.reserveActorTurnDraft({
     draft,
     commandFingerprint,
@@ -713,26 +720,6 @@ function selectWhispers(
   });
 }
 
-function canonicalContext(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalContext);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(
-        ([key]) =>
-          ![
-            "sourceRoot",
-            "path",
-            "folder",
-            "createdAt",
-            "updatedAt",
-            "promptPreview",
-          ].includes(key),
-      )
-      .map(([key, item]) => [key, canonicalContext(item)]),
-  );
-}
-
 function normalizeUsage(
   usage: Partial<NormalizedRuntimeUsage>,
 ): NormalizedRuntimeUsage {
@@ -758,15 +745,6 @@ function numericUsage(value: unknown): number {
   if (typeof value !== "number" || value < 0 || !Number.isSafeInteger(value))
     throw new InvalidRuntimeStreamError(emptyObservation());
   return value;
-}
-
-function requiredSafeIdentifier(value: unknown, label: string): string {
-  const normalized = boundedIdentifier(value);
-  if (!normalized)
-    throw new DomainValidationError(
-      `${label} is invalid or credential-shaped.`,
-    );
-  return normalized;
 }
 
 function boundedIdentifier(value: unknown): string | null {

@@ -24,6 +24,13 @@ import {
   unwrapRecordedOutcome,
 } from "../core/domain-rules.ts";
 import {
+  acceptedTextFromReceipt,
+  buildAcceptedCommit,
+  receiptFor,
+  validateReadyDraft,
+} from "../core/draft-acceptance.ts";
+import { decodeActorTurnDraftRecord } from "../core/draft-contracts.ts";
+import {
   BranchConflictError,
   CommandIdentityError,
   DomainNotFoundError,
@@ -33,6 +40,7 @@ import {
   type ClosureRequestInput,
   type CreateContentRevisionInput,
   type ActorTurnDraftRepository,
+  type AcceptActorTurnDraftCommand,
   type CreateSimulationInput,
   type RecordedCommand,
   type RecordedOutcome,
@@ -1123,6 +1131,158 @@ export class SqliteSimulationRepository
       return { draft, replayed: false };
     });
   }
+  replayAcceptedActorTurnDraft(
+    input: AcceptActorTurnDraftCommand,
+  ): { branch: BranchRecord; commit: CommitRecord } | null {
+    const draftCommand = this.sql()
+      .prepare(
+        "SELECT 1 FROM actor_turn_draft_commands WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?",
+      )
+      .get(input.ownerScope, input.simulationId, input.commandId);
+    if (draftCommand) throw new CommandIdentityError(input.commandId);
+    const row = this.sql()
+      .prepare(
+        "SELECT command_id, canonical_input_json, fingerprint, result_json, created_at FROM command_results WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?",
+      )
+      .get(input.ownerScope, input.simulationId, input.commandId) as
+      | Record<string, unknown>
+      | undefined;
+    if (!row) return null;
+    const stored = decodeCommandRow(row);
+    if (stored.canonicalInput.kind !== "accept_draft")
+      throw new CommandIdentityError(input.commandId);
+    const receipt = stored.canonicalInput.payload;
+    if (receipt.draftId !== input.draftId)
+      throw new CommandIdentityError(input.commandId);
+    const expectedSource =
+      input.finalText === undefined
+        ? "generated_verbatim"
+        : input.finalText === receipt.generatedArtifact.text
+          ? "generated_verbatim"
+          : "acceptor_edited";
+    const finalText = acceptedTextFromReceipt(receipt);
+    if (
+      receipt.accepted.textSource !== expectedSource ||
+      (input.finalText !== undefined && input.finalText !== finalText)
+    )
+      throw new CommandIdentityError(input.commandId);
+    if (stored.result.kind !== "commit")
+      throw new CommandIdentityError(input.commandId);
+    return { branch: stored.result.branch, commit: stored.result.commit };
+  }
+
+  acceptActorTurnDraft(input: {
+    request: AcceptActorTurnDraftCommand;
+    commandInput: Extract<RecordedCommand, { kind: "accept_draft" }>;
+    commandFingerprint: string;
+    createdAt: string;
+  }): { branch: BranchRecord; commit: CommitRecord; replayed: boolean } {
+    return this.transaction(() => {
+      const replay = this.replayAcceptedActorTurnDraft(input.request);
+      if (replay) return { ...replay, replayed: true };
+      const collision = this.sql()
+        .prepare(
+          "SELECT 1 FROM actor_turn_draft_commands WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?",
+        )
+        .get(
+          input.request.ownerScope,
+          input.request.simulationId,
+          input.request.commandId,
+        );
+      if (collision) throw new CommandIdentityError(input.request.commandId);
+      if (!validCreatedAt(input.createdAt))
+        throw new DomainValidationError(
+          "Draft acceptance timestamp is invalid.",
+        );
+      const draft = this.getActorTurnDraft(
+        input.request.ownerScope,
+        input.request.simulationId,
+        input.request.draftId,
+      );
+      if (!draft) throw new DomainNotFoundError("Draft not found.");
+      const validated = validateReadyDraft(this, input.request, draft);
+      const receipt = receiptFor(validated.draft, validated.acceptedText);
+      const expected = recordCommand("accept_draft", {
+        ownerScope: input.request.ownerScope,
+        simulationId: input.request.simulationId,
+        branchId: validated.draft.branchId,
+        expectedHead: validated.draft.basisHeadCommitId,
+        commandId: input.request.commandId,
+        payload: receipt,
+      });
+      if (
+        stableStringify(input.commandInput) !== stableStringify(expected) ||
+        input.commandFingerprint !== fingerprintCommand(expected)
+      )
+        throw new DomainValidationError(
+          "Draft acceptance command is not bound to the validated draft.",
+        );
+      const commit = buildAcceptedCommit(
+        this,
+        validated.draft,
+        receipt,
+        input.request.commandId,
+        input.createdAt,
+      );
+      this.insertCommit(commit);
+      const changedHead = this.sql()
+        .prepare(
+          "UPDATE branches SET head_commit_id = ? WHERE owner_scope = ? AND simulation_id = ? AND id = ? AND head_commit_id = ?",
+        )
+        .run(
+          commit.id,
+          validated.draft.ownerScope,
+          validated.draft.simulationId,
+          validated.draft.branchId,
+          validated.draft.basisHeadCommitId,
+        );
+      if (changedHead.changes !== 1)
+        throw new BranchConflictError(
+          validated.draft.basisHeadCommitId,
+          this.getBranch(
+            validated.draft.ownerScope,
+            validated.draft.simulationId,
+            validated.draft.branchId,
+          )?.headCommitId || "missing",
+        );
+      const acceptedDraft = {
+        ...validated.draft,
+        status: "accepted" as const,
+        updatedAt: now(),
+      };
+      const changedDraft = this.sql()
+        .prepare(
+          "UPDATE actor_turn_drafts SET status = ?, draft_json = ?, updated_at = ? WHERE id = ? AND owner_scope = ? AND simulation_id = ? AND status = 'ready'",
+        )
+        .run(
+          acceptedDraft.status,
+          JSON.stringify(acceptedDraft),
+          acceptedDraft.updatedAt,
+          acceptedDraft.id,
+          acceptedDraft.ownerScope,
+          acceptedDraft.simulationId,
+        );
+      if (changedDraft.changes !== 1)
+        throw new DomainValidationError(
+          "Draft terminal transition lost its compare-and-set race.",
+        );
+      const branch = this.getBranch(
+        validated.draft.ownerScope,
+        validated.draft.simulationId,
+        validated.draft.branchId,
+      )!;
+      const result = { branch, commit };
+      this.writeCommand(
+        validated.draft.ownerScope,
+        validated.draft.simulationId,
+        input.request.commandId,
+        expected,
+        fingerprintCommand(expected),
+        recordCommitOutcome(result),
+      );
+      return { ...result, replayed: false };
+    });
+  }
 
   replayCommand(
     ownerScope: string,
@@ -1370,6 +1530,14 @@ function sortValue(value: unknown): unknown {
 function now(): string {
   return new Date().toISOString();
 }
+function validCreatedAt(value: unknown): value is string {
+  if (typeof value !== "string" || value.length !== 24) return false;
+  try {
+    return new Date(value).toISOString() === value;
+  } catch {
+    return false;
+  }
+}
 function rowToRevision(row: any): ContentRevisionRecord {
   return {
     id: row.id,
@@ -1413,8 +1581,10 @@ function rowToCommit(row: any): CommitRecord {
     createdAt: row.created_at,
   };
 }
-function rowToActorTurnDraft(row: { draft_json: string }): ActorTurnDraftRecord {
-  return JSON.parse(row.draft_json) as ActorTurnDraftRecord;
+function rowToActorTurnDraft(row: {
+  draft_json: string;
+}): ActorTurnDraftRecord {
+  return decodeActorTurnDraftRecord(JSON.parse(row.draft_json));
 }
 function rowToStageWhisper(row: any): StageWhisperRecord {
   return {

@@ -606,7 +606,7 @@ function validateCanonicalCommandInput(
   if (
     ![
       "start", "turn", "effects", "closure", "edit", "regenerate", "fork",
-      "whisper", "revise_memory", "retract_memory",
+      "whisper", "accept_draft", "revise_memory", "retract_memory",
     ].includes(String(input.kind)) ||
     input.ownerScope !== archive.simulation.ownerScope ||
     input.simulationId !== archive.simulation.id ||
@@ -628,6 +628,8 @@ function validateCanonicalCommandInput(
   const result = unwrapRecordedOutcome(command.result) as Record<string, unknown>;
   if (input.kind === "start")
     validateStartInput(archive, command, decodedInput, result);
+  else if (input.kind === "accept_draft")
+    validateAcceptedDraftCommandShape(archive, command, decodedInput, result);
   else if (["turn", "effects", "closure", "edit", "regenerate", "revise_memory", "retract_memory"].includes(
     String(input.kind),
   ))
@@ -703,12 +705,13 @@ function validateCommitInput(
     throw invalidCommandResult(command.commandId, "commit identity mismatch");
   const commandKind = command.canonicalInput.kind;
   if (
-    (commit.kind === "turn" && !["turn", "edit", "regenerate"].includes(commandKind)) ||
+    (commit.kind === "turn" && !["turn", "edit", "regenerate", "accept_draft"].includes(commandKind)) ||
     (commit.kind === "effects" && commandKind !== "effects") ||
     (commit.kind === "episode_closure" && commandKind !== "closure")
     || (commit.kind === "memory" && !["revise_memory", "retract_memory"].includes(commandKind))
   )
     throw invalidCommandResult(command.commandId, "command kind mismatch");
+  if (commit.kind === "turn" && commandKind === "accept_draft") return;
   if (commit.kind === "turn")
     validateTurnInput(
       archive,
@@ -1610,14 +1613,29 @@ function validateMessage(value: unknown): void {
   const item = value as Record<string, unknown>;
   stringsOf(item, ["id", "logicalMessageId", "actorId", "text"], "message");
   stringArray(item.audience, "message audience");
-  exact(item.provenance, ["mode", "operation"], "message provenance");
   const provenance = item.provenance as Record<string, unknown>;
-  oneOf(provenance.mode, ["manual"], "message provenance mode");
-  oneOf(
-    provenance.operation,
-    ["turn", "edit", "regenerate"],
-    "message operation",
-  );
+  if (provenance.mode === "manual") {
+    exact(provenance, ["mode", "operation"], "message provenance");
+    oneOf(
+      provenance.operation,
+      ["turn", "edit", "regenerate"],
+      "message operation",
+    );
+  } else {
+    exact(
+      provenance,
+      ["mode", "operation", "sourceArtifactDigest", "finalTextSource"],
+      "generated message provenance",
+    );
+    oneOf(provenance.mode, ["generated"], "generated message provenance mode");
+    oneOf(provenance.operation, ["turn"], "generated message operation");
+    stringsOf(provenance, ["sourceArtifactDigest"], "generated message provenance");
+    oneOf(
+      provenance.finalTextSource,
+      ["generated_verbatim", "acceptor_edited"],
+      "generated final text source",
+    );
+  }
 }
 
 function validateClosure(value: unknown): void {
@@ -2031,4 +2049,30 @@ function invalidCommandResult(commandId: string, reason: string): Error {
   return new Error(
     `Simulation archive command result is invalid for ${commandId}: ${reason}.`,
   );
+}
+
+// Pass A only: import needs to retain structurally valid recorded acceptance
+// commands for canonical replay. Receipt semantics are deliberately deferred to
+// the schema-v6 verifier work in Pass B.
+function validateAcceptedDraftCommandShape(
+  archive: SimulationArchive,
+  command: SimulationArchive["commandResults"][number],
+  input: Record<string, unknown>,
+  result: Record<string, unknown>,
+): void {
+  assertExactInput(command.commandId, input, [
+    "ownerScope", "simulationId", "branchId", "expectedHead",
+    "commandId", "payload",
+  ]);
+  if (!isRecord(result.commit) || !isRecord(result.branch))
+    throw invalidCommandResult(command.commandId, "invalid accepted draft result");
+  const resultCommit = result.commit as Record<string, unknown>;
+  const commit = archive.commits.find((item) => item.id === resultCommit.id);
+  if (
+    !commit ||
+    commit.kind !== "turn" ||
+    commit.parentCommitId !== input.expectedHead ||
+    result.branch.id !== input.branchId
+  )
+    throw invalidCommandResult(command.commandId, "accepted draft basis mismatch");
 }
