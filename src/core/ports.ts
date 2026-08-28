@@ -183,7 +183,7 @@ export type RecordedOutcome =
   | { kind: "whisper"; whisper: StageWhisperRecord };
 
 export type SimulationArchive = {
-  schemaVersion: 4 | 5;
+  schemaVersion: 4 | 5 | 6;
   contentRevision: ContentRevisionRecord;
   simulation: SimulationRecord;
   branches: BranchRecord[];

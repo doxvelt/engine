@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { domainId } from "./domain-rules.ts";
 import { DomainValidationError } from "./ports.ts";
 import type {
   AcceptDraftReceipt,
@@ -20,6 +21,7 @@ const STOP_REASONS = [
   "aborted",
   "other",
 ] as const;
+const COMPLETED_STOP_REASONS = [null, "stop", "length", "other"] as const;
 
 export function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -160,9 +162,8 @@ export function assertRuntimeProvenance(
     throw invalid("Runtime terminal status is inconsistent.");
 }
 
-export function assertGeneratedArtifact(
+export function assertCompletedArtifact(
   value: unknown,
-  terminal: "completed" | "failed" = "completed",
 ): asserts value is ActorTurnDraftArtifact {
   const artifact = object(value, "Generated artifact");
   exact(artifact, ["text", "digest", "provenance"], "Generated artifact");
@@ -170,7 +171,13 @@ export function assertGeneratedArtifact(
   assertSha256(artifact.digest, "Generated artifact digest");
   if (sha256(artifact.text) !== artifact.digest)
     throw invalid("Generated artifact digest is invalid.");
-  assertRuntimeProvenance(artifact.provenance, terminal);
+  assertRuntimeProvenance(artifact.provenance, "completed");
+  if (
+    !COMPLETED_STOP_REASONS.includes(
+      artifact.provenance.stopReason as (typeof COMPLETED_STOP_REASONS)[number],
+    )
+  )
+    throw invalid("Generated artifact completion stop reason is invalid.");
 }
 
 export function decodeActorTurnDraftRecord(
@@ -207,17 +214,28 @@ export function decodeActorTurnDraftRecord(
     ],
     "Actor turn draft",
   );
+  const id = requiredSafeIdentifier(draft.id, "Draft id");
+  const ownerScope = requiredSafeIdentifier(draft.ownerScope, "Draft ownerScope");
+  const simulationId = requiredSafeIdentifier(
+    draft.simulationId,
+    "Draft simulationId",
+  );
+  const generationCommandId = requiredSafeIdentifier(
+    draft.generationCommandId,
+    "Draft generationCommandId",
+  );
   for (const key of [
-    "id",
-    "ownerScope",
-    "simulationId",
-    "generationCommandId",
     "branchId",
     "basisHeadCommitId",
     "contentRevisionId",
     "actorId",
   ])
-    requiredSafeIdentifier(draft[key], `Draft ${key}`);
+    requiredSafeIdentifier(draft[key], "Draft " + key);
+  if (
+    id !==
+    domainId("actor_turn_draft", ownerScope, simulationId, generationCommandId)
+  )
+    throw invalid("Draft ID is not bound to its generation identity.");
   stringArray(draft.audience, "Draft audience");
   stringArray(draft.skillDigests, "Draft skill digests");
   unique(draft.audience as string[], "Draft audience");
@@ -326,7 +344,7 @@ export function decodeAcceptDraftReceipt(value: unknown): AcceptDraftReceipt {
     throw invalid("Accept draft capability grant is invalid.");
   assertSha256(receipt.contextHash, "Accept draft context hash");
   assertSha256(receipt.promptHash, "Accept draft prompt hash");
-  assertGeneratedArtifact(receipt.generatedArtifact, "completed");
+  assertCompletedArtifact(receipt.generatedArtifact);
   const accepted = object(receipt.accepted, "Accept draft accepted text");
   if (accepted.textSource === "generated_verbatim")
     exact(accepted, ["textSource"], "Accept draft accepted text");
@@ -348,7 +366,7 @@ function validateDraftState(
     return;
   }
   if (status === "ready" || status === "accepted") {
-    assertGeneratedArtifact(artifact);
+    assertCompletedArtifact(artifact);
     if (failure !== null)
       throw invalid("Ready draft failure state is invalid.");
     return;
@@ -359,7 +377,7 @@ function validateDraftState(
     assertFailure(failure);
     return;
   }
-  if (artifact !== null) assertGeneratedArtifact(artifact);
+  if (artifact !== null) assertCompletedArtifact(artifact);
   if (failure !== null) assertFailure(failure);
   if (artifact !== null && failure !== null)
     throw invalid("Discarded draft state is invalid.");
@@ -415,11 +433,12 @@ function exact(
     throw invalid(`${label} has unexpected fields.`);
 }
 function validIso(value: unknown): boolean {
-  return (
-    typeof value === "string" &&
-    value.length <= 40 &&
-    Number.isFinite(Date.parse(value))
-  );
+  if (typeof value !== "string" || value.length !== 24) return false;
+  try {
+    return new Date(value).toISOString() === value;
+  } catch {
+    return false;
+  }
 }
 function credentialShapedSegment(value: string): boolean {
   return (

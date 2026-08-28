@@ -258,7 +258,7 @@ test("CLI edit, regenerate, fork, and logical import/export preserve sibling pat
   const importedDb = path.join(root, "imported.sqlite");
   const importedSource = path.join(root, "imported-source");
   const exported = await cli(["export", packageDir, "--db", db]);
-  assert.equal(exported.manifest.schemaVersion, 5);
+  assert.equal(exported.manifest.schemaVersion, 6);
   await cli([
     "import",
     packageDir,
@@ -452,7 +452,7 @@ test("local API preserves source, play, closure, export, and pure branch project
     simulationId: "api",
     targetDir: path.join(root, "api-package"),
   });
-  assert.equal(exported.manifest.schemaVersion, 5);
+  assert.equal(exported.manifest.schemaVersion, 6);
   assert.ok(turn.commit.id);
 });
 

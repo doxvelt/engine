@@ -1063,3 +1063,43 @@ test("SQLite rollback is atomic across every acceptance write boundary", async (
     }
   }
 });
+
+test("ready draft identity, completed stop reasons, and timestamps reject tampering", async (t) => {
+  const { store, dbPath, draft, started } = await readyDraft(t);
+  const variants: Array<[string, (value: Record<string, any>) => void]> = [
+    ["generation command", (value) => { value.generationCommandId = "forged"; }],
+    ["draft id", (value) => { value.id = "actor_turn_draft_forged"; }],
+    ...(["error", "aborted", "tool_use"] as const).map((stopReason) => [
+      "stop " + stopReason,
+      (value: Record<string, any>) => { value.artifact.provenance.stopReason = stopReason; },
+    ] as [string, (value: Record<string, any>) => void]),
+    ["numeric timestamp", (value) => { value.createdAt = "1"; }],
+    ["noncanonical timestamp", (value) => { value.updatedAt = "2026-01-01T00:00:00Z"; }],
+  ];
+  for (const [label, mutate] of variants) {
+    const restore = mutateStoredDraft(dbPath, draft.id, mutate);
+    assert.throws(
+      () => acceptActorTurnDraft(store, {
+        ownerScope: "owner", simulationId: "sim", draftId: draft.id, commandId: "tamper-" + label,
+      }),
+      DomainValidationError,
+    );
+    restore();
+    assertNoAcceptanceLeak(store, draft.id, started.root.id, "tamper-" + label);
+  }
+});
+
+test("acceptance replay rejects forged result caches while commits stay canonical", async (t) => {
+  const { store, dbPath, draft } = await readyDraft(t);
+  const request = { ownerScope: "owner", simulationId: "sim", draftId: draft.id, commandId: "accept-cache" };
+  const accepted = acceptActorTurnDraft(store, request);
+  const canonical = store.getCommit("owner", "sim", accepted.commit.id);
+  const database = new DatabaseSync(dbPath);
+  const row = database.prepare("SELECT result_json FROM command_results WHERE command_id = ?").get(request.commandId) as { result_json: string };
+  const forged = JSON.parse(row.result_json);
+  forged.commit.events[0].message.text = "Forged cache text.";
+  database.prepare("UPDATE command_results SET result_json = ? WHERE command_id = ?").run(JSON.stringify(forged), request.commandId);
+  database.close();
+  assert.deepEqual(store.getCommit("owner", "sim", accepted.commit.id), canonical);
+  assert.throws(() => acceptActorTurnDraft(store, request), /command result is invalid|result cache does not match authoritative history/);
+});

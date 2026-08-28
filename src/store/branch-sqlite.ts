@@ -863,7 +863,7 @@ export class SqliteSimulationRepository
     const memoryJobTransitions = this.listMemoryJobTransitions(ownerScope, simulationId);
     const detachedMemoryOperations = this.listDetachedMemoryOperations(ownerScope, simulationId);
     return {
-      schemaVersion: 5,
+      schemaVersion: 6,
       contentRevision,
       simulation,
       branches,
@@ -1168,7 +1168,39 @@ export class SqliteSimulationRepository
       throw new CommandIdentityError(input.commandId);
     if (stored.result.kind !== "commit")
       throw new CommandIdentityError(input.commandId);
-    return { branch: stored.result.branch, commit: stored.result.commit };
+    validateSimulationArchive(
+      this.exportSimulation(input.ownerScope, input.simulationId),
+    );
+    const commitId = domainId(
+      "commit",
+      input.ownerScope,
+      input.simulationId,
+      input.commandId,
+    );
+    const commitRow = this.sql()
+      .prepare(
+        "SELECT * FROM commits WHERE id = ? AND owner_scope = ? AND simulation_id = ?",
+      )
+      .get(commitId, input.ownerScope, input.simulationId);
+    if (!commitRow)
+      throw new DomainValidationError("Accepted draft commit is missing.");
+    const commit = rowToCommit(commitRow);
+    const branch = this.getBranch(
+      input.ownerScope,
+      input.simulationId,
+      stored.canonicalInput.branchId,
+    );
+    if (!branch)
+      throw new DomainValidationError("Accepted draft branch is missing.");
+    const historicalBranch = { ...branch, headCommitId: commit.id };
+    if (
+      stableStringify(stored.result.commit) !== stableStringify(commit) ||
+      stableStringify(stored.result.branch) !== stableStringify(historicalBranch)
+    )
+      throw new DomainValidationError(
+        "Accepted draft result cache does not match authoritative history.",
+      );
+    return { branch: historicalBranch, commit };
   }
 
   acceptActorTurnDraft(input: {

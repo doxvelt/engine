@@ -1,4 +1,5 @@
 import {
+  assertCompletedArtifact,
   assertRuntimeText,
   canonicalDraftContext,
   decodeActorTurnDraftRecord,
@@ -132,13 +133,7 @@ export function validateReadyDraft(
   if (!draft.artifact || draft.failure)
     throw new DomainValidationError("Ready draft artifact state is invalid.");
   const artifact = draft.artifact;
-  if (artifact.provenance.terminalStatus !== "completed")
-    throw new DomainValidationError(
-      "Ready draft terminal provenance is invalid.",
-    );
-  if (sha256(artifact.text) !== artifact.digest)
-    throw new DomainValidationError("Generated artifact digest is invalid.");
-  assertRuntimeText(artifact.text, "Generated artifact text");
+  assertCompletedArtifact(artifact);
   const acceptedText =
     request.finalText === undefined ? artifact.text : request.finalText;
   assertRuntimeText(acceptedText, "Accepted text");
@@ -146,17 +141,6 @@ export function validateReadyDraft(
     throw new DomainValidationError(
       "Draft runtime profile provenance is invalid.",
     );
-  const usage = artifact.provenance.usage;
-  if (
-    !Number.isSafeInteger(usage.inputTokens) ||
-    !Number.isSafeInteger(usage.outputTokens) ||
-    !Number.isSafeInteger(usage.totalTokens) ||
-    usage.inputTokens < 0 ||
-    usage.outputTokens < 0 ||
-    usage.totalTokens < 0 ||
-    usage.totalTokens !== usage.inputTokens + usage.outputTokens
-  )
-    throw new DomainValidationError("Draft usage provenance is invalid.");
   if (!Array.isArray(draft.capabilityGrant) || draft.capabilityGrant.length)
     throw new DomainValidationError("Draft capability grant is invalid.");
   if (
