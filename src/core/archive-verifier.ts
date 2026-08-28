@@ -18,6 +18,7 @@ import {
 } from "./domain-rules.ts";
 import { deriveRetainedBeliefs } from "./retained-beliefs.ts";
 import { legacyClosureOperations, projectPerceptions } from "./memory-operations.ts";
+import { decodeAcceptDraftReceipt } from "./draft-contracts.ts";
 import {
   assertRecordedCommandOutcome,
   assertRecordedOutcomeIdentity,
@@ -28,6 +29,7 @@ import {
 import type { SimulationArchive } from "./ports.ts";
 import type {
   CommitRecord,
+  AcceptDraftReceipt,
   MemoryOperation,
   RuntimeEvent,
 } from "./types.ts";
@@ -54,6 +56,11 @@ function topologicalCommits(commits: CommitRecord[]): CommitRecord[] {
 }
 
 export function validateSimulationArchive(archive: SimulationArchive): void {
+  if (![4, 5, 6].includes(archive.schemaVersion))
+    throw new Error(
+      `Unsupported simulation archive schema: ${String(archive.schemaVersion)}`,
+    );
+  if (archive.schemaVersion !== 6) validateLegacyArchive(archive);
   if (archive.schemaVersion === 4) {
     const untouched = structuredClone(archive);
     untouched.schemaVersion = 5;
@@ -63,7 +70,7 @@ export function validateSimulationArchive(archive: SimulationArchive): void {
     validateSimulationArchive(untouched);
     upconvertV4Archive(archive);
   }
-  if (archive.schemaVersion !== 5)
+  if (archive.schemaVersion !== 5 && archive.schemaVersion !== 6)
     throw new Error(
       `Unsupported simulation archive schema: ${String(archive.schemaVersion)}`,
     );
@@ -143,9 +150,59 @@ export function validateSimulationArchive(archive: SimulationArchive): void {
       );
     }
   }
+  validateAcceptedDraftIdentityUniqueness(archive);
   validateCommandResults(archive);
   validateCanonicalProvenance(archive);
   replayAccessGraph(archive, topologicalCommits(archive.commits));
+}
+
+
+function validateAcceptedDraftIdentityUniqueness(
+  archive: SimulationArchive,
+): void {
+  if (archive.schemaVersion !== 6) return;
+  const canonicalCommandIds = new Set(
+    archive.commandResults.map((command) => command.commandId),
+  );
+  const generationCommandIds = new Set<string>();
+  const draftIds = new Set<string>();
+  for (const command of archive.commandResults) {
+    if (command.canonicalInput?.kind !== "accept_draft") continue;
+    let receipt: AcceptDraftReceipt;
+    try {
+      receipt = decodeAcceptDraftReceipt(command.canonicalInput.payload);
+    } catch {
+      continue;
+    }
+    if (canonicalCommandIds.has(receipt.generationCommandId))
+      throw new Error(
+        "Simulation archive accepted generation command identity is reused canonically.",
+      );
+    if (
+      generationCommandIds.has(receipt.generationCommandId) ||
+      draftIds.has(receipt.draftId)
+    )
+      throw new Error(
+        "Simulation archive contains duplicate accepted draft identity.",
+      );
+    generationCommandIds.add(receipt.generationCommandId);
+    draftIds.add(receipt.draftId);
+  }
+}
+
+function validateLegacyArchive(archive: SimulationArchive): void {
+  if (
+    archive.commandResults.some(
+      (command) => command.canonicalInput.kind === "accept_draft",
+    ) ||
+    archive.commits.some((commit) =>
+      commit.events.some(
+        (event) =>
+          event.type === "message_accepted" &&
+          event.message.provenance.mode === "generated",
+      ),
+    )
+  ) throw new Error("Legacy simulation archives cannot contain draft acceptance artifacts.");
 }
 
 function upconvertV4Archive(archive: SimulationArchive): void {
@@ -606,7 +663,7 @@ function validateCanonicalCommandInput(
   if (
     ![
       "start", "turn", "effects", "closure", "edit", "regenerate", "fork",
-      "whisper", "revise_memory", "retract_memory",
+      "whisper", "accept_draft", "revise_memory", "retract_memory",
     ].includes(String(input.kind)) ||
     input.ownerScope !== archive.simulation.ownerScope ||
     input.simulationId !== archive.simulation.id ||
@@ -628,6 +685,8 @@ function validateCanonicalCommandInput(
   const result = unwrapRecordedOutcome(command.result) as Record<string, unknown>;
   if (input.kind === "start")
     validateStartInput(archive, command, decodedInput, result);
+  else if (input.kind === "accept_draft")
+    validateAcceptedDraftCommandShape(archive, command, decodedInput, result);
   else if (["turn", "effects", "closure", "edit", "regenerate", "revise_memory", "retract_memory"].includes(
     String(input.kind),
   ))
@@ -1610,14 +1669,29 @@ function validateMessage(value: unknown): void {
   const item = value as Record<string, unknown>;
   stringsOf(item, ["id", "logicalMessageId", "actorId", "text"], "message");
   stringArray(item.audience, "message audience");
-  exact(item.provenance, ["mode", "operation"], "message provenance");
   const provenance = item.provenance as Record<string, unknown>;
-  oneOf(provenance.mode, ["manual"], "message provenance mode");
-  oneOf(
-    provenance.operation,
-    ["turn", "edit", "regenerate"],
-    "message operation",
-  );
+  if (provenance.mode === "manual") {
+    exact(provenance, ["mode", "operation"], "message provenance");
+    oneOf(
+      provenance.operation,
+      ["turn", "edit", "regenerate"],
+      "message operation",
+    );
+  } else {
+    exact(
+      provenance,
+      ["mode", "operation", "sourceArtifactDigest", "finalTextSource"],
+      "generated message provenance",
+    );
+    oneOf(provenance.mode, ["generated"], "generated message provenance mode");
+    oneOf(provenance.operation, ["turn"], "generated message operation");
+    stringsOf(provenance, ["sourceArtifactDigest"], "generated message provenance");
+    oneOf(
+      provenance.finalTextSource,
+      ["generated_verbatim", "acceptor_edited"],
+      "generated final text source",
+    );
+  }
 }
 
 function validateClosure(value: unknown): void {
@@ -2031,4 +2105,145 @@ function invalidCommandResult(commandId: string, reason: string): Error {
   return new Error(
     `Simulation archive command result is invalid for ${commandId}: ${reason}.`,
   );
+}
+
+function validateAcceptedDraftCommandShape(
+  archive: SimulationArchive,
+  command: SimulationArchive["commandResults"][number],
+  input: Record<string, unknown>,
+  result: Record<string, unknown>,
+): void {
+  if (archive.schemaVersion !== 6)
+    throw invalidCommandResult(command.commandId, "draft acceptance requires schema v6");
+  assertExactInput(command.commandId, input, [
+    "ownerScope", "simulationId", "branchId", "expectedHead",
+    "commandId", "payload",
+  ]);
+  if (!isRecord(result.commit) || !isRecord(result.branch))
+    throw invalidCommandResult(command.commandId, "invalid accepted draft result");
+  let receipt: AcceptDraftReceipt;
+  try {
+    receipt = decodeAcceptDraftReceipt(input.payload);
+  } catch {
+    throw invalidCommandResult(command.commandId, "accepted draft receipt is invalid");
+  }
+  const resultCommit = result.commit;
+  const commit = archive.commits.find((item) => item.id === resultCommit.id);
+  const branch = archive.branches.find((item) => item.id === input.branchId);
+  if (
+    !commit ||
+    !branch ||
+    input.ownerScope !== archive.simulation.ownerScope ||
+    input.simulationId !== archive.simulation.id ||
+    input.commandId !== command.commandId ||
+    receipt.draftId !== domainId(
+      "actor_turn_draft",
+      archive.simulation.ownerScope,
+      archive.simulation.id,
+      receipt.generationCommandId,
+    ) ||
+    receipt.contentRevisionId !== archive.simulation.contentRevisionId ||
+    commit.id !== domainId(
+      "commit",
+      archive.simulation.ownerScope,
+      archive.simulation.id,
+      command.commandId,
+    ) ||
+    commit.ownerScope !== archive.simulation.ownerScope ||
+    commit.simulationId !== archive.simulation.id ||
+    commit.kind !== "turn" ||
+    commit.commandId !== command.commandId ||
+    commit.parentCommitId !== input.expectedHead ||
+    result.branch.id !== input.branchId ||
+    result.branch.ownerScope !== archive.simulation.ownerScope ||
+    result.branch.simulationId !== archive.simulation.id ||
+    result.branch.headCommitId !== commit.id ||
+    !isAncestor(archive.commits, branch.origin.baseCommitId, String(input.expectedHead)) ||
+    !isAncestor(archive.commits, commit.id, branch.headCommitId) ||
+    stableStringify(result.commit) !== stableStringify(commit) ||
+    result.branch.name !== branch.name ||
+    result.branch.createdAt !== branch.createdAt ||
+    stableStringify(result.branch.origin) !== stableStringify(branch.origin)
+  )
+    throw invalidCommandResult(command.commandId, "accepted draft basis mismatch");
+  requireArchiveActor(archive, command.commandId, receipt.actorId);
+  if (
+    stableStringify(receipt.audience) !==
+    stableStringify(normalizeAudience(receipt.actorId, receipt.audience))
+  ) throw invalidCommandResult(command.commandId, "accepted draft audience is not normalized");
+  for (const actorId of receipt.audience)
+    requireArchiveActor(archive, command.commandId, actorId);
+  const artifact = receipt.generatedArtifact;
+  // Prompt policy, output schema, skills, and context/prompt hashes occur once in
+  // the self-contained receipt. Their shape is validated by the codec, but they
+  // remain recorded claims until a signed/preimage-bearing format exists.
+  if (
+    stableStringify(artifact.provenance.runtimeProfile) !==
+      stableStringify(receipt.runtimeProfile)
+  ) throw invalidCommandResult(command.commandId, "accepted draft artifact provenance is invalid");
+  const finalText = receipt.accepted.textSource === "generated_verbatim"
+    ? artifact.text
+    : receipt.accepted.text;
+  if (
+    receipt.accepted.textSource === "acceptor_edited" &&
+    receipt.accepted.text === artifact.text
+  ) throw invalidCommandResult(command.commandId, "accepted draft edit must differ from generated text");
+  const message = {
+    id: domainId(
+      "message_version",
+      archive.simulation.ownerScope,
+      archive.simulation.id,
+      command.commandId,
+    ),
+    logicalMessageId: domainId(
+      "message",
+      archive.simulation.ownerScope,
+      archive.simulation.id,
+      command.commandId,
+    ),
+    actorId: receipt.actorId,
+    text: finalText,
+    audience: receipt.audience,
+    provenance: {
+      mode: "generated" as const,
+      operation: "turn" as const,
+      sourceArtifactDigest: artifact.digest,
+      finalTextSource: receipt.accepted.textSource,
+    },
+  };
+  const whispers = receipt.stageWhispers.map((snapshot) => {
+    const whisper = archive.stageWhispers.find((item) => item.id === snapshot.id);
+    if (
+      !whisper ||
+      whisper.text !== snapshot.text ||
+      whisper.ownerScope !== archive.simulation.ownerScope ||
+      whisper.simulationId !== archive.simulation.id ||
+      whisper.branchId !== input.branchId ||
+      whisper.expectedHead !== input.expectedHead ||
+      whisper.targetActorId !== receipt.actorId
+    ) throw invalidCommandResult(command.commandId, "accepted draft whisper snapshot is invalid");
+    return whisper;
+  });
+  const consumed = new Set(
+    ancestryThrough(archive.commits, commit.parentCommitId).flatMap((ancestor) =>
+      ancestor.events.flatMap((event) =>
+        event.type === "stage_whisper_consumed" ? [event.whisperId] : [],
+      ),
+    ),
+  );
+  if (whispers.some((whisper) => consumed.has(whisper.id)))
+    throw invalidCommandResult(command.commandId, "accepted draft whisper was already consumed");
+  const expectedEvents: RuntimeEvent[] = [
+    { type: "message_accepted", message },
+    ...expectedFirstImpressionEvents(archive, commit, receipt.audience),
+    ...buildStageWhisperEvents({
+      ownerScope: archive.simulation.ownerScope,
+      simulationId: archive.simulation.id,
+      commandId: command.commandId,
+      actorId: receipt.actorId,
+      selected: whispers,
+    }),
+  ];
+  if (stableStringify(commit.events) !== stableStringify(expectedEvents))
+    throw invalidCommandResult(command.commandId, "accepted draft event sequence is invalid");
 }

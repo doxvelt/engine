@@ -700,7 +700,7 @@ test("logical import/export preserves content, branches, commits, and projection
     simulationId: "sim-a",
     targetDir: packageDir,
   });
-  assert.equal(exported.manifest.schemaVersion, 5);
+  assert.equal(exported.manifest.schemaVersion, 6);
   await importSimulationPackage({
     packageDir,
     targetSourceDir: targetSource,

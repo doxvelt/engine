@@ -8,6 +8,7 @@ import type {
   ActorTurnDraftArtifact,
   ActorTurnDraftFailure,
   ActorTurnDraftRecord,
+  AcceptDraftReceipt,
   MemoryJobRecord,
   MemoryOperation,
   MemoryJobResult,
@@ -89,6 +90,14 @@ export type DiscardActorTurnDraftCommand = {
   commandId: string;
 };
 
+export type AcceptActorTurnDraftCommand = {
+  ownerScope: string;
+  simulationId: string;
+  draftId: string;
+  commandId: string;
+  finalText?: string;
+};
+
 export type CreateContentRevisionInput = {
   ownerScope: string;
   compiled: CompiledWorkspace;
@@ -155,7 +164,11 @@ export type RecordedCommand =
       branchId: string;
       name?: string | null;
     } & MutationIdentity)
-  | ({ kind: "whisper" } & StageWhisperCommand);
+  | ({ kind: "whisper" } & StageWhisperCommand)
+  | ({
+      kind: "accept_draft";
+      payload: AcceptDraftReceipt;
+    } & BranchMutation);
 
 export type RecordedOutcome =
   | {
@@ -170,7 +183,7 @@ export type RecordedOutcome =
   | { kind: "whisper"; whisper: StageWhisperRecord };
 
 export type SimulationArchive = {
-  schemaVersion: 4 | 5;
+  schemaVersion: 4 | 5 | 6;
   contentRevision: ContentRevisionRecord;
   simulation: SimulationRecord;
   branches: BranchRecord[];
@@ -191,6 +204,15 @@ export type SimulationArchive = {
 export type ClosureRequestInput = AppendCommitInput & { job: MemoryJobRecord };
 
 export interface ActorTurnDraftRepository {
+  replayAcceptedActorTurnDraft(
+    input: AcceptActorTurnDraftCommand,
+  ): { branch: BranchRecord; commit: CommitRecord } | null;
+  acceptActorTurnDraft(input: {
+    request: AcceptActorTurnDraftCommand;
+    commandInput: Extract<RecordedCommand, { kind: "accept_draft" }>;
+    commandFingerprint: string;
+    createdAt: string;
+  }): { branch: BranchRecord; commit: CommitRecord; replayed: boolean };
   reserveActorTurnDraft(input: {
     draft: ActorTurnDraftRecord;
     commandFingerprint: string;
