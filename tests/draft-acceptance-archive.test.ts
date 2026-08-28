@@ -192,6 +192,25 @@ test("schema-v6 archives reject duplicate accepted draft identities", async (t) 
   );
 });
 
+test("schema-v6 archives reserve accepted generation IDs from canonical commands", async (t) => {
+  const archive = await acceptedArchive(t);
+  const generationCommandId =
+    acceptance(archive).canonicalInput.payload.generationCommandId;
+  const source = archive.commandResults.find(
+    (command) => command.commandId === "later-turn",
+  );
+  assert.ok(source, "later canonical command must exist");
+  const reused = structuredClone(source);
+  reused.commandId = generationCommandId;
+  reused.canonicalInput.commandId = generationCommandId;
+  reused.fingerprint = fingerprintCommand(reused.canonicalInput);
+  archive.commandResults.push(reused);
+  assert.throws(
+    () => validateSimulationArchive(archive),
+    /accepted generation command identity is reused/,
+  );
+});
+
 function acceptanceCommit(archive: SimulationArchive) {
   const commit = archive.commits.find((item) => item.commandId === "accept");
   if (!commit) throw new Error("missing acceptance commit");

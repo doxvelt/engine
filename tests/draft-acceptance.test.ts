@@ -226,6 +226,24 @@ test("accepts generated-verbatim text explicitly or by omission without reinvoki
   });
   const { finalText: _ignored, ...omitted } = request;
   assert.equal(acceptActorTurnDraft(store, omitted).replayed, true);
+  const generationReplay = await generateActorTurnDraft(store, runtime, {
+    ownerScope: draft.ownerScope,
+    simulationId: draft.simulationId,
+    branchId: draft.branchId,
+    expectedHead: draft.basisHeadCommitId,
+    commandId: draft.generationCommandId,
+    payload: {
+      actorId: draft.actorId,
+      audience: draft.audience,
+      stageWhisperIds: draft.stageWhispers.map((item) => item.id),
+      runtimeProfile: draft.runtimeProfile,
+      promptPolicy: draft.promptPolicy,
+      outputSchema: draft.outputSchema,
+      skillDigests: draft.skillDigests,
+    },
+  });
+  assert.equal(generationReplay.replayed, true);
+  assert.equal(generationReplay.draft.status, "accepted");
   assert.equal(runtime.calls, 1);
   const archive = store.exportSimulation("owner", "sim");
   const command = archive.commandResults.find(
@@ -1010,6 +1028,7 @@ test("SQLite rollback is atomic across every acceptance write boundary", async (
     ["commit", "BEFORE INSERT ON commits"],
     ["branch", "BEFORE UPDATE OF head_commit_id ON branches"],
     ["draft", "BEFORE UPDATE OF status ON actor_turn_drafts"],
+    ["identity", "BEFORE INSERT ON accepted_actor_turn_draft_identities"],
     ["command", "BEFORE INSERT ON command_results"],
   ] as const;
   for (const [name, timing] of targets) {

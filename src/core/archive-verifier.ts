@@ -161,6 +161,9 @@ function validateAcceptedDraftIdentityUniqueness(
   archive: SimulationArchive,
 ): void {
   if (archive.schemaVersion !== 6) return;
+  const canonicalCommandIds = new Set(
+    archive.commandResults.map((command) => command.commandId),
+  );
   const generationCommandIds = new Set<string>();
   const draftIds = new Set<string>();
   for (const command of archive.commandResults) {
@@ -171,6 +174,10 @@ function validateAcceptedDraftIdentityUniqueness(
     } catch {
       continue;
     }
+    if (canonicalCommandIds.has(receipt.generationCommandId))
+      throw new Error(
+        "Simulation archive accepted generation command identity is reused canonically.",
+      );
     if (
       generationCommandIds.has(receipt.generationCommandId) ||
       draftIds.has(receipt.draftId)

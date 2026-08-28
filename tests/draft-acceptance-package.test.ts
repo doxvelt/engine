@@ -3,7 +3,11 @@ import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFil
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { acceptActorTurnDraft, generateActorTurnDraft } from "../src/core/draft-lifecycle.ts";
+import {
+  acceptActorTurnDraft,
+  discardActorTurnDraft,
+  generateActorTurnDraft,
+} from "../src/core/draft-lifecycle.ts";
 import { commitManualTurn, startBranchSimulation } from "../src/core/branch-kernel.ts";
 import { validateSimulationArchive } from "../src/core/archive-verifier.ts";
 import { fingerprintCommand } from "../src/core/domain-rules.ts";
@@ -111,6 +115,69 @@ test("v6 generated edited and verbatim packages replay without draft rows or raw
         CommandIdentityError,
       );
       assert.equal(runtime.calls, 0);
+      assert.throws(
+        () => commitManualTurn(store, {
+          ownerScope: "local",
+          simulationId,
+          branchId: acceptanceInput.branchId,
+          expectedHead: branch.headCommitId,
+          commandId: acceptanceInput.payload.generationCommandId,
+          payload: {
+            actorId: "cfo",
+            text: "Must not commit under a reserved generation identity.",
+            audience: ["ceo"],
+          },
+        }),
+        CommandIdentityError,
+      );
+      assert.equal(
+        store.exportSimulation("local", simulationId).commandResults.some(
+          (command) =>
+            command.commandId === acceptanceInput.payload.generationCommandId,
+        ),
+        false,
+      );
+      const freshRuntime = new DeterministicFakeRuntime([
+        { type: "completed", text: "Fresh draft.", usage: { inputTokens: 1, outputTokens: 1 } },
+      ]);
+      const fresh = await generateActorTurnDraft(store, freshRuntime, {
+        ownerScope: "local",
+        simulationId,
+        branchId: acceptanceInput.branchId,
+        expectedHead: branch.headCommitId,
+        commandId: "fresh-generate",
+        payload: {
+          actorId: acceptanceInput.payload.actorId,
+          audience: acceptanceInput.payload.audience,
+          stageWhisperIds: [],
+          runtimeProfile: acceptanceInput.payload.runtimeProfile,
+          promptPolicy: acceptanceInput.payload.promptPolicy,
+          outputSchema: acceptanceInput.payload.outputSchema,
+          skillDigests: acceptanceInput.payload.skillDigests,
+        },
+      });
+      assert.throws(
+        () => acceptActorTurnDraft(store, {
+          ownerScope: "local",
+          simulationId,
+          draftId: fresh.draft.id,
+          commandId: acceptanceInput.payload.generationCommandId,
+        }),
+        CommandIdentityError,
+      );
+      assert.throws(
+        () => discardActorTurnDraft(store, {
+          ownerScope: "local",
+          simulationId,
+          draftId: fresh.draft.id,
+          commandId: acceptanceInput.payload.generationCommandId,
+        }),
+        CommandIdentityError,
+      );
+      assert.equal(
+        store.getActorTurnDraft("local", simulationId, fresh.draft.id)?.status,
+        "ready",
+      );
     } finally { store.close(); }
   }
 });

@@ -136,6 +136,15 @@ export class SqliteSimulationRepository
         PRIMARY KEY(owner_scope, simulation_id, command_id),
         FOREIGN KEY(draft_id) REFERENCES actor_turn_drafts(id)
       );
+      CREATE TABLE IF NOT EXISTS accepted_actor_turn_draft_identities (
+        owner_scope TEXT NOT NULL, simulation_id TEXT NOT NULL,
+        generation_command_id TEXT NOT NULL, draft_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(owner_scope, simulation_id, generation_command_id),
+        UNIQUE(owner_scope, simulation_id, draft_id)
+      );
+      CREATE INDEX IF NOT EXISTS actor_turn_draft_commands_by_draft
+        ON actor_turn_draft_commands(owner_scope, simulation_id, draft_id);
       CREATE TABLE IF NOT EXISTS memory_jobs (
         id TEXT PRIMARY KEY, owner_scope TEXT NOT NULL, simulation_id TEXT NOT NULL,
         origin_branch_id TEXT NOT NULL, episode_id TEXT NOT NULL,
@@ -917,7 +926,7 @@ export class SqliteSimulationRepository
           );
       for (const whisper of archive.stageWhispers)
         this.insertStageWhisper(whisper);
-      for (const command of archive.commandResults)
+      for (const command of archive.commandResults) {
         this.sql()
           .prepare("INSERT INTO command_results VALUES (?, ?, ?, ?, ?, ?, ?)")
           .run(
@@ -929,6 +938,15 @@ export class SqliteSimulationRepository
             JSON.stringify(command.result),
             command.createdAt,
           );
+        if (command.canonicalInput.kind === "accept_draft")
+          this.reserveAcceptedDraftIdentity(
+            archive.simulation.ownerScope,
+            archive.simulation.id,
+            command.canonicalInput.payload.generationCommandId,
+            command.canonicalInput.payload.draftId,
+            command.createdAt,
+          );
+      }
       for (const job of archive.memoryJobs || []) this.insertMemoryJob(job);
       for (const transition of archive.memoryJobTransitions || [])
         this.insertMemoryJobTransition(transition);
@@ -1037,12 +1055,12 @@ export class SqliteSimulationRepository
         input.commandFingerprint,
       );
       if (prior) return { draft: prior, replayed: true };
-      this.assertAcceptedDraftIdentityAvailable(
+      if (this.isAcceptedDraftId(
         input.draft.ownerScope,
         input.draft.simulationId,
-        input.draft.generationCommandId,
         input.draft.id,
-      );
+      ))
+        throw new CommandIdentityError(input.draft.generationCommandId);
       const branch = this.getBranch(
         input.draft.ownerScope,
         input.draft.simulationId,
@@ -1146,6 +1164,12 @@ export class SqliteSimulationRepository
       )
       .get(input.ownerScope, input.simulationId, input.commandId);
     if (draftCommand) throw new CommandIdentityError(input.commandId);
+    if (this.isAcceptedGenerationCommandId(
+      input.ownerScope,
+      input.simulationId,
+      input.commandId,
+    ))
+      throw new CommandIdentityError(input.commandId);
     const row = this.sql()
       .prepare(
         "SELECT command_id, canonical_input_json, fingerprint, result_json, created_at FROM command_results WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?",
@@ -1318,6 +1342,13 @@ export class SqliteSimulationRepository
         fingerprintCommand(expected),
         recordCommitOutcome(result),
       );
+      this.reserveAcceptedDraftIdentity(
+        validated.draft.ownerScope,
+        validated.draft.simulationId,
+        validated.draft.generationCommandId,
+        validated.draft.id,
+        input.createdAt,
+      );
       return { ...result, replayed: false };
     });
   }
@@ -1380,38 +1411,77 @@ export class SqliteSimulationRepository
     const row = this.sql().prepare(
       "SELECT fingerprint, draft_id FROM actor_turn_draft_commands WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?",
     ).get(ownerScope, simulationId, commandId) as { fingerprint: string; draft_id: string } | undefined;
-    if (!row) return null;
-    if (row.fingerprint !== fingerprint) throw new CommandIdentityError(commandId);
-    const draft = this.getActorTurnDraft(ownerScope, simulationId, row.draft_id);
-    if (!draft) throw new DomainNotFoundError(`Draft not found: ${row.draft_id}`);
-    return draft;
+    if (row) {
+      if (row.fingerprint !== fingerprint)
+        throw new CommandIdentityError(commandId);
+      const draft = this.getActorTurnDraft(ownerScope, simulationId, row.draft_id);
+      if (!draft) throw new CommandIdentityError(commandId);
+      return draft;
+    }
+    if (this.isAcceptedGenerationCommandId(ownerScope, simulationId, commandId))
+      throw new CommandIdentityError(commandId);
+    return null;
   }
 
-  private assertAcceptedDraftIdentityAvailable(
+  private reserveAcceptedDraftIdentity(
     ownerScope: string,
     simulationId: string,
     generationCommandId: string,
     draftId: string,
+    createdAt: string,
   ): void {
-    const reserved = this.sql()
+    const existing = this.sql()
       .prepare(
-        `SELECT command_id, canonical_input_json, fingerprint, result_json,
-                created_at FROM command_results
-         WHERE owner_scope = ? AND simulation_id = ?`,
+        `SELECT generation_command_id, draft_id
+           FROM accepted_actor_turn_draft_identities
+          WHERE owner_scope = ? AND simulation_id = ?
+            AND (generation_command_id = ? OR draft_id = ?)`,
       )
-      .all(ownerScope, simulationId)
-      .map(decodeCommandRow)
-      .some((command) =>
-        command.canonicalInput.kind === "accept_draft" &&
-        (
-          command.canonicalInput.payload.generationCommandId ===
-            generationCommandId ||
-          command.canonicalInput.payload.draftId === draftId
-        ),
-      );
-    if (!reserved) return;
-    validateSimulationArchive(this.exportSimulation(ownerScope, simulationId));
-    throw new CommandIdentityError(generationCommandId);
+      .get(
+        ownerScope,
+        simulationId,
+        generationCommandId,
+        draftId,
+      ) as { generation_command_id: string; draft_id: string } | undefined;
+    if (existing) {
+      if (
+        existing.generation_command_id === generationCommandId &&
+        existing.draft_id === draftId
+      ) return;
+      throw new CommandIdentityError(generationCommandId);
+    }
+    this.sql()
+      .prepare(
+        "INSERT INTO accepted_actor_turn_draft_identities VALUES (?, ?, ?, ?, ?)",
+      )
+      .run(ownerScope, simulationId, generationCommandId, draftId, createdAt);
+  }
+
+  private isAcceptedGenerationCommandId(
+    ownerScope: string,
+    simulationId: string,
+    commandId: string,
+  ): boolean {
+    return Boolean(this.sql()
+      .prepare(
+        `SELECT 1 FROM accepted_actor_turn_draft_identities
+          WHERE owner_scope = ? AND simulation_id = ?
+            AND generation_command_id = ?`,
+      )
+      .get(ownerScope, simulationId, commandId));
+  }
+
+  private isAcceptedDraftId(
+    ownerScope: string,
+    simulationId: string,
+    draftId: string,
+  ): boolean {
+    return Boolean(this.sql()
+      .prepare(
+        `SELECT 1 FROM accepted_actor_turn_draft_identities
+          WHERE owner_scope = ? AND simulation_id = ? AND draft_id = ?`,
+      )
+      .get(ownerScope, simulationId, draftId));
   }
 
   private writeDraftCommand(input: {
@@ -1524,6 +1594,12 @@ export class SqliteSimulationRepository
       "SELECT 1 FROM actor_turn_draft_commands WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?",
     ).get(ownerScope, simulationId, commandId);
     if (draftCommand) throw new CommandIdentityError(commandId);
+    if (this.isAcceptedGenerationCommandId(
+      ownerScope,
+      simulationId,
+      commandId,
+    ))
+      throw new CommandIdentityError(commandId);
     const row = this.sql()
       .prepare(
         `SELECT command_id, canonical_input_json, fingerprint, result_json,
