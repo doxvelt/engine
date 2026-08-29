@@ -495,24 +495,40 @@ function observeStopReason(
   observation.stopReason = value as RuntimeStopReason;
 }
 
+type CapturedRuntimeIdentity = {
+  adapter: RuntimeAdapterIdentity;
+  providerId: string | null;
+  modelId: string | null;
+};
+
 function captureRuntimeIdentity(
   runtime: ActorTurnRuntime,
-): RuntimeAdapterIdentity {
+): CapturedRuntimeIdentity {
   try {
     const identity = runtime.identity;
     const id = identity?.id;
     const version = identity?.version;
+    const providerId = identity?.providerId;
+    const modelId = identity?.modelId;
     return {
-      id: boundedIdentifier(id) || "unknown",
-      version: boundedIdentifier(version) || "unknown",
+      adapter: {
+        id: boundedIdentifier(id) || "unknown",
+        version: boundedIdentifier(version) || "unknown",
+      },
+      providerId: boundedIdentifier(providerId),
+      modelId: boundedIdentifier(modelId),
     };
   } catch {
-    return { id: "unknown", version: "unknown" };
+    return {
+      adapter: { id: "unknown", version: "unknown" },
+      providerId: null,
+      modelId: null,
+    };
   }
 }
 
 function completedProvenance(
-  adapterIdentity: RuntimeAdapterIdentity,
+  adapterIdentity: CapturedRuntimeIdentity,
   draft: ActorTurnDraftRecord,
   observation: RuntimeObservation,
 ) {
@@ -523,7 +539,7 @@ function completedProvenance(
 }
 
 function failureFor(
-  adapterIdentity: RuntimeAdapterIdentity,
+  adapterIdentity: CapturedRuntimeIdentity,
   draft: ActorTurnDraftRecord,
   observation: RuntimeObservation,
   code: ActorTurnDraftFailure["code"],
@@ -542,18 +558,18 @@ function failureFor(
 }
 
 function provenanceBase(
-  adapterIdentity: RuntimeAdapterIdentity,
+  adapterIdentity: CapturedRuntimeIdentity,
   draft: ActorTurnDraftRecord,
   observation: RuntimeObservation,
 ) {
   return {
-    adapter: adapterIdentity,
+    adapter: adapterIdentity.adapter,
     runtimeProfile: {
       id: boundedIdentifier(draft.runtimeProfile.id) || "unknown",
       version: boundedIdentifier(draft.runtimeProfile.version) || "unknown",
     },
-    providerId: null,
-    modelId: null,
+    providerId: adapterIdentity.providerId,
+    modelId: adapterIdentity.modelId,
     usage: failureSafeUsage(observation.usage),
     stopReason: observation.stopReason,
   };
