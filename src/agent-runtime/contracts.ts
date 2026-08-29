@@ -9,6 +9,10 @@ import type {
 export type RuntimeAdapterIdentity = {
   id: string;
   version: string;
+  /** Runtime-only provenance; persisted separately from the adapter reference. */
+  providerId?: string | null;
+  /** Runtime-only provenance; persisted separately from the adapter reference. */
+  modelId?: string | null;
 };
 
 /** Token fields are write-once fragments; later events may add missing fields or repeat identical values. */
