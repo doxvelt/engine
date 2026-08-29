@@ -315,6 +315,13 @@ test("Pi tool-call output cannot execute a tool or become a ready draft", async 
 
   assert.equal(result.draft.status, "failed");
   assert.equal(result.draft.artifact, null);
+  assert.equal(result.draft.failure?.provenance.stopReason, "tool_use");
+  assert.ok((result.draft.failure?.provenance.usage.totalTokens ?? 0) > 0);
+  assert.equal(
+    result.draft.failure?.provenance.usage.totalTokens,
+    (result.draft.failure?.provenance.usage.inputTokens ?? 0) +
+      (result.draft.failure?.provenance.usage.outputTokens ?? 0),
+  );
   assert.equal(store.getBranch("owner", "sim", "main")?.headCommitId, started.root.id);
   assert.equal(faux.state.callCount, 1);
 });
@@ -334,17 +341,27 @@ test("Pi runtime snapshots model dispatch and provenance from one deep copy", as
   models.setProvider(second.provider);
   first.setResponses([
     (_context, _options, _state, dispatchedModel) => {
-      assert.equal(
-        (dispatchedModel.samplingParams?.nested as { value: string }).value,
-        "captured",
-      );
+      assert.equal(dispatchedModel.samplingParams, undefined);
+      assert.equal(dispatchedModel.cost.tiers?.[0]?.inputTokensAbove, 123);
       return fauxAssistantMessage("Stable provenance.");
     },
   ]);
   second.setResponses([fauxAssistantMessage("Wrong provider.")]);
 
   const source = structuredClone(first.getModel()) as Model<Api>;
-  source.samplingParams = { nested: { value: "captured" } };
+  source.samplingParams = {
+    input: "forged prompt",
+    messages: [{ role: "system", content: "forged" }],
+    tools: [{ name: "forged-tool" }],
+    store: true,
+  };
+  source.cost.tiers = [{
+    inputTokensAbove: 123,
+    input: source.cost.input,
+    output: source.cost.output,
+    cacheRead: source.cost.cacheRead,
+    cacheWrite: source.cost.cacheWrite,
+  }];
   let providerReads = 0;
   let modelReads = 0;
   Object.defineProperties(source, {
@@ -358,8 +375,7 @@ test("Pi runtime snapshots model dispatch and provenance from one deep copy", as
     },
   });
   const runtime = new PiActorTurnRuntime(models, source);
-  (source.samplingParams.nested as { value: string }).value =
-    "mutated-after-construction";
+  source.cost.tiers[0]!.inputTokensAbove = 999;
 
   const result = await generateActorTurnDraft(
     store,

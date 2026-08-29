@@ -107,7 +107,9 @@ export class PiActorTurnRuntime implements ActorTurnRuntime {
       }
       if (event.type === "message_end" && event.message.role === "assistant") {
         if (hasToolCall(event.message)) {
-          finishFailure("tool_use");
+          const usage = normalizeUsage(event.message.usage);
+          if (usage) enqueue({ type: "usage", usage });
+          finishFailure(usage ? "tool_use" : "error");
           agent.abort();
         }
         return;
@@ -174,7 +176,9 @@ export class PiActorTurnRuntime implements ActorTurnRuntime {
 }
 
 function snapshotModel(model: Model<Api>): Model<Api> {
-  return deepFreeze(structuredClone(model));
+  const { samplingParams: _requestShapingDefaults, ...safeModel } =
+    structuredClone(model);
+  return deepFreeze(safeModel as Model<Api>);
 }
 
 function deepFreeze<T>(value: T): T {
