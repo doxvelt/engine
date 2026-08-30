@@ -64,20 +64,22 @@
         <section v-else class="dx-light-card mt-7 p-5 sm:p-6" aria-labelledby="review-title">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div><p class="dx-label">Draft review</p><h2 id="review-title" class="mt-2 text-lg font-semibold text-highlighted">{{ actorName(reviewDraft.actorId) }}’s proposed turn</h2></div>
-            <UBadge :color="review.kind === 'ready' ? 'warning' : 'error'" variant="subtle" size="sm">{{ review.kind === 'ready' ? 'Awaiting acceptance' : 'Generation failed' }}</UBadge>
+            <UBadge :color="review.kind === 'ready' ? 'warning' : review.kind === 'pending' ? 'neutral' : 'error'" variant="subtle" size="sm">{{ review.kind === 'ready' ? 'Awaiting acceptance' : review.kind === 'pending' ? 'Generating' : 'Generation failed' }}</UBadge>
           </div>
           <p v-if="draftIsStale" class="dx-warning-note mt-4 rounded-sm p-3 text-sm leading-6" aria-live="polite">This draft was based on another branch head and can no longer be accepted. Its text remains visible so you can inspect it before discarding and generating again.</p>
           <template v-if="review.kind === 'ready'"><UFormField label="Generated text" class="mt-5"><UTextarea v-model="reviewText" :rows="9" autoresize aria-label="Editable generated text" /></UFormField></template>
+          <p v-else-if="review.kind === 'pending'" class="dx-source-note mt-5 rounded-sm p-3 text-sm leading-6" aria-live="polite">{{ review.message }}</p>
           <p v-else class="dx-error-note mt-5 rounded-sm p-3 text-sm leading-6">{{ reviewMessage }}</p>
-          <dl v-if="review.kind !== 'unavailable'" class="mt-5 grid gap-x-5 gap-y-3 border-y border-muted py-4 text-xs sm:grid-cols-2">
+          <dl v-if="review.kind === 'ready' || review.kind === 'failed'" class="mt-5 grid gap-x-5 gap-y-3 border-y border-muted py-4 text-xs sm:grid-cols-2">
             <div><dt class="dx-label">Provider / model</dt><dd class="mt-1 text-default">{{ review.provenance.providerModel }}</dd></div>
             <div><dt class="dx-label">Adapter</dt><dd class="mt-1 text-default">{{ review.provenance.adapter }}</dd></div>
             <div><dt class="dx-label">Usage</dt><dd class="mt-1 text-default">{{ review.provenance.usage }}</dd></div>
             <div><dt class="dx-label">Stop reason</dt><dd class="mt-1 text-default">{{ review.provenance.stopReason }}</dd></div>
           </dl>
           <div class="mt-5 flex flex-wrap justify-end gap-2">
-            <UButton v-if="review.kind === 'ready'" color="neutral" variant="subtle" :loading="busyAction === 'discard'" :disabled="busyAction === 'accept'" @click="discardDraft">Discard</UButton>
-            <UButton v-else color="neutral" variant="subtle" @click="continueAfterFailedDraft">Continue</UButton>
+            <UButton v-if="review.kind === 'ready' || review.kind === 'pending'" color="neutral" variant="subtle" :loading="busyAction === 'discard'" :disabled="busyAction === 'accept' || busyAction === 'refresh'" @click="discardDraft">{{ review.kind === 'pending' ? 'Cancel' : 'Discard' }}</UButton>
+            <UButton v-if="review.kind === 'pending'" icon="i-lucide-refresh-cw" color="primary" :loading="busyAction === 'refresh'" :disabled="busyAction === 'discard'" @click="refreshPendingDraft">Check again</UButton>
+            <UButton v-else-if="review.kind !== 'ready'" color="neutral" variant="subtle" @click="continueAfterFailedDraft">Continue</UButton>
             <UButton v-if="review.kind === 'ready'" icon="i-lucide-check" color="primary" :loading="busyAction === 'accept'" :disabled="busyAction === 'discard' || draftIsStale || !reviewText.trim()" @click="acceptDraft">Accept</UButton>
           </div>
         </section>
@@ -87,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { acceptDraftBody, classifyDraftReview, CommandConvergenceError, createCommandLease, isStaleDraftBasis, playableActors, runLeasedMutation, type CommandAction } from "../lib/stage-play";
+import { acceptDraftBody, classifyDraftReview, CommandConvergenceError, createCommandLease, isStaleDraftBasis, playableActors, runLeasedMutation, settleGenerationLease, type CommandAction } from "../lib/stage-play";
 
 type Actor = { id: string; name: string; kind: string };
 type SourceFile = { id: string; name: string; kind: string };
@@ -97,7 +99,7 @@ type RuntimeStatus = { configured: boolean; adapter: { id: string | null; versio
 type DraftProvenance = { adapter: { id: string; version: string }; providerId: string | null; modelId: string | null; usage: { totalTokens: number }; stopReason: string | null };
 type Draft = { id: string; branchId: string; basisHeadCommitId: string; actorId: string; status: string; artifact: { text: string; provenance: DraftProvenance } | null; failure: { message: string; provenance: DraftProvenance } | null };
 type StagedWhisper = { id: string; text: string; actorId: string; branchId: string; expectedHead: string };
-type BusyAction = CommandAction | null;
+type BusyAction = CommandAction | "refresh" | null;
 
 class ApiError extends Error { constructor(readonly status: number, message: string) { super(message); } }
 
@@ -209,9 +211,7 @@ async function generateDraft(): Promise<void> {
     const input = { branchId: branch.value.id, expectedHead: branch.value.headCommitId, actorId: selectedActorId.value, stageWhisperIds: whisperId ? [whisperId] : [] };
     busyAction.value = "generate";
     const result = await api<{ draft: Draft }>(`/simulations/${encodeURIComponent(simulationId.value)}/drafts`, { method: "POST", body: { ...input, commandId: commands.for("generate", input) } });
-    commands.succeed("generate"); reviewDraft.value = result.draft; draftIsStale.value = false;
-    const summary = classifyDraftReview(result.draft); reviewText.value = summary.kind === "ready" ? summary.text : "";
-    setStatus(summary.kind === "ready" ? "Draft ready for review." : "The generated draft failed. It was not added to the transcript.", summary.kind === "ready" ? "info" : "warning");
+    receiveGeneratedDraft(result.draft);
   } catch (error) {
     if (!(await refreshAfterConflict(error))) showRequestError(error, "Could not generate a draft.");
   }
@@ -226,6 +226,30 @@ async function stageDirectionIfNeeded(): Promise<string | null> {
   const whisper = await api<{ id: string }>(`/simulations/${encodeURIComponent(simulationId.value)}/whispers`, { method: "POST", body: { ...input, commandId: commands.for("whisper", input) } });
   commands.succeed("whisper"); stagedWhisper.value = { id: whisper.id, text, actorId: selectedActorId.value, branchId: branch.value.id, expectedHead: branch.value.headCommitId };
   return whisper.id;
+}
+function receiveGeneratedDraft(draft: Draft): void {
+  reviewDraft.value = draft;
+  draftIsStale.value = branch.value ? isStaleDraftBasis(draft, branch.value) : true;
+  const summary = classifyDraftReview(draft);
+  reviewText.value = summary.kind === "ready" ? summary.text : "";
+  settleGenerationLease(commands, draft.status);
+  if (summary.kind === "pending")
+    setStatus("Generation is still in progress. Check again to retrieve this same durable draft.", "info");
+  else if (summary.kind === "ready") setStatus("Draft ready for review.", "info");
+  else if (summary.kind === "failed")
+    setStatus("The generated draft failed. It was not added to the transcript.", "warning");
+  else setStatus(summary.message, "warning");
+}
+async function refreshPendingDraft(): Promise<void> {
+  const draft = reviewDraft.value;
+  if (!draft || review.value.kind !== "pending") return;
+  busyAction.value = "refresh";
+  try {
+    const refreshed = await api<Draft>(`/simulations/${encodeURIComponent(simulationId.value)}/drafts/${encodeURIComponent(draft.id)}`);
+    receiveGeneratedDraft(refreshed);
+  } catch (error) {
+    showRequestError(error, "Could not refresh this pending draft.");
+  } finally { busyAction.value = null; }
 }
 async function acceptDraft(): Promise<void> {
   const draft = reviewDraft.value; if (!draft || review.value.kind !== "ready") return;
@@ -282,7 +306,7 @@ async function refreshAfterConflict(error: unknown): Promise<boolean> {
   return true;
 }
 function continueAfterFailedDraft(): void {
-  if (review.value.kind === "ready") return;
+  if (review.value.kind === "ready" || review.value.kind === "pending") return;
   clearDraft(); setStatus("Failed draft closed. The canonical transcript is unchanged.", "info");
 }
 function clearDraft(): void { reviewDraft.value = null; reviewText.value = ""; direction.value = ""; stagedWhisper.value = null; draftIsStale.value = false; commands.reset(); }

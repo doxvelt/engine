@@ -9,6 +9,7 @@ import {
   isStaleDraftBasis,
   playableActors,
   runLeasedMutation,
+  settleGenerationLease,
   stableSerialize,
 } from "../src/local-ui/lib/stage-play.ts";
 
@@ -57,6 +58,21 @@ test("leased mutations retain identity until projection convergence succeeds", a
   assert.equal(seen.at(-1), "command-2");
 });
 
+test("generation leases survive pending replay and clear only at ready or failed", () => {
+  let next = 0;
+  const lease = createCommandLease(() => `generate-${++next}`);
+  const body = { branchId: "main", expectedHead: "root", actorId: "ceo" };
+  const commandId = lease.for("generate", body);
+
+  assert.equal(settleGenerationLease(lease, "generating"), false);
+  assert.equal(lease.for("generate", body), commandId);
+  assert.equal(settleGenerationLease(lease, "discarded"), false);
+  assert.equal(lease.for("generate", body), commandId);
+  assert.equal(settleGenerationLease(lease, "ready"), true);
+  assert.equal(lease.for("generate", body), "generate-2");
+  assert.equal(settleGenerationLease(lease, "failed"), true);
+});
+
 test("stable serialization is key-order independent and rejects unsupported values", () => {
   assert.equal(
     stableSerialize({ branchId: "main", nested: { b: 2, a: 1 } }),
@@ -90,7 +106,16 @@ test("acceptance omits only byte-identical artifact text", () => {
   });
 });
 
-test("draft review classification keeps failed output out of the editor and exposes safe provenance", () => {
+test("draft review classification distinguishes pending work and keeps failed output out of the editor", () => {
+  const pending = classifyDraftReview({
+    status: "generating",
+    artifact: null,
+    failure: null,
+  });
+  assert.equal(pending.kind, "pending");
+  assert.match(pending.message, /still in progress/i);
+  assert.equal("text" in pending, false);
+
   const ready = classifyDraftReview({
     status: "ready",
     artifact: {
@@ -165,7 +190,7 @@ test("Stage contains only the durable-draft play routes and uses the command lea
     new URL("../src/local-ui/pages/stage.vue", import.meta.url),
     "utf8",
   );
-  for (const required of ["/runtime", "/drafts", "/accept", "/discard", "createCommandLease", "runLeasedMutation", "continueAfterFailedDraft"])
+  for (const required of ["/runtime", "/drafts", "/accept", "/discard", "createCommandLease", "runLeasedMutation", "settleGenerationLease", "refreshPendingDraft", "continueAfterFailedDraft"])
     assert.ok(page.includes(required), `missing ${required}`);
   for (const retired of ["/turn-draft", "/turns", "localStorage", "modelItems", "inspectorTab"])
     assert.equal(page.includes(retired), false, `retired Stage surface: ${retired}`);

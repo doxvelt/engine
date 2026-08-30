@@ -62,6 +62,15 @@ export async function runLeasedMutation<T>(
   return result;
 }
 
+export function settleGenerationLease(
+  leases: CommandLeaseStore,
+  status: string,
+): boolean {
+  if (status !== "ready" && status !== "failed") return false;
+  leases.succeed("generate");
+  return true;
+}
+
 export type StageActor = { id: string; name?: string; kind: string };
 
 export function playableActors<T extends StageActor>(actors: readonly T[]): T[] {
@@ -98,6 +107,7 @@ export type CompactProvenance = {
 };
 
 export type DraftReview =
+  | { kind: "pending"; message: string }
   | { kind: "ready"; text: string; provenance: CompactProvenance }
   | { kind: "failed"; message: string; provenance: CompactProvenance }
   | { kind: "unavailable"; message: string };
@@ -107,6 +117,11 @@ export function classifyDraftReview(input: {
   artifact: { text?: unknown; provenance?: SafeProvenanceInput | null } | null;
   failure: { message?: unknown; provenance?: SafeProvenanceInput | null } | null;
 }): DraftReview {
+  if (input.status === "generating")
+    return {
+      kind: "pending",
+      message: "Generation is still in progress. Check again to retrieve the durable draft.",
+    };
   if (input.status === "ready" && typeof input.artifact?.text === "string")
     return {
       kind: "ready",
