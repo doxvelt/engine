@@ -11,6 +11,8 @@ import {
 import { DomainValidationError } from "../src/core/ports.ts";
 import { initWorkspace } from "../src/core/init.ts";
 import { createLocalApiServer } from "../src/local-api/server.ts";
+import type { ActorTurnRuntime } from "../src/agent-runtime/contracts.ts";
+import { DeterministicFakeRuntime } from "./helpers/deterministic-fake-runtime.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
 import { exportSimulationPackage } from "../src/store/portable.ts";
 
@@ -24,10 +26,12 @@ async function apiFixture(
   t: test.TestContext,
   dbPath: string,
   allowedOrigins?: readonly string[],
+  actorTurnRuntime?: ActorTurnRuntime,
 ) {
   const server = createLocalApiServer({
     dbPath,
     ...(allowedOrigins ? { allowedOrigins } : {}),
+    ...(actorTurnRuntime ? { actorTurnRuntime } : {}),
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(
@@ -258,7 +262,11 @@ test("accepted API drafts consume only their captured whisper snapshot", async (
     path.join(workspace, "models", "snapshot.md"),
     `---\nid: snapshot\nprovider: openai-compatible\nbase_url: ${modelBaseUrl}\nmodel: test-model\n---\n`,
   );
-  const base = await apiFixture(t, dbPath);
+  const runtime = new DeterministicFakeRuntime([
+    { type: "usage", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+    { type: "completed", text: "Snapshot-bound draft", stopReason: "stop" },
+  ]);
+  const base = await apiFixture(t, dbPath, undefined, runtime);
   const started = await jsonPost(base, "/simulations/start", {
     simulationId: "snapshot",
     workspacePath: workspace,
@@ -281,20 +289,20 @@ test("accepted API drafts consume only their captured whisper snapshot", async (
   const whisperA = await stage("whisper-a", "Whisper A");
   const draftResponse = await jsonPost(
     base,
-    "/simulations/snapshot/turn-draft",
+    "/simulations/snapshot/drafts",
     {
       branchId: "main",
       expectedHead: rootHead,
+      commandId: "generate-draft",
       actorId: "actor",
-      modelId: "snapshot",
+      stageWhisperIds: [whisperA.id],
     },
   );
   assert.equal(draftResponse.status, 200);
   const draft = (await draftResponse.json()) as {
-    text: string;
-    stageWhisperIds: string[];
+    draft: { id: string; stageWhispers: Array<{ id: string }> };
   };
-  assert.deepEqual(draft.stageWhisperIds, [whisperA.id]);
+  assert.deepEqual(draft.draft.stageWhispers.map((whisper) => whisper.id), [whisperA.id]);
   const whisperB = await stage("whisper-b", "Whisper B");
   const setupStore = await openBranchStore(dbPath).open();
   const foreignActorWhisper = setupStore.createStageWhisper({
@@ -325,34 +333,20 @@ test("accepted API drafts consume only their captured whisper snapshot", async (
     text: "Foreign branch direction",
   });
   setupStore.close();
-  const missingSnapshot = await jsonPost(base, "/simulations/snapshot/turns", {
-    branchId: "main",
-    expectedHead: rootHead,
-    commandId: "missing-snapshot",
-    actorId: "actor",
-    manualText: draft.text,
-    audience: [],
-  });
-  assert.equal(missingSnapshot.status, 400);
-  const invalidSnapshot = await jsonPost(base, "/simulations/snapshot/turns", {
+  const invalidSnapshot = await jsonPost(base, "/simulations/snapshot/drafts", {
     branchId: "main",
     expectedHead: rootHead,
     commandId: "invalid-snapshot",
     actorId: "actor",
-    manualText: draft.text,
-    audience: [],
     stageWhisperIds: ["missing-whisper"],
   });
   assert.equal(invalidSnapshot.status, 400);
-  const acceptedResponse = await jsonPost(base, "/simulations/snapshot/turns", {
-    branchId: "main",
-    expectedHead: rootHead,
-    commandId: "accept-draft",
-    actorId: "actor",
-    manualText: draft.text,
-    audience: [],
-    stageWhisperIds: draft.stageWhisperIds,
-  });
+  assert.equal(runtime.calls, 1);
+  const acceptedResponse = await jsonPost(
+    base,
+    `/simulations/snapshot/drafts/${draft.draft.id}/accept`,
+    { commandId: "accept-draft" },
+  );
   assert.equal(acceptedResponse.status, 200);
   const accepted = (await acceptedResponse.json()) as {
     commit: { id: string; events: Array<{ type: string; whisperId?: string }> };

@@ -3,7 +3,11 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
-import { generateDoxveltText } from "../ai/generate.ts";
+import {
+  acceptActorTurnDraft,
+  discardActorTurnDraft,
+  generateActorTurnDraft,
+} from "../core/draft-lifecycle.ts";
 import { closeBranchEpisode, requestEpisodeClosure, runEpisodeMemoryJob } from "../core/branch-episode.ts";
 import {
   assertExpectedBranchHead,
@@ -21,7 +25,6 @@ import {
 import { compileWorkspace } from "../core/compiler.ts";
 import { retractMemory, reviseMemory } from "../core/memory-operations.ts";
 import { initWorkspace } from "../core/init.ts";
-import { loadModelRecord } from "../core/models.ts";
 import {
   exportSimulationPackage,
   importSimulationPackage,
@@ -32,6 +35,7 @@ import {
   readSourceText,
   writeSourceText,
 } from "../core/source.ts";
+import type { ActorTurnRuntime } from "../agent-runtime/contracts.ts";
 import {
   openBranchStore,
   type SqliteSimulationRepository,
@@ -51,6 +55,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 export type LocalApiOptions = {
   dbPath?: string;
+  actorTurnRuntime?: ActorTurnRuntime;
   allowedOrigins?: readonly string[];
 };
 export function createLocalApiServer(options: LocalApiOptions = {}) {
@@ -70,7 +75,9 @@ export async function handleLocalApiRequest(
   const method = request.method || "GET";
   validateLocalBoundary(request, response, method, options);
   if (method === "OPTIONS") return end(response, 204);
-  const url = new URL(request.url || "/", "http://localhost");
+  const rawRequestTarget = request.url || "/";
+  rejectDotPathSegments(rawRequestTarget);
+  const url = new URL(rawRequestTarget, "http://localhost");
   if (url.searchParams.has("ownerScope"))
     throw new HttpError(
       400,
@@ -79,6 +86,8 @@ export async function handleLocalApiRequest(
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
   if (method === "GET" && url.pathname === "/health")
     return send(response, 200, { ok: true });
+  if (method === "GET" && url.pathname === "/runtime")
+    return send(response, 200, runtimeStatus(options.actorTurnRuntime));
   if (parts[0] === "source")
     return sourceRoute(method, parts, url, request, response);
   if (method === "POST" && parts[0] === "packages") {
@@ -274,78 +283,77 @@ export async function handleLocalApiRequest(
       });
     }
     if (method === "POST" && parts[2] === "turn-draft") {
-      const body = await bodyOf(request);
-      const actorId = required(body, "actorId");
-      const branchId = required(body, "branchId");
-      const expectedHead = required(body, "expectedHead");
-      assertExpectedBranchHead(store, {
-        ownerScope,
-        simulationId,
-        branchId,
-        expectedHead,
-      });
-      const pendingWhispers = store.listPendingStageWhispers(
-        ownerScope,
-        simulationId,
-        branchId,
-        expectedHead,
-        actorId,
+      throw new HttpError(
+        410,
+        "turn-draft is retired; generate a durable draft with POST /simulations/:simulationId/drafts.",
       );
+    }
+    if (method === "POST" && parts[2] === "drafts" && !parts[3]) {
+      const body = await bodyOf(request);
+      rejectRuntimeSelection(body);
+      if (!options.actorTurnRuntime)
+        throw new HttpError(503, "No local actor-turn runtime is configured.");
+      const base = envelope(body, ownerScope, simulationId);
       const audience =
         body.audience === undefined
           ? projectBranch(store, {
               ownerScope,
               simulationId,
-              branchId,
-              head: expectedHead,
+              branchId: base.branchId,
+              head: base.expectedHead,
             })
               .audience.filter((item) => item.status === "active")
               .map((item) => item.actorId)
           : strings(body, "audience");
-      const context = inspectActorContext(store, {
+      const result = await generateActorTurnDraft(store, options.actorTurnRuntime, {
+        ...base,
+        payload: {
+          actorId: required(body, "actorId"),
+          audience,
+          stageWhisperIds: strings(body, "stageWhisperIds"),
+          runtimeProfile: { id: "local-character", version: "v1" },
+          promptPolicy: { id: "default", version: "v1" },
+          outputSchema: { id: "screenplay", digest: "schema-v1" },
+          skillDigests: [],
+        },
+      });
+      return send(response, 200, result);
+    }
+    if (method === "GET" && parts[2] === "drafts" && parts[3] && !parts[4]) {
+      const draft = store.getActorTurnDraft(ownerScope, simulationId, parts[3]);
+      if (!draft) throw new HttpError(404, `Draft not found: ${parts[3]}`);
+      return send(response, 200, draft);
+    }
+    if (
+      method === "POST" &&
+      parts[2] === "drafts" &&
+      parts[3] &&
+      parts[4] === "accept" &&
+      parts.length === 5
+    ) {
+      const body = await bodyOf(request);
+      return send(response, 200, acceptActorTurnDraft(store, {
         ownerScope,
         simulationId,
-        branchId,
-        head: expectedHead,
-        actorId,
-        audience,
-        stageWhispers: [
-          ...pendingWhispers,
-          ...(optional(body, "whisperText")
-            ? [
-                {
-                  id: "draft",
-                  ownerScope,
-                  simulationId,
-                  branchId,
-                  expectedHead,
-                  commandId: "draft",
-                  targetActorId: actorId,
-                  text: optional(body, "whisperText")!,
-                  createdAt: new Date().toISOString(),
-                },
-              ]
-            : []),
-        ],
-      });
-      const modelId = required(body, "modelId");
-      const model = await loadModelRecord(simulation.sourceRoot, modelId);
-      if (!model) throw new HttpError(404, `Model not found: ${modelId}`);
-      const generated = await generateDoxveltText({
-        actorId,
-        purpose: "turn",
-        model,
-        prompt: context.promptPreview,
-      });
-      return send(response, 200, {
+        draftId: parts[3],
+        commandId: required(body, "commandId"),
+        ...(body.finalText === undefined ? {} : { finalText: any(body, "finalText") }),
+      }));
+    }
+    if (
+      method === "POST" &&
+      parts[2] === "drafts" &&
+      parts[3] &&
+      parts[4] === "discard" &&
+      parts.length === 5
+    ) {
+      const body = await bodyOf(request);
+      return send(response, 200, discardActorTurnDraft(store, {
+        ownerScope,
         simulationId,
-        actorId,
-        modelId,
-        text: generated.text.trim(),
-        audience: context.subjective.currentAudience,
-        stageWhisperIds: pendingWhispers.map((whisper) => String(whisper.id)),
-        context,
-      });
+        draftId: parts[3],
+        commandId: required(body, "commandId"),
+      }));
     }
     if (method === "POST" && parts[2] === "audience") {
       const body = await bodyOf(request);
@@ -779,6 +787,65 @@ function sendError(response: ServerResponse, error: unknown) {
     error: error instanceof Error ? error.message : String(error),
   });
 }
+function rejectDotPathSegments(requestTarget: string): void {
+  const rawPath = requestTarget.split("?", 1)[0] || "/";
+  for (const segment of rawPath.split("/")) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      throw new HttpError(400, "Request path contains invalid encoding.");
+    }
+    if (decoded === "." || decoded === "..")
+      throw new HttpError(404, "Request path contains a forbidden dot segment.");
+  }
+}
+
+function rejectRuntimeSelection(body: Record<string, unknown>): void {
+  for (const key of [
+    "modelId",
+    "baseUrl",
+    "runtimeProfile",
+    "promptPolicy",
+    "outputSchema",
+    "skills",
+    "apiKey",
+    "ownerScope",
+  ]) {
+    if (Object.hasOwn(body, key))
+      throw new HttpError(400, `${key} is deployment-owned and must not be supplied.`);
+  }
+}
+
+function runtimeStatus(runtime: ActorTurnRuntime | undefined) {
+  const identity = runtime?.identity;
+  return {
+    configured: Boolean(runtime),
+    runtimeProfile: { id: "local-character", version: "v1" },
+    adapter: runtime
+      ? {
+          id: publicRuntimeIdentity(identity?.id),
+          version: publicRuntimeIdentity(identity?.version),
+        }
+      : null,
+    provider: runtime ? publicRuntimeIdentity(identity?.providerId) : null,
+    model: runtime ? publicRuntimeIdentity(identity?.modelId) : null,
+  };
+}
+
+function publicRuntimeIdentity(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (
+    !normalized ||
+    normalized.length > 160 ||
+    /^[a-z][a-z\d+.-]*:\/\//i.test(normalized) ||
+    /(?:^|[/_=-])(?:sk|pk|rk|api[_-]?key|token|secret)(?:[/_=-]|$)/i.test(normalized)
+  )
+    return null;
+  return normalized;
+}
+
 function validateLocalBoundary(
   request: IncomingMessage,
   response: ServerResponse,
