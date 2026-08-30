@@ -210,50 +210,18 @@ test("CLI draft generates non-canonical text and turn rejects direct AI acceptan
   const address = api.address();
   if (!address || typeof address === "string")
     throw new Error("Missing API address.");
-  const requestsBeforeInvalidAudience = modelServer.requestCount();
-  const invalidAudienceResponse = await fetch(
-    `http://127.0.0.1:${address.port}/simulations/default/turn-draft`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        actorId: "actor",
-        modelId: "draft-model",
-        branchId: "main",
-        expectedHead: head,
-        audience: ["missing-actor"],
-      }),
-    },
-  );
-  assert.equal(invalidAudienceResponse.status, 404);
-  assert.equal(modelServer.requestCount(), requestsBeforeInvalidAudience);
+  const requestsBeforeRetiredRoute = modelServer.requestCount();
   const response = await fetch(
     `http://127.0.0.1:${address.port}/simulations/default/turn-draft`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        actorId: "actor",
-        modelId: "draft-model",
-        branchId: "main",
-        expectedHead: head,
-        audience: ["observer"],
-      }),
+      body: JSON.stringify({ modelId: "draft-model" }),
     },
   );
-  assert.equal(response.status, 200);
-  const apiDraft = (await response.json()) as {
-    text: string;
-    audience: string[];
-    context: { subjective: { currentAudience: string[] }; promptPreview: string };
-  };
-  assert.equal(apiDraft.text, "Generated draft text");
-  assert.deepEqual(apiDraft.audience, ["actor", "observer"]);
-  assert.deepEqual(apiDraft.context.subjective.currentAudience, [
-    "actor",
-    "observer",
-  ]);
-  assert.match(apiDraft.context.promptPreview, /@observer/);
+  assert.equal(response.status, 410);
+  assert.match(JSON.stringify(await response.json()), /durable draft/);
+  assert.equal(modelServer.requestCount(), requestsBeforeRetiredRoute);
   const afterApiDraft = await openBranchStore(dbPath).open();
   try {
     assert.equal(
