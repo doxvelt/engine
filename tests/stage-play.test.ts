@@ -1,0 +1,172 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+import {
+  acceptDraftBody,
+  classifyDraftReview,
+  createCommandLease,
+  isStaleDraftBasis,
+  playableActors,
+  runLeasedMutation,
+  stableSerialize,
+} from "../src/local-ui/lib/stage-play.ts";
+
+test("command leases reuse an ID for an unchanged action body and clear only explicitly", () => {
+  let next = 0;
+  const lease = createCommandLease(() => `command-${++next}`);
+  const first = lease.for("generate", { actorId: "jade", expectedHead: "root" });
+
+  assert.equal(
+    lease.for("generate", { expectedHead: "root", actorId: "jade" }),
+    first,
+  );
+  assert.equal(
+    lease.for("generate", { actorId: "jade", expectedHead: "next" }),
+    "command-2",
+  );
+  assert.equal(lease.for("accept", { draftId: "draft-1" }), "command-3");
+
+  lease.succeed("generate");
+  assert.equal(
+    lease.for("generate", { actorId: "jade", expectedHead: "root" }),
+    "command-4",
+  );
+  lease.reset();
+  assert.equal(lease.for("accept", { draftId: "draft-1" }), "command-5");
+});
+
+test("leased mutations retain identity until projection convergence succeeds", async () => {
+  let next = 0;
+  const lease = createCommandLease(() => `command-${++next}`);
+  const seen: string[] = [];
+  let convergenceFails = true;
+  const execute = () => runLeasedMutation(
+    lease,
+    "accept",
+    { draftId: "draft-1", finalText: "Edited" },
+    async (commandId) => { seen.push(commandId); return { replayed: seen.length > 1 }; },
+    async () => { if (convergenceFails) throw new Error("projection unavailable"); },
+  );
+
+  await assert.rejects(execute(), /projection did not load/);
+  convergenceFails = false;
+  assert.deepEqual(await execute(), { replayed: true });
+  assert.deepEqual(seen, ["command-1", "command-1"]);
+  await execute();
+  assert.equal(seen.at(-1), "command-2");
+});
+
+test("stable serialization is key-order independent and rejects unsupported values", () => {
+  assert.equal(
+    stableSerialize({ branchId: "main", nested: { b: 2, a: 1 } }),
+    stableSerialize({ nested: { a: 1, b: 2 }, branchId: "main" }),
+  );
+  assert.throws(() => stableSerialize({ date: new Date() }), /plain objects/);
+  const cyclic: { self?: unknown } = {};
+  cyclic.self = cyclic;
+  assert.throws(() => stableSerialize(cyclic), /cyclic/);
+});
+
+test("Stage actor choices contain only sorted generative agents", () => {
+  assert.deepEqual(
+    playableActors([
+      { id: "board", name: "Board", kind: "affiliation" },
+      { id: "coo", name: "COO", kind: "agent" },
+      { id: "ceo", name: "CEO", kind: "agent" },
+      { id: "guest", name: "Guest", kind: "stateless" },
+    ]).map((actor) => actor.id),
+    ["ceo", "coo"],
+  );
+});
+
+test("acceptance omits only byte-identical artifact text", () => {
+  assert.deepEqual(acceptDraftBody("accept-1", "Generated text", "Generated text"), {
+    commandId: "accept-1",
+  });
+  assert.deepEqual(acceptDraftBody("accept-2", "Generated text", "Generated text "), {
+    commandId: "accept-2",
+    finalText: "Generated text ",
+  });
+});
+
+test("draft review classification keeps failed output out of the editor and exposes safe provenance", () => {
+  const ready = classifyDraftReview({
+    status: "ready",
+    artifact: {
+      text: "A generated response.",
+      provenance: {
+        adapter: { id: "pi", version: "3.4" },
+        providerId: "openai",
+        modelId: "gpt-test",
+        usage: { inputTokens: 12, outputTokens: 8, totalTokens: 20 },
+        stopReason: "stop",
+      },
+    },
+    failure: null,
+  });
+  assert.deepEqual(ready, {
+    kind: "ready",
+    text: "A generated response.",
+    provenance: {
+      providerModel: "openai / gpt-test",
+      adapter: "pi v3.4",
+      usage: "20 tokens",
+      stopReason: "stop",
+    },
+  });
+
+  const failed = classifyDraftReview({
+    status: "failed",
+    artifact: null,
+    failure: {
+      message: "The runtime stopped before producing a draft.",
+      provenance: {
+        adapter: { id: "pi", version: "3.4" },
+        providerId: null,
+        modelId: null,
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: null },
+        stopReason: "error",
+      },
+    },
+  });
+  assert.equal(failed.kind, "failed");
+  assert.equal(failed.message, "The runtime stopped before producing a draft.");
+  assert.equal("text" in failed, false);
+  assert.equal(failed.provenance.providerModel, "Provider / model unavailable");
+});
+
+test("staleness compares the draft basis against the current branch head, never transcript IDs", () => {
+  assert.equal(
+    isStaleDraftBasis(
+      { branchId: "main", basisHeadCommitId: "commit-1" },
+      { id: "main", headCommitId: "commit-1" },
+    ),
+    false,
+  );
+  assert.equal(
+    isStaleDraftBasis(
+      { branchId: "main", basisHeadCommitId: "commit-1" },
+      { id: "main", headCommitId: "commit-2" },
+    ),
+    true,
+  );
+  assert.equal(
+    isStaleDraftBasis(
+      { branchId: "other", basisHeadCommitId: "commit-1" },
+      { id: "main", headCommitId: "commit-1" },
+    ),
+    true,
+  );
+});
+
+test("Stage contains only the durable-draft play routes and uses the command lease", async () => {
+  const page = await readFile(
+    new URL("../src/local-ui/pages/stage.vue", import.meta.url),
+    "utf8",
+  );
+  for (const required of ["/runtime", "/drafts", "/accept", "/discard", "createCommandLease", "runLeasedMutation", "continueAfterFailedDraft"])
+    assert.ok(page.includes(required), `missing ${required}`);
+  for (const retired of ["/turn-draft", "/turns", "localStorage", "modelItems", "inspectorTab"])
+    assert.equal(page.includes(retired), false, `retired Stage surface: ${retired}`);
+});
