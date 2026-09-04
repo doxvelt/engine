@@ -14,6 +14,7 @@ Read these first:
 6. `docs/design/ENTITY_DOSSIER_FORMAT.md`
 7. `docs/design/SYSTEM_LOOP.md`
 8. `docs/design/MVP_ARCHITECTURE.md`
+9. `docs/design/STAGE_EXPERIENCE.md` for Stage interaction work and reviews
 
 ## Product Direction
 
