@@ -24,12 +24,30 @@ Design the beginning and the middle together: turn 1 is an empty-state variation
 These are proposed treatments, not immutable requirements:
 
 - A compact scene header, independently scrolling transcript, and anchored composer.
-- Explicit **Direct / Perform** choices within one composer, with distinct text buffers and submission labels. Never reinterpret existing input silently when switching intent.
+- Compact **Direct / Perform** choices within one composer, with distinct text buffers and submission labels. Never reinterpret existing input silently when switching intent.
 - A proposed performance at the transcript's leading edge of new history; acceptance promotes it into history without relocating the next-action area.
-- Opening context in the conversation area, accessible later through a scene brief rather than repeated above every turn.
+- An opening expressed through the selected play format: for a screenplay, a scene heading and opening action. It remains at the start of the conversation after turns are accepted. Avoid a generic onboarding card, cast-chip strip, or separate compulsory briefing step.
+- Scene setup accessible through the scene title. Authored starting situation, format-specific presentation and private director guidance are distinct; seeing a brief does not confer its contents on every actor.
+- Sender on the left of a turn header; recipients on the right. The audience control can reveal turn number, provenance and accepted state on tap or keyboard activation. Accepted history is the unmarked default; a draft keeps an explicit textual boundary.
+- Remove redundant composer dividers, next-turn counters, repeated role instructions and a second review-panel heading. Preserve actions, not duplicate explanations.
 - Keep the acting character explicit after acceptance; do not silently advance to a different actor unless a scenario-defined rule is disclosed.
 
 Whether manually written performances need a separate preview is an open design decision. Their commit semantics must be explicit either way. Audience controls and draft retries must map to actual domain operations before production integration; a prototype is not proof that those seams exist.
+
+## Agreed notation semantics; editor treatment under evaluation
+
+`#nell @mara “Mara. A word.” Nell steps toward the mooring post, away from the passenger.`
+
+- `#` identifies the single sender. `@` identifies recipients. One other recipient means a direct turn without a separate direct-message mode.
+- **Every explicit @mention applies to the entire turn**, including mentions inside dialogue, private direction, or an agent's proposed response. There are no passage-level audience changes and no separate non-routing “reference mention” interpretation.
+- A plain name in prose has no routing effect. “Do not tell @ivo” nevertheless includes Ivo; use the plain name when not issuing a recipient instruction.
+- Resolve recipients from all mention occurrences, deduplicate them, and show the complete resulting audience before acceptance. The sender also perceives their own turn. Generated mentions remain staged draft data; they do not deliver anything during generation.
+- Leading routing notation may render as a from/to header; in-prose mentions may remain inline. Their audience semantics are identical. Removing one occurrence removes that recipient only if no remaining occurrence includes them.
+- Unknown identities and multiple senders require correction; never guess a recipient or silently fall back to public delivery.
+
+The current disposable study tests editable chips, keyboard completion, click/backspace removal, and equivalent #/@ picker buttons. It uses `@everyone` as an explicit fixture-wide recipient set and requires at least one recipient rather than inventing an implicit public default. These alias/default details and the exact editor behaviour remain prototype choices, not a new engine grammar or shipped capability.
+
+Keep prototype limitations in one plain, discoverable notice: example replies are not generated from direction, and nothing is saved. Do not repeat “canned alternative” metadata inside performances.
 
 ## Review benchmark
 
@@ -38,6 +56,8 @@ Evaluate the **same layout** with no accepted turns, a long established transcri
 - Can a user identify the situation, current run, acting character, and next action without assistance?
 - Can they distinguish writing dialogue/actions from privately directing a performance before submission?
 - Is the resulting audience explicit, including private or restricted turns?
+- Does an inline @mention, including one emitted in a draft response, update the whole-turn audience visibly without committing it? Does deletion respect other remaining occurrences?
+- Can a user type, select, remove and undo routing chips without losing prose or line breaks? Do intent switches preserve separate text?
 - Can they tell proposed from accepted content without colour or technical identifiers?
 - Can they read, edit, retry, accept, and discard without hunting for controls?
 - Does accepting a proposal preserve a predictable route to the next turn?
