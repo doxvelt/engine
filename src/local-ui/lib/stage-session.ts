@@ -75,8 +75,6 @@ export class StageSession {
         this.request<{ drafts: StageDraft[] }>(`/drafts${query}`),
       ]);
       if (this.disposed || version !== this.refreshVersion) return;
-      const previous = this.selectedDraft;
-      const dirty = this.unsavedReview;
       let generated = recovery.drafts.find(draft => draft.generationCommandId === this.generationId);
       // Finished records disappear from discovery, regardless of which draft is
       // selected. Retain and refresh the identity associated with the live lease.
@@ -84,12 +82,25 @@ export class StageSession {
         generated = await this.request<StageDraft>(`/drafts/${encodeURIComponent(this.generationDraft.id)}`);
         if (this.disposed || version !== this.refreshVersion) return;
       }
-      // Terminal records are absent from discovery. Read the selected record to
-      // preserve dirty text without pretending the saved draft is still pending.
-      if (previous && (this.pending || dirty) && !recovery.drafts.some(draft => draft.id === previous.id)) {
-        const terminal = generated?.id === previous.id ? generated : await this.request<StageDraft>(`/drafts/${encodeURIComponent(previous.id)}`);
+      // Selection and editor text can change during either terminal read. Gather
+      // missing records without applying them, rechecking selection after each await.
+      const terminalReads = new Map<string, StageDraft>();
+      if (generated) terminalReads.set(generated.id, stageDraft(generated));
+      while (true) {
+        const selected = this.selectedDraft;
+        if (!selected || !(this.pending || this.unsavedReview) ||
+            recovery.drafts.some(draft => draft.id === selected.id) || terminalReads.has(selected.id)) break;
+        const terminal = await this.request<StageDraft>(`/drafts/${encodeURIComponent(selected.id)}`);
         if (this.disposed || version !== this.refreshVersion) return;
-        recovery.drafts.push(stageDraft(terminal));
+        terminalReads.set(selected.id, stageDraft(terminal));
+      }
+      // No awaits below: preserve the CURRENT editor, and retain a terminal record
+      // only if the current selection still needs it for review or reconciliation.
+      const previous = this.selectedDraft;
+      const dirty = this.unsavedReview;
+      if (previous && (this.pending || dirty) && !recovery.drafts.some(draft => draft.id === previous.id)) {
+        const terminal = terminalReads.get(previous.id);
+        if (terminal) recovery.drafts.push(terminal);
       }
       this.projection = projection;
       this.drafts = recovery.drafts;
