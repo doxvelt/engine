@@ -173,22 +173,30 @@ watch(() => [route.query.simulation, route.query.branch], async () => {
   if (session.value.scope.simulationId === nextSimulation && session.value.scope.branchId === nextBranch) return;
   simulationId.value = nextSimulation; branchId.value = nextBranch; await openRun(false);
 });
-async function openRun(updateRoute = true): Promise<void> {
+function captureSetupScope() {
+  return Object.freeze({ apiBase: apiBase.value, simulationId: simulationId.value, branchId: branchId.value, workspacePath: workspacePath.value });
+}
+function matchesSetupScope(scope: ReturnType<typeof captureSetupScope>): boolean {
+  return scope.apiBase === apiBase.value && scope.simulationId === simulationId.value && scope.branchId === branchId.value && scope.workspacePath === workspacePath.value;
+}
+async function openRun(updateRoute = true, scope = captureSetupScope()): Promise<void> {
+  if (!mounted || !matchesSetupScope(scope)) return;
   const version = ++setupVersion;
   session.value.dispose();
-  const current = new StageSession({ apiBase: apiBase.value, simulationId: simulationId.value, branchId: branchId.value });
-  session.value = current;
+  session.value = new StageSession(scope);
+  const current = session.value;
+  const ownsSetup = () => mounted && version === setupVersion && session.value === current && matchesSetupScope(scope);
   setupBusy.value = true; setupError.value = '';
   try {
-    const status = await stageSetupRequest<RuntimeStatus>(apiBase.value, '/runtime');
-    if (!mounted || version !== setupVersion) return;
+    const status = await stageSetupRequest<RuntimeStatus>(scope.apiBase, '/runtime');
+    if (!ownsSetup()) return;
     runtime.value = status;
-    await session.value.refresh();
-    if (!mounted || version !== setupVersion) return;
-    if (updateRoute) await navigateTo({ path: '/stage', query: { workspace: workspacePath.value, simulation: simulationId.value, branch: branchId.value } }, { replace: true });
+    await current.refresh();
+    if (!ownsSetup()) return;
+    if (updateRoute) await navigateTo({ path: '/stage', query: { workspace: scope.workspacePath, simulation: scope.simulationId, branch: scope.branchId } }, { replace: true });
   } catch (error) {
-    if (mounted && version === setupVersion && !(error instanceof StageApiError && error.status === 404)) setupError.value = error instanceof Error ? error.message : String(error);
-  } finally { if (mounted && version === setupVersion) setupBusy.value = false; }
+    if (ownsSetup() && !(error instanceof StageApiError && error.status === 404)) setupError.value = error instanceof Error ? error.message : String(error);
+  } finally { if (ownsSetup()) setupBusy.value = false; }
 }
 async function discoverSource(): Promise<void> {
   const base = apiBase.value; const workspace = workspacePath.value;
@@ -200,15 +208,27 @@ async function discoverSource(): Promise<void> {
   } catch (error) { if (mounted) setupError.value = String(error); }
 }
 async function startSimulation(): Promise<void> {
-  if (setupBusy.value) return;
+  if (!mounted || setupBusy.value) return;
+  const scope = captureSetupScope();
+  const input = Object.freeze({ workspacePath: scope.workspacePath, simulationId: scope.simulationId, branchId: scope.branchId, scenarioId: scenarioId.value });
+  let version = setupVersion;
+  let owner = session.value;
+  const ownsSetup = () => mounted && version === setupVersion && session.value === owner && matchesSetupScope(scope) && scenarioId.value === input.scenarioId;
   setupBusy.value = true; setupError.value = '';
-  const input = { workspacePath: workspacePath.value, simulationId: simulationId.value, branchId: branchId.value, scenarioId: scenarioId.value };
   try {
-    await runLeasedMutation(setupCommands, 'start', input,
-      commandId => stageSetupRequest(apiBase.value, '/simulations/start', { ...input, commandId }),
-      async () => { await openRun(); if (!session.value.projection) throw new Error('Run created; retry Start to load it.'); });
-  } catch (error) { setupError.value = error instanceof Error ? error.message : String(error); }
-  finally { if (mounted) setupBusy.value = false; }
+    await runLeasedMutation(setupCommands, 'start', { ...input, apiBase: scope.apiBase },
+      commandId => stageSetupRequest(scope.apiBase, '/simulations/start', { ...input, commandId }),
+      async () => {
+        if (!ownsSetup()) throw new Error('Start no longer owns this setup.');
+        const loading = openRun(true, scope);
+        // openRun synchronously transfers ownership to its new version/session.
+        version = setupVersion; owner = session.value;
+        await loading;
+        if (!ownsSetup()) throw new Error('Start no longer owns this setup.');
+        if (!owner.projection) throw new Error('Run created; retry Start to load it.');
+      });
+  } catch (error) { if (ownsSetup()) setupError.value = error instanceof Error ? error.message : String(error); }
+  finally { if (ownsSetup()) setupBusy.value = false; }
 }
 </script>
 

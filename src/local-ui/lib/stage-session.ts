@@ -20,6 +20,7 @@ export class StageSession {
   private commands = createCommandLease(() => crypto.randomUUID());
   private pending: (() => Promise<void>) | null = null;
   private generationId: string | null = null;
+  private generationDraft: StageDraft | null = null;
   projection: StageProjection | null = null;
   drafts: StageDraft[] = [];
   selectedDraftId: string | null = null;
@@ -76,15 +77,23 @@ export class StageSession {
       if (this.disposed || version !== this.refreshVersion) return;
       const previous = this.selectedDraft;
       const dirty = this.unsavedReview;
+      let generated = recovery.drafts.find(draft => draft.generationCommandId === this.generationId);
+      // Finished records disappear from discovery, regardless of which draft is
+      // selected. Retain and refresh the identity associated with the live lease.
+      if (!generated && this.generationDraft?.generationCommandId === this.generationId) {
+        generated = await this.request<StageDraft>(`/drafts/${encodeURIComponent(this.generationDraft.id)}`);
+        if (this.disposed || version !== this.refreshVersion) return;
+      }
       // Terminal records are absent from discovery. Read the selected record to
       // preserve dirty text without pretending the saved draft is still pending.
       if (previous && (this.pending || dirty) && !recovery.drafts.some(draft => draft.id === previous.id)) {
-        const terminal = await this.request<StageDraft>(`/drafts/${encodeURIComponent(previous.id)}`);
+        const terminal = generated?.id === previous.id ? generated : await this.request<StageDraft>(`/drafts/${encodeURIComponent(previous.id)}`);
         if (this.disposed || version !== this.refreshVersion) return;
         recovery.drafts.push(stageDraft(terminal));
       }
       this.projection = projection;
       this.drafts = recovery.drafts;
+      if (generated?.generationCommandId === this.generationId) this.generationDraft = stageDraft(generated);
       if (!this.actorId) this.actorId = this.actors[0]?.id || "";
       if (!this.initialized) {
         this.selectDraft(this.drafts[0]?.id || null);
@@ -110,8 +119,12 @@ export class StageSession {
     // Discovery may find a completed draft after its POST response was lost.
     // Keep that command leased until the pending operation itself converges.
     if (this.pending) return;
-    const generated = this.drafts.find(draft => draft.generationCommandId === this.generationId);
-    if (generated && settleGenerationLease(this.commands, generated.status)) this.generationId = null;
+    const generated = this.generationDraft;
+    if (!generated || generated.generationCommandId !== this.generationId) return;
+    if (generated.status === "accepted" || generated.status === "discarded") this.commands.succeed("generate");
+    else if (!settleGenerationLease(this.commands, generated.status)) return;
+    this.generationId = null;
+    this.generationDraft = null;
   }
   selectDraft(id: string | null): void {
     if (this.selectedDraftId !== id) this.notice = "";
@@ -180,6 +193,7 @@ export class StageSession {
       if (this.disposed) return;
       const input = { ...basis, stageWhisperIds: whisperId ? [whisperId] : [] };
       const commandId = this.commands.for("generate", input);
+      if (this.generationId !== commandId) this.generationDraft = null;
       this.generationId = commandId;
       const result = await this.request<{ draft: StageDraft }>("/drafts", { ...input, commandId });
       await this.receiveGeneratedDraft(result.draft);
@@ -187,6 +201,7 @@ export class StageSession {
     });
   }
   private async receiveGeneratedDraft(draft: StageDraft): Promise<void> {
+    if (draft.generationCommandId === this.generationId) this.generationDraft = stageDraft(draft);
     await this.refresh();
     if (this.disposed) return;
     if (!this.drafts.some(item => item.id === draft.id) && ["ready", "failed", "generating"].includes(draft.status)) this.drafts.push(stageDraft(draft));
