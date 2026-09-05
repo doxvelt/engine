@@ -1,4 +1,6 @@
-export type CommandAction = "start" | "whisper" | "generate" | "accept" | "discard";
+import { canOwnTurn } from "../../core/turn-ownership.ts";
+
+export type CommandAction = "start" | "whisper" | "generate" | "accept" | "discard" | "perform" | "retry";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -75,7 +77,7 @@ export type StageActor = { id: string; name?: string; kind: string };
 
 export function playableActors<T extends StageActor>(actors: readonly T[]): T[] {
   return actors
-    .filter((actor) => actor.kind === "agent")
+    .filter(canOwnTurn)
     .toSorted((left, right) =>
       (left.name || left.id).localeCompare(right.name || right.id),
     );

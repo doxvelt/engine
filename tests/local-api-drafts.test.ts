@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createServer, request as httpRequest } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -390,4 +390,163 @@ test("draft validation maps stale, actor, audience, whisper, and command conflic
   const retired = await post(base, "/simulations/sim/turn-draft", { modelId: "ignored" });
   assert.equal(retired.status, 410);
   assert.equal(runtime.calls, 1);
+});
+
+
+test("Stage discovery is branch scoped, deterministic and durable without a browser pointer", async (t) => {
+  const { base, dbPath } = await fixture(t, new DeterministicFakeRuntime([
+    { type: "completed", text: "A draft.", stopReason: "stop" },
+  ]));
+  const start = await started(base);
+  const drafts = [];
+  for (const command of ["first", "second"]) {
+    const response = await post(base, "/simulations/sim/drafts", generate(start.root.id, command));
+    drafts.push((await response.json()).draft);
+  }
+  const discover = await fetch(`${base}/simulations/sim/drafts?branchId=main`);
+  assert.equal(discover.status, 200);
+  assert.deepEqual((await discover.json()).drafts.map((draft: { id: string }) => draft.id), drafts.map(draft => draft.id));
+  for (const route of ["/simulations/sim/drafts?branchId=wrong", "/simulations/wrong/drafts?branchId=main"])
+    assert.equal((await fetch(base + route)).status, 404);
+  const reopened = await openBranchStore(dbPath).open();
+  try {
+    assert.deepEqual(reopened.listRecoverableActorTurnDrafts("wrong", "sim", "main"), []);
+    assert.deepEqual(reopened.listRecoverableActorTurnDrafts("local", "sim", "wrong"), []);
+    assert.equal(reopened.listRecoverableActorTurnDrafts("local", "sim", "main").length, 2);
+  } finally { reopened.close(); }
+  await post(base, `/simulations/sim/drafts/${drafts[0].id}/discard`, { commandId: "discard-first" });
+  await post(base, `/simulations/sim/drafts/${drafts[1].id}/accept`, { commandId: "accept-second" });
+  assert.deepEqual((await (await fetch(`${base}/simulations/sim/drafts?branchId=main`)).json()).drafts, []);
+});
+
+test("authored stateless actors own restricted first and later turns through Perform and Direct", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-scene-source-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await cp(workspace, root, { recursive: true });
+  await mkdir(path.join(root, "entities", "scene"));
+  await writeFile(path.join(root, "entities", "scene", "IDENTITY.md"), "---\nid: scene\nname: Scene\nkind: stateless\nvisibility: public\n---\nAn authored scene-setting actor.\n");
+  const runtime = new DeterministicFakeRuntime([
+    { type: "completed", text: "The room falls quiet.", stopReason: "stop" },
+  ], request => {
+    assert.equal(request.actorId, "scene");
+    assert.doesNotMatch(request.prompt, /operations team is hiding|may replace @ceo/);
+  });
+  const { base } = await fixture(t, runtime);
+  for (const firstMode of ["manual", "generated"]) {
+    const sim = `scene-${firstMode}`;
+    const start = await post(base, "/simulations/start", { simulationId: sim, workspacePath: root, scenarioId: "executive-interviews", branchId: "main", commandId: "start" });
+    assert.equal(start.status, 200);
+    let head = (await start.json()).root.id;
+    for (const mode of [firstMode, firstMode === "manual" ? "generated" : "manual"]) {
+      const input = { branchId: "main", expectedHead: head, commandId: mode, actorId: "scene", audience: ["cfo"], stageWhisperIds: [] };
+      if (mode === "manual") {
+        const body = { ...input, manualText: "A chair scrapes the floor." };
+        const response = await post(base, `/simulations/${sim}/turns`, body);
+        assert.equal(response.status, 200);
+        const replay = await post(base, `/simulations/${sim}/turns`, body);
+        assert.equal(replay.status, 200, "lost manual response must replay after the head advanced");
+        assert.equal((await replay.json()).replayed, true);
+      } else {
+        const before = await (await fetch(`${base}/simulations/${sim}/transcript`)).json();
+        const response = await post(base, `/simulations/${sim}/drafts`, input);
+        assert.equal(response.status, 200);
+        const draft = (await response.json()).draft;
+        assert.equal(draft.status, "ready");
+        assert.deepEqual((await (await fetch(`${base}/simulations/${sim}/transcript`)).json()).transcript, before.transcript);
+        assert.equal((await post(base, `/simulations/${sim}/drafts/${draft.id}/accept`, { commandId: "accept" })).status, 200);
+      }
+      const projection = await (await fetch(`${base}/simulations/${sim}/transcript`)).json();
+      head = projection.branch.headCommitId;
+      assert.equal(projection.transcript.at(-1).actorId, "scene");
+      assert.deepEqual(projection.transcript.at(-1).audience.toSorted(), ["cfo", "scene"]);
+      const excluded = await (await fetch(`${base}/simulations/${sim}/context/ceo`)).json();
+      assert.equal(excluded.subjective.transcript.length, 0);
+    }
+    assert.equal((await (await fetch(`${base}/simulations/${sim}/transcript`)).json()).transcript.length, 2);
+  }
+});
+
+test("Stage retry captures original routing and whispers; failed drafts can be dismissed", async (t) => {
+  let fail = false;
+  const runtime: ActorTurnRuntime = {
+    identity: { id: "deterministic-test", version: "1" },
+    async *runActorTurn(request) {
+      assert.equal(request.actorId, "ceo");
+      assert.match(request.prompt, /Keep the answer brief/);
+      if (fail) throw new Error("deliberate runtime failure");
+      yield { type: "completed", text: "A measured answer.", stopReason: "stop" };
+    },
+  };
+  const { base } = await fixture(t, runtime);
+  const start = await started(base);
+  const whisper = await (await post(base, "/simulations/sim/whispers", { branchId: "main", expectedHead: start.root.id, commandId: "whisper", targetActorId: "ceo", text: "Keep the answer brief" })).json();
+  const original = (await (await post(base, "/simulations/sim/drafts", { ...generate(start.root.id), stageWhisperIds: [whisper.id] })).json()).draft;
+  const response = await post(base, `/simulations/sim/drafts/${original.id}/retry`, { commandId: "retry" });
+  assert.equal(response.status, 200);
+  const candidate = (await response.json()).draft;
+  assert.notEqual(candidate.id, original.id);
+  assert.deepEqual(candidate.audience, original.audience);
+  assert.deepEqual(candidate.stageWhispers, original.stageWhispers);
+  const replay = await post(base, `/simulations/sim/drafts/${original.id}/retry`, { commandId: "retry" });
+  assert.equal((await replay.json()).draft.id, candidate.id);
+  const rejected = await post(base, `/simulations/sim/drafts/${original.id}/retry`, { commandId: "bad", actorId: "coo" });
+  assert.equal(rejected.status, 400);
+  fail = true;
+  const failed = (await (await post(base, `/simulations/sim/drafts/${original.id}/retry`, { commandId: "fail" })).json()).draft;
+  assert.equal(failed.status, "failed");
+  assert.equal((await post(base, `/simulations/sim/drafts/${failed.id}/discard`, { commandId: "dismiss" })).status, 200);
+  const state = await (await fetch(`${base}/simulations/sim/stage?branchId=main`)).json();
+  assert.equal(state.scenarioName, "Executive Interviews");
+  assert.deepEqual(state.transcript, []);
+  assert.equal(JSON.stringify(state).includes("operations team is hiding"), false);
+  assert.ok(state.actors.every((actor: object) => Object.keys(actor).toSorted().join() === "id,kind,name"));
+});
+
+test("draft discovery survives API restart with ready, failed and in-progress records", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-stage-restart-"));
+  const dbPath = path.join(root, "runtime.sqlite");
+  let finish: () => void = () => {};
+  const waiting = new Promise<void>(resolve => { finish = resolve; });
+  let mode = "ready";
+  const runtime: ActorTurnRuntime = {
+    identity: { id: "restart-test", version: "1" },
+    async *runActorTurn() {
+      if (mode === "failed") throw new Error("Deliberate failure");
+      if (mode === "waiting") await waiting;
+      yield { type: "completed", text: "Saved result", stopReason: "stop" };
+    },
+  };
+  let server = createLocalApiServer({ dbPath, actorTurnRuntime: runtime });
+  const listen = async () => {
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    return `http://127.0.0.1:${address.port}`;
+  };
+  let base = await listen();
+  t.after(async () => { finish(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); });
+  const start = await started(base);
+  await post(base, "/simulations/sim/drafts", generate(start.root.id, "ready"));
+  mode = "failed";
+  await post(base, "/simulations/sim/drafts", generate(start.root.id, "failed"));
+  mode = "waiting";
+  const inProgress = post(base, "/simulations/sim/drafts", generate(start.root.id, "waiting")).catch(() => null);
+  let snapshot: { drafts: { id: string; status: string }[] } = { drafts: [] };
+  for (let attempt = 0; attempt < 50; attempt++) {
+    snapshot = await (await fetch(`${base}/simulations/sim/drafts?branchId=main`)).json();
+    if (snapshot.drafts.length === 3) break;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  assert.deepEqual(snapshot.drafts.map(draft => draft.status), ["ready", "failed", "generating"]);
+  server.closeAllConnections();
+  await new Promise<void>(resolve => server.close(() => resolve()));
+  server = createLocalApiServer({ dbPath, actorTurnRuntime: runtime });
+  base = await listen();
+  const recovered = await (await fetch(`${base}/simulations/sim/drafts?branchId=main`)).json();
+  assert.deepEqual(recovered, snapshot);
+  // A restarted API can discard stranded work without adding canonical events.
+  const pending = snapshot.drafts.find(draft => draft.status === "generating")!;
+  assert.equal((await post(base, `/simulations/sim/drafts/${pending.id}/discard`, { commandId: "discard-stranded" })).status, 200);
+  finish(); await inProgress;
+  assert.deepEqual((await (await fetch(`${base}/simulations/sim/transcript`)).json()).transcript, []);
 });

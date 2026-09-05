@@ -2,6 +2,8 @@
 
 This document defines Doxvelt's intended long-lived software architecture. It is a target, not a claim about the current implementation.
 
+For the Stage's conversation-centred interaction principles and UI review benchmark, see [Stage Experience](STAGE_EXPERIENCE.md). That contract complements the engine architecture; it does not declare unimplemented UI capabilities shipped.
+
 Doxvelt remains local-first: one person must be able to author and run a simulation without Doxvelt-hosted infrastructure. The same domain model must also support a hosted service without replacing the simulation engine or changing simulation semantics.
 
 ## Architectural Position

@@ -204,6 +204,11 @@ export type SimulationArchive = {
 export type ClosureRequestInput = AppendCommitInput & { job: MemoryJobRecord };
 
 export interface ActorTurnDraftRepository {
+  listRecoverableActorTurnDrafts(
+    ownerScope: string,
+    simulationId: string,
+    branchId: string,
+  ): ActorTurnDraftRecord[];
   replayAcceptedActorTurnDraft(
     input: AcceptActorTurnDraftCommand,
   ): { branch: BranchRecord; commit: CommitRecord } | null;

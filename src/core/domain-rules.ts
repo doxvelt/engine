@@ -1,3 +1,4 @@
+import { canOwnTurn } from "./turn-ownership.ts";
 import { createHash } from "node:crypto";
 import type {
   RecordedCommand,
@@ -114,11 +115,7 @@ function sortValue(value: unknown): unknown {
   return value;
 }
 
-export function canOwnTurn(entity: EntityRecord): boolean {
-  return entity.kind === "agent" ||
-    entity.kind === "affiliation" ||
-    entity.kind === "stateless";
-}
+export { canOwnTurn } from "./turn-ownership.ts";
 
 export function canHoldEpisodeMemory(entity: EntityRecord): boolean {
   return entity.kind === "agent";

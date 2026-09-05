@@ -1083,6 +1083,21 @@ export class SqliteSimulationRepository
     });
   }
 
+  listRecoverableActorTurnDrafts(
+    ownerScope: string,
+    simulationId: string,
+    branchId: string,
+  ): ActorTurnDraftRecord[] {
+    const rows = this.sql().prepare(
+      `SELECT draft_json FROM actor_turn_drafts
+       WHERE owner_scope = ? AND simulation_id = ?
+         AND json_extract(draft_json, '$.branchId') = ?
+         AND status IN ('generating', 'ready', 'failed')
+       ORDER BY created_at, id`,
+    ).all(ownerScope, simulationId, branchId) as { draft_json: string }[];
+    return rows.map(rowToActorTurnDraft);
+  }
+
   getActorTurnDraft(
     ownerScope: string,
     simulationId: string,
@@ -1136,11 +1151,11 @@ export class SqliteSimulationRepository
         throw new DomainNotFoundError(`Draft not found: ${input.draftId}`);
       if (current.generationCommandId === input.commandId)
         throw new DomainValidationError("Discard requires a distinct command ID.");
-      if (current.status !== "generating" && current.status !== "ready")
+      if (current.status !== "generating" && current.status !== "ready" && current.status !== "failed")
         throw new DomainValidationError(`Draft cannot be discarded from ${current.status}.`);
       const draft = { ...current, status: "discarded" as const, updatedAt: now() };
       const changed = this.sql().prepare(
-        "UPDATE actor_turn_drafts SET status = ?, draft_json = ?, updated_at = ? WHERE id = ? AND owner_scope = ? AND simulation_id = ? AND status IN ('generating', 'ready')",
+        "UPDATE actor_turn_drafts SET status = ?, draft_json = ?, updated_at = ? WHERE id = ? AND owner_scope = ? AND simulation_id = ? AND status IN ('generating', 'ready', 'failed')",
       ).run(draft.status, JSON.stringify(draft), draft.updatedAt, draft.id, draft.ownerScope, draft.simulationId);
       if (changed.changes !== 1)
         throw new DomainValidationError("Draft terminal transition lost its compare-and-set race.");
