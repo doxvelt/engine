@@ -1,3 +1,5 @@
+import { stageDraft, type StageProjection } from "./stage-contracts.ts";
+import { canOwnTurn } from "../core/turn-ownership.ts";
 import {
   createServer,
   type IncomingMessage,
@@ -152,6 +154,22 @@ export async function handleLocalApiRequest(
     const simulation = store.getSimulation(ownerScope, simulationId);
     if (!simulation)
       throw new HttpError(404, `Simulation not found: ${simulationId}`);
+    if (method === "GET" && parts[2] === "stage" && parts.length === 3) {
+      const projection = projectBranch(store, query(url, simulation));
+      const revision = content(store, ownerScope, simulationId);
+      const scenario = revision.compiled.scenarios.find(item => item.id === simulation.scenarioId);
+      const result: StageProjection = {
+        scenarioName: scenario?.name || simulation.scenarioId || "Stage",
+        branch: projection.branch,
+        transcript: projection.transcript,
+        audience: projection.audience,
+        actors: revision.compiled.entities.filter(canOwnTurn).map(actor => ({
+          id: actor.id, kind: actor.kind,
+          name: actor.visibility === "public" ? actor.name : actor.id,
+        })),
+      };
+      return send(response, 200, result);
+    }
     if (method === "GET" && parts[2] === "actors")
       return send(response, 200, {
         simulationId,
@@ -232,7 +250,10 @@ export async function handleLocalApiRequest(
       const text = required(body, "manualText");
       const actorId = required(body, "actorId");
       const stageWhisperIds = requiredStrings(body, "stageWhisperIds");
-      assertExpectedBranchHead(store, base);
+      // A missing basis cannot be a replay. Preserve the command conflict response
+      // before projection lookup; existing bases reach the kernel's replay check.
+      if (!store.getCommit(ownerScope, simulationId, base.expectedHead))
+        assertExpectedBranchHead(store, base);
       const q = {
         ownerScope,
         simulationId,
@@ -278,7 +299,7 @@ export async function handleLocalApiRequest(
           ownerScope,
           simulationId,
           branchId: base.branchId,
-        }).transcript.at(-1),
+        }).transcript.find(turn => turn.commitId === committed.commit.id),
         context: actorContext,
       });
     }
@@ -315,6 +336,34 @@ export async function handleLocalApiRequest(
           promptPolicy: { id: "default", version: "v1" },
           outputSchema: { id: "screenplay", digest: "schema-v1" },
           skillDigests: [],
+        },
+      });
+      return send(response, 200, result);
+    }
+    if (method === "GET" && parts[2] === "drafts" && parts.length === 3) {
+      const branchId = url.searchParams.get("branchId");
+      if (!branchId) throw new HttpError(400, "branchId is required for draft discovery.");
+      if (!store.getBranch(ownerScope, simulationId, branchId))
+        throw new HttpError(404, `Branch not found: ${branchId}`);
+      return send(response, 200, {
+        drafts: store.listRecoverableActorTurnDrafts(ownerScope, simulationId, branchId).map(stageDraft),
+      });
+    }
+    if (method === "POST" && parts[2] === "drafts" && parts[3] && parts[4] === "retry" && parts.length === 5) {
+      const body = await bodyOf(request);
+      if (Object.keys(body).some(key => key !== "commandId"))
+        throw new HttpError(400, "Retry accepts only a commandId; routing is captured by the original draft.");
+      const original = store.getActorTurnDraft(ownerScope, simulationId, parts[3]);
+      if (!original) throw new HttpError(404, "Draft not found.");
+      if (!options.actorTurnRuntime) throw new HttpError(503, "No local actor-turn runtime is configured.");
+      const result = await generateActorTurnDraft(store, options.actorTurnRuntime, {
+        ownerScope, simulationId, branchId: original.branchId,
+        expectedHead: original.basisHeadCommitId, commandId: required(body, "commandId"),
+        payload: {
+          actorId: original.actorId, audience: original.audience,
+          stageWhisperIds: original.stageWhispers.map(whisper => whisper.id),
+          runtimeProfile: original.runtimeProfile, promptPolicy: original.promptPolicy,
+          outputSchema: original.outputSchema, skillDigests: original.skillDigests,
         },
       });
       return send(response, 200, result);

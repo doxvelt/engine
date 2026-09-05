@@ -4,9 +4,11 @@
       <div class="flex h-full min-h-0 flex-col">
         <header class="dx-topbar flex h-16 shrink-0 items-center justify-between border-b px-4 sm:px-8">
           <div class="flex min-w-0 items-center gap-3">
-            <NuxtLink to="/" class="flex min-w-0 items-center" aria-label="Doxvelt home">
-              <img :src="wordmarkInk" alt="Doxvelt" class="dx-wordmark dx-wordmark-light" />
-              <img :src="wordmarkParchment" alt="Doxvelt" class="dx-wordmark dx-wordmark-dark" />
+            <NuxtLink to="/" class="flex min-w-0 shrink-0 items-center" aria-label="Doxvelt home">
+              <img v-if="currentPath === '/stage'" :src="markInk" alt="Doxvelt" class="dx-wordmark-light h-6 w-6 sm:hidden" />
+              <img v-if="currentPath === '/stage'" :src="markParchment" alt="Doxvelt" class="dx-wordmark-dark h-6 w-6 sm:hidden" />
+              <img :class="{ 'max-sm:!hidden': currentPath === '/stage' }" :src="wordmarkInk" alt="Doxvelt" class="dx-wordmark dx-wordmark-light" />
+              <img :class="{ 'max-sm:!hidden': currentPath === '/stage' }" :src="wordmarkParchment" alt="Doxvelt" class="dx-wordmark dx-wordmark-dark" />
             </NuxtLink>
             <UTabs
               v-if="currentPath !== '/'"
@@ -34,8 +36,7 @@ import markInk from "../../design-system/assets/2026-05-doxvelt-mark-fg-ink-raw-
 import markParchment from "../../design-system/assets/2026-05-doxvelt-mark-fg-parchment-raw-solid.svg";
 
 const route = useRoute();
-const router = useRouter();
-const currentPath = ref(route.path);
+const currentPath = computed(() => route.path);
 
 useHead({
   link: [
@@ -51,19 +52,11 @@ const sectionTabs = [
 
 const activeSection = computed(() => currentPath.value === "/stage" ? "stage" : "studio");
 
-onMounted(() => {
-  currentPath.value = router.currentRoute.value.path;
-});
-
-router.afterEach((to) => {
-  currentPath.value = to.path;
-});
-
 function goToSection(value: string | number): void {
   if (value !== "studio" && value !== "stage") return;
   navigateTo({
     path: `/${value}`,
-    query: router.currentRoute.value.query
+    query: route.query
   });
 }
 </script>

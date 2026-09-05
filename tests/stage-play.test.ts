@@ -84,7 +84,7 @@ test("stable serialization is key-order independent and rejects unsupported valu
   assert.throws(() => stableSerialize(cyclic), /cyclic/);
 });
 
-test("Stage actor choices contain only sorted generative agents", () => {
+test("Stage actor choices follow supported turn ownership and remain sorted", () => {
   assert.deepEqual(
     playableActors([
       { id: "board", name: "Board", kind: "affiliation" },
@@ -92,7 +92,7 @@ test("Stage actor choices contain only sorted generative agents", () => {
       { id: "ceo", name: "CEO", kind: "agent" },
       { id: "guest", name: "Guest", kind: "stateless" },
     ]).map((actor) => actor.id),
-    ["ceo", "coo"],
+    ["board", "ceo", "coo", "guest"],
   );
 });
 
@@ -185,13 +185,16 @@ test("staleness compares the draft basis against the current branch head, never 
   );
 });
 
-test("Stage contains only the durable-draft play routes and uses the command lease", async () => {
+test("Stage uses supported manual and durable routes through scoped command leases", async () => {
   const page = await readFile(
     new URL("../src/local-ui/pages/stage.vue", import.meta.url),
     "utf8",
   );
-  for (const required of ["/runtime", "/drafts", "/accept", "/discard", "createCommandLease", "runLeasedMutation", "settleGenerationLease", "refreshPendingDraft", "continueAfterFailedDraft"])
-    assert.ok(page.includes(required), `missing ${required}`);
-  for (const retired of ["/turn-draft", "/turns", "localStorage", "modelItems", "inspectorTab"])
-    assert.equal(page.includes(retired), false, `retired Stage surface: ${retired}`);
+  const session = await readFile(new URL("../src/local-ui/lib/stage-session.ts", import.meta.url), "utf8");
+  const surface = page + session;
+  for (const required of ["/runtime", "/drafts", '"accept"', '"discard"', "/turns", "createCommandLease", "runLeasedMutation", "settleGenerationLease", "refreshPendingDraft", "StageSession"])
+    assert.ok(surface.includes(required), `missing ${required}`);
+  for (const retired of ["/turn-draft", "localStorage", "modelItems", "inspectorTab"])
+    assert.equal(surface.includes(retired), false, `retired Stage surface: ${retired}`);
+  assert.ok(session.includes('stageWhisperIds: []'), "manual performance does not consume Direct whispers");
 });
