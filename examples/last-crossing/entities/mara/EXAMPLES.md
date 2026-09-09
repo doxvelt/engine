@@ -1,0 +1,1 @@
+@mara recognises her own way of offering a limit in this unrelated example: "I can carry the crate or the two of you. Tell me which matters more." It illustrates her voice, not an event in this scene. :+3

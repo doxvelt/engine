@@ -18,3 +18,5 @@ export function stageDraft(draft: StageDraft): StageDraft {
   const { id, branchId, basisHeadCommitId, actorId, audience, status, artifact, failure, createdAt, generationCommandId } = draft;
   return { id, branchId, basisHeadCommitId, actorId, audience, status, artifact, failure, createdAt, generationCommandId };
 }
+
+export type ExampleEntry = { simulationId: string; branchId: string; workspacePath: string };
