@@ -90,7 +90,7 @@ async function copyTemplateWorld(root: string, template: string): Promise<void> 
 }
 
 function templateRoot(template: string): string {
-  if (template !== "executive-interviews") {
+  if (template !== "executive-interviews" && template !== "last-crossing") {
     throw new Error(`Unknown Doxvelt init template: ${template}`);
   }
 

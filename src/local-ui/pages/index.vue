@@ -7,6 +7,17 @@
           <p class="dx-lede">
             Author dossiers in Studio, then run hard-turn scenes on Stage with subjective context, beliefs, memories, and access paths intact.
           </p>
+          <div class="mt-6 grid gap-3">
+            <h2 class="dx-section-title">The last crossing</h2>
+            <p class="text-sm text-muted">The last ferry before a storm. A captain, a quay keeper, and a late passenger with a sealed letter. Choose who speaks next.</p>
+            <div>
+              <UButton icon="i-lucide-theater" color="primary" size="lg" :loading="example.busy" :disabled="example.busy" @click="playExample">
+                Play the example
+              </UButton>
+            </div>
+            <p class="text-sm text-muted">Starts a scene or continues your saved example.</p>
+            <p v-if="example.error" role="alert" class="dx-error-note rounded-sm p-3 text-sm">{{ example.error }} Try Play the example again.</p>
+          </div>
         </div>
 
         <aside class="dx-light-card p-6">
@@ -94,8 +105,8 @@
 
           <UPageCard
             icon="i-lucide-sparkles"
-            title="Load Demo Workspace"
-            description="Seed the executive-interviews example so you can inspect a complete authored workspace."
+            title="Inspect Executive Interviews"
+            description="Create an executive-interviews workspace for authoring and inspection in Studio."
             :ui="{ root: 'dx-action-card', body: 'gap-4' }"
           >
             <UInput v-model="demoWorkspacePath" icon="i-lucide-folder-symlink" size="sm" class="w-full" />
@@ -160,6 +171,18 @@
 </template>
 
 <script setup lang="ts">
+import { ExampleEntryController } from "../lib/example-entry";
+
+const example = ref(new ExampleEntryController());
+onBeforeUnmount(() => example.value.dispose());
+
+async function playExample(): Promise<void> {
+  await example.value.play(apiBase.value, entry => navigateTo({
+    path: "/stage",
+    query: { workspace: entry.workspacePath, simulation: entry.simulationId, branch: entry.branchId },
+  }));
+}
+
 type BusyAction = "blank" | "demo" | null;
 
 const config = useRuntimeConfig();

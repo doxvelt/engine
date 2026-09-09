@@ -1,0 +1,1 @@
+@corin recognises his own change from deflection to admission in this unrelated example: "Let me carry it back. No, wait. I gave you the wrong parcel; this is mine to fix." It illustrates his voice, not an event in this scene. :+3

@@ -27,22 +27,25 @@ bun run dev
 
 The API listens on `http://127.0.0.1:8787`. Nuxt prints the UI URL, usually `http://localhost:3000`.
 
-From the UI, create a blank workspace or initialize the `executive-interviews` demo. Then:
+On Home, choose **Play the example** to open **The last crossing** directly on Stage.
+Mara, Nell and Corin meet at the last ferry before a storm. Choose an actor and
+an audience, then use **Perform** to commit your own words or **Direct** to generate
+and review a draft. There is no required narrator or opening script.
 
-- Use **Studio** to edit source files, create assets, validate compilation, and inspect compiled source spans.
+The app creates its own source copy beside the local database and resumes the
+same example on later clicks, including after restart. It never refreshes that
+copy over your edits or replaces accepted history. Studio remains available for
+source authoring; Executive Interviews remains an inspectable template.
 
-Studio/source authoring remains usable after Slices 1 and 2. The existing
-**Stage** UI has not yet migrated to the required branch ID, expected-head,
-command-ID, and memory-job contracts, so it is temporarily incompatible with
-the branch-aware runtime. Use the CLI or local API for simulation play until the
-later workbench migration is complete.
+Generation needs a deployment-configured runtime; manual Perform works without
+one. See AI Drafts below and the [slice scope](docs/design/LAST_CROSSING.md).
 
 ## What You Can Do Today
 
 - Create or seed a local simulation workspace.
 - Author worlds, scenarios, formats, models, entities, and connections as files.
 - Compile Markdown source into inspectable runtime fabric.
-- Run branch-aware hard-turn scenes through the CLI or local API.
+- Play branch-aware hard-turn scenes on Stage, through the CLI or local API.
 - Control who is in the audience for each turn.
 - Add private stage whispers for one actor's next turn.
 - Grant and revoke runtime access without editing source files.
@@ -53,12 +56,8 @@ later workbench migration is complete.
   through the local API.
 - Export and import local simulation packages.
 
-Slices 1 and 2 of the architectural MVP are complete. The CLI and local API are
-the supported play interfaces; full local UI play cannot be claimed until Stage
-is migrated in a later workbench slice. Doxvelt is local single-user software
-right now; hosted accounts, collaboration, publishing, and marketplaces are
-intentionally out of scope for the current product. The target architecture
-actively avoids local-only domain assumptions.
+Doxvelt is local single-user software. Hosted accounts, collaboration,
+publishing and marketplaces remain outside this slice.
 
 ## Architecture Direction
 
@@ -69,9 +68,8 @@ jobs, and beliefs are immutable or append-only and projected at a selected
 branch head. Portable schema-v5 archives carry explicit branch origins, memory
 jobs, transitions, and detached operations; schema-v4 archives are validated
 before deterministic upconversion. SQLite is the first adapter behind
-storage-neutral domain/application ports. The Pi runtime composition is
-validated; its Doxvelt adapter, capability mediation, and sandboxed executable
-helpers remain later slices.
+storage-neutral domain/application ports. The Pi actor-turn adapter and durable draft lifecycle are implemented. General
+capability mediation and sandboxed executable helpers remain outside this slice.
 
 Slice 2 derives stable message-perception records from committed audiences and uses them as memory provenance. Generalized perception for non-message world events remains later work.
 
@@ -123,7 +121,7 @@ This connection gives @jade access to @mafia knowledge. :access:member
 
 ## CLI
 
-The CLI is the supported interactive play surface for the current engine and is also useful for tests, automation, and quick inspection. Studio remains the visual source-authoring surface.
+Stage is the visual play surface. The CLI also supports automation and inspection; Studio handles source authoring.
 
 Create a demo workspace:
 
@@ -165,27 +163,22 @@ bun run doxvelt -- import workspaces/package-export --world workspaces/imported-
 
 ## AI Drafts
 
-Doxvelt commits playable turns only from explicit manual text. Model-backed actor output is generated as a non-canonical draft through API `turn-draft` or CLI `draft`, then may be reviewed and accepted separately with `turn --manual`. Draft generation never advances a branch head.
+Model output is a durable, non-canonical draft until accepted. Stage uses
+`POST /simulations/:id/drafts`, followed by explicit acceptance or discard.
+Saved drafts can be recovered after reload or API restart.
 
-The default scaffold expects an OpenAI-compatible chat completions endpoint:
-
-```yaml
----
-id: local-openai-compatible
-provider: openai-compatible
-base_url: http://localhost:11434/v1
-model: llama3.1
-api_key_env: OLLAMA_API_KEY
----
-```
-
-For Ollama, start the server with:
+Configure the existing Pi runtime on the API process, separately from authored
+content. For example, with a locally installed compatible model:
 
 ```sh
-ollama serve
+bun run api -- --runtime-base-url http://localhost:11434/v1 --runtime-model YOUR_MODEL --runtime-context-window 16384 --runtime-max-tokens 768
+bun run ui
 ```
 
-Then set `model` to an installed Ollama model. `OLLAMA_API_KEY` may be unset for local Ollama; it is only needed for endpoints that require bearer-token authentication.
+For an authenticated runtime, supply `DOXVELT_RUNTIME_API_KEY` in the API process
+environment. Credentials and endpoint configuration do not belong in the example.
+The legacy blank scaffold still contains `models/` metadata; this slice does not
+migrate that authoring contract.
 
 ## Local Development
 
@@ -212,7 +205,8 @@ Repository landmarks:
 - `src/local-api`: local HTTP API over the core engine.
 - `src/local-ui`: Nuxt workbench UI.
 - `design-system`: visual tokens, fonts, brand assets, and static UI specimens.
-- `examples/executive-interviews`: complete example source workspace.
+- `examples/last-crossing`: the playable Home example.
+- `examples/executive-interviews`: the retained authoring/inspection example.
 
 Accepted runtime state is stored once as content revisions and branch-linked commits; derived context is rebuilt from those records.
 

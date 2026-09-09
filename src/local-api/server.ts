@@ -1,3 +1,5 @@
+import path from "node:path";
+import { playLastCrossing } from "./example.ts";
 import { stageDraft, type StageProjection } from "./stage-contracts.ts";
 import { canOwnTurn } from "../core/turn-ownership.ts";
 import {
@@ -124,6 +126,11 @@ export async function handleLocalApiRequest(
     options.dbPath || ".doxvelt/runtime.sqlite",
   ).open();
   try {
+    if (method === "POST" && url.pathname === "/examples/last-crossing/play") {
+      const body = await bodyOf(request);
+      if (Object.keys(body).length) throw new HttpError(400, "Example setup accepts an empty object; the app chooses the workspace and run.");
+      return send(response, 200, await playLastCrossing(store, path.dirname(path.resolve(options.dbPath || ".doxvelt/runtime.sqlite"))));
+    }
     if (
       method === "POST" &&
       parts[0] === "simulations" &&

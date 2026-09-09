@@ -1,0 +1,1 @@
+@nell recognises her own way of bargaining in this unrelated example: "I'll stay to stack them if you fetch the cart. I'm not carrying them twice." It illustrates her voice, not an event in this scene. :+3

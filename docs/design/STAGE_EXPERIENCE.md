@@ -2,6 +2,14 @@
 
 **Status:** First bounded conversation-centred production slice approved. The production decisions below supersede earlier interaction hypotheses for this slice; notation experiments remain deferred. The opening decision is resolved below. This subset is implemented and locally verified in the working tree with deterministic runtime integration tests and production browser checks; this is not a release or live-inference claim.
 
+## Follow-on slice: play one compelling scene
+
+[The last crossing](LAST_CROSSING.md) adds the approved authored example and a
+Home-to-Stage entry. Its three characters use the ordinary opening, audience,
+manual-turn and durable-draft contracts below. The earlier exclusions of a new
+example and Home work applied to the interaction proof; this follow-on permits
+only the bounded entry and content described in that scope.
+
 ## Approved production subset
 
 Implement this slice in the existing Nuxt/Nuxt UI Stage using canonical design-system tokens and existing assets. The disposable study is a visual reference only; its scripted replies, fictional fixtures, embedded assets and editor implementation are not production content or architecture.
