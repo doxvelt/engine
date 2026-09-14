@@ -49,14 +49,23 @@ export function acceptActorTurnDraft(
   const replay = repository.replayAcceptedActorTurnDraft(request);
   if (replay) return { ...replay, replayed: true };
 
-  const draft = repository.getActorTurnDraft(
-    request.ownerScope,
-    request.simulationId,
-    request.draftId,
-  );
-  if (!draft)
-    throw new DomainNotFoundError(`Draft not found: ${request.draftId}`);
-  const validated = validateReadyDraft(repository, request, draft);
+  let validated: ReturnType<typeof validateReadyDraft>;
+  try {
+    const draft = repository.getActorTurnDraft(
+      request.ownerScope,
+      request.simulationId,
+      request.draftId,
+    );
+    if (!draft)
+      throw new DomainNotFoundError(`Draft not found: ${request.draftId}`);
+    validated = validateReadyDraft(repository, request, draft);
+  } catch (error) {
+    // A concurrent acceptance may have committed since the initial lookup.
+    // Only an authoritative, matching receipt can supersede a preflight error.
+    const concurrentReplay = repository.replayAcceptedActorTurnDraft(request);
+    if (concurrentReplay) return { ...concurrentReplay, replayed: true };
+    throw error;
+  }
   const receipt = receiptFor(validated.draft, validated.acceptedText);
   const recorded = recordCommand("accept_draft", {
     ownerScope: request.ownerScope,
