@@ -95,7 +95,7 @@
         <UTextarea v-if="session.mode === 'direct'" v-model="session.direction" :rows="3" class="w-full" aria-label="Private direction" placeholder="Private direction (optional)…" :disabled="locked" />
         <UTextarea v-else v-model="session.performance" :rows="3" class="w-full" aria-label="Performance" placeholder="Write the actor’s words or actions…" :disabled="locked" />
         <div class="mt-2 flex items-center justify-between gap-2">
-          <UTabs v-model="session.mode" :items="[{ label: 'Direct', value: 'direct' }, { label: 'Perform', value: 'perform' }]" :content="false" @click="activateComposerMode" size="xs" :ui="{ list: 'w-36' }" />
+          <UTabs v-model="session.mode" :items="[{ label: 'Direct', value: 'direct' }, { label: 'Perform', value: 'perform' }]" :content="false" @mousedown.capture="beginComposerMode" @click="activateComposerMode" size="xs" :ui="{ list: 'w-36' }" />
           <UButton type="submit" color="primary" :loading="session.busy" :disabled="!canSubmit">{{ session.mode === 'direct' ? 'Generate draft' : 'Perform' }}</UButton>
         </div>
         <p v-if="session.mode === 'direct' && runtime && !runtime.configured" class="mt-2 text-xs text-muted">Generation unavailable. Perform is ready to use.</p>
@@ -140,8 +140,11 @@ const awayFromLatest = ref(false);
 const historyContent = ref<HTMLElement | null>(null);
 const composer = ref<HTMLElement | null>(null);
 let historyObserver: ResizeObserver | undefined;
-let readingAnchor: { key: string; offset: number } | null = null;
+let readingAnchor: { key: string; offset: number; textOffset?: number; textTop?: number } | null = null;
 let readingTop = 0;
+// Last actual position observed or written by this view. Keep it until the
+// position changes: browsers can coalesce or repeat generated scroll events.
+let historyScrollTop: number | null = null;
 let followingLatest = true;
 let focusVersion = 0;
 let pendingComposerResume: (() => boolean) | null = null;
@@ -157,8 +160,20 @@ const draftStatus = computed(() => ({ ready: 'Not accepted', generating: 'Genera
 const draftItems = computed(() => [{ label: 'Compose a new turn', value: 'compose' }, ...session.value.drafts.map((draft, index) => ({ value: draft.id, label: `${index + 1}. ${actorName(draft.actorId)} · ${draft.status}${draft.basisHeadCommitId !== session.value.projection?.branch.headCommitId ? ' · stale' : ''}` }))]);
 const canSubmit = computed(() => !locked.value && !!session.value.actorId && (session.value.mode === 'perform' ? !!session.value.performance.trim() : !!runtime.value?.configured));
 
-// Remember a visible turn and its viewport offset, so reflow above it does not
-// displace earlier reading. The DOM supplies geometry; session state stays pure.
+// Prose is a single Vue text node. Read Range geometry without touching DOM or
+// Selection; binary search keeps long continuous turns logarithmic per scroll.
+function proseRange(turn: HTMLElement): { range: Range; text: Text } | null {
+  const text = turn.querySelector('.stage-prose')?.firstChild;
+  if (!text || text.nodeType !== 3 || !text.textContent?.length) return null;
+  return { range: document.createRange(), text: text as Text };
+}
+function characterRect(range: Range, text: Text, offset: number): DOMRect {
+  range.setStart(text, offset);
+  range.setEnd(text, offset + 1);
+  return range.getBoundingClientRect();
+}
+// Geometry belongs only to this mounted view, never the session/domain.
+
 function measureHistory(): void {
   const el = history.value;
   if (!el) return;
@@ -166,10 +181,28 @@ function measureHistory(): void {
   const top = el.getBoundingClientRect().top;
   const latest = turns.at(-1);
   awayFromLatest.value = !!latest && latest.getBoundingClientRect().bottom - top - el.clientHeight > 1;
+  if (el.scrollTop === historyScrollTop) return;
+  historyScrollTop = el.scrollTop;
   followingLatest = !awayFromLatest.value;
   readingTop = el.scrollTop;
   const turn = turns.find(item => item.getBoundingClientRect().bottom > top);
   readingAnchor = turn ? { key: turn.dataset.historyKey!, offset: turn.getBoundingClientRect().top - top } : null;
+  const prose = turn && proseRange(turn);
+  if (prose && readingAnchor) {
+    const { range, text } = prose;
+    let low = 0;
+    let high = text.length - 1;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (characterRect(range, text, mid).top < top) low = mid + 1;
+      else high = mid;
+    }
+    const rect = characterRect(range, text, low);
+    if (rect.bottom > top && rect.top < top + el.clientHeight) {
+      readingAnchor.textOffset = low;
+      readingAnchor.textTop = rect.top - top;
+    }
+  }
 }
 function restoreHistory(): void {
   const el = history.value;
@@ -178,19 +211,29 @@ function restoreHistory(): void {
   else {
     const anchor = readingAnchor;
     const turn = anchor && Array.from(el.querySelectorAll<HTMLElement>('[data-history-key]')).find(item => item.dataset.historyKey === anchor.key);
-    el.scrollTop = turn ? el.scrollTop + turn.getBoundingClientRect().top - el.getBoundingClientRect().top - anchor!.offset : readingTop;
+    const prose = turn && anchor?.textOffset !== undefined && proseRange(turn);
+    if (prose && anchor!.textOffset! < prose.text.length) {
+      el.scrollTop += characterRect(prose.range, prose.text, anchor!.textOffset!).top - el.getBoundingClientRect().top - anchor!.textTop!;
+    } else {
+      el.scrollTop = turn ? el.scrollTop + turn.getBoundingClientRect().top - el.getBoundingClientRect().top - anchor!.offset : readingTop;
+    }
   }
+  // Read back the browser's actual (possibly rounded/clamped) position. Refresh
+  // the edge indicator without replacing the character anchor or follow intent.
+  // A later scroll at a different position is user navigation and captures anew.
+  historyScrollTop = el.scrollTop;
+  readingTop = el.scrollTop;
   measureHistory();
 }
 function jumpToLatest(): void {
   if (!history.value) return;
-  history.value.scrollTop = history.value.scrollHeight;
+  followingLatest = true;
+  restoreHistory();
   history.value.focus({ preventScroll: true });
-  measureHistory();
 }
 watch(history, el => {
   historyObserver?.disconnect();
-  readingAnchor = null; readingTop = 0; followingLatest = true;
+  readingAnchor = null; readingTop = 0; historyScrollTop = null; followingLatest = true;
   if (!el) return;
   restoreHistory();
   historyObserver = new ResizeObserver(restoreHistory);
@@ -232,7 +275,27 @@ function onDraftCloseAutoFocus(event: Event): void {
   event.preventDefault();
   void resumeComposer();
 }
+async function beginComposerMode(event: MouseEvent): Promise<void> {
+  if (event.button !== 0 || event.ctrlKey || locked.value) return;
+  const tab = (event.target as HTMLElement).closest('[role="tab"]');
+  if (!tab || tab.hasAttribute('disabled')) return;
+  // Capture precedes Reka's mousedown model update and the dock's reflow. The
+  // eventual mouseup/click may land on the form, so it cannot own this intent.
+  const version = ++focusVersion;
+  const owner = session.value;
+  const draftId = owner.selectedDraftId;
+  const origin = document.activeElement;
+  // A capture-listener microtask can precede the target listener/default focus.
+  // Wait for the next frame to let the complete native activation settle.
+  await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  await nextTick();
+  if (!mounted || version !== focusVersion || session.value !== owner || owner.selectedDraftId !== draftId
+    || tab.getAttribute('aria-selected') !== 'true'
+    || (document.activeElement !== origin && document.activeElement !== tab)) return;
+  await resumeComposer();
+}
 function activateComposerMode(event: MouseEvent): void {
+  if (event.detail > 0) return; // Pointer entry was already captured before reflow.
   // Reka also updates its automatic tabs on focus (Tab/arrow navigation). Only
   // an explicit click, including keyboard activation, enters the text editor.
   const tab = (event.target as HTMLElement).closest('[role="tab"]');
