@@ -3,12 +3,8 @@
     <div class="dx-home-container">
       <section class="dx-home-intro">
         <div>
-          <h1 class="dx-display">Open subjective worlds.</h1>
-          <p class="dx-lede">
-            Author dossiers in Studio, then run hard-turn scenes on Stage with subjective context, beliefs, memories, and access paths intact.
-          </p>
-          <div class="mt-6 grid gap-3">
-            <h2 class="dx-section-title">The last crossing</h2>
+          <h1 class="dx-section-title">The last crossing</h1>
+          <div class="mt-4 grid gap-3">
             <p class="text-sm text-muted">The last ferry before a storm. A captain, a quay keeper, and a late passenger with a sealed letter. Choose who speaks next.</p>
             <div>
               <UButton icon="i-lucide-theater" color="primary" size="lg" :loading="example.busy" :disabled="example.busy" @click="playExample">
@@ -21,37 +17,20 @@
         </div>
 
         <aside class="dx-light-card p-6">
-          <h2 class="dx-label">Open Existing</h2>
-          <div class="mt-4 grid gap-3">
-            <UInput v-model="openWorkspacePath" icon="i-lucide-folder-open" size="md" class="w-full" placeholder="workspaces/my-simulation" />
-            <div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-              <UButton icon="i-lucide-pencil-ruler" color="primary" variant="solid" size="md" block :disabled="!openWorkspacePath.trim()" @click="openWorkspace('/studio')">
-                Open Studio
-              </UButton>
-              <UButton icon="i-lucide-theater" color="neutral" variant="subtle" size="md" block :disabled="!openWorkspacePath.trim()" @click="openWorkspace('/stage')">
-                Open Stage
-              </UButton>
-              <UButton
-                icon="i-lucide-trash-2"
-                color="error"
-                variant="ghost"
-                size="md"
-                square
-                aria-label="Delete typed workspace from disk"
-                :disabled="!openWorkspacePath.trim()"
-                :loading="deletingWorkspace === openWorkspacePath.trim()"
-                @click="deleteWorkspace(openWorkspacePath.trim())"
-              />
-            </div>
-          </div>
+          <h2 class="dx-section-title">Create your own</h2>
+          <p class="mt-2 text-sm text-muted">Start a blank workspace, then author your world and actors in Studio.</p>
+          <UFormField label="Workspace path" class="mt-4">
+            <UInput v-model="blankWorkspacePath" icon="i-lucide-folder-plus" class="w-full" />
+          </UFormField>
+          <UButton class="mt-4" icon="i-lucide-file-plus-2" color="neutral" variant="subtle" :disabled="!blankWorkspacePath.trim() || busyAction !== null" :loading="busyAction === 'blank'" @click="createBlankWorkspace">Create your own</UButton>
         </aside>
       </section>
 
       <section v-if="recentWorkspaces.length > 0" class="py-8">
         <div class="dx-section-heading">
           <div>
-            <h2 class="dx-section-title">Recent In This Browser</h2>
-            <p class="mt-1 text-sm text-muted">Pick up where this browser last left off.</p>
+            <h2 class="dx-section-title">Browser workspaces</h2>
+            <p class="mt-1 text-sm text-muted">Source workspace shortcuts stored in this browser.</p>
           </div>
           <UButton icon="i-lucide-list-x" color="neutral" variant="ghost" size="sm" @click="clearRecent">
             Clear
@@ -85,23 +64,37 @@
       <section class="py-8">
         <div class="dx-section-heading">
           <div>
-            <h2 class="dx-section-title">Start Something</h2>
-            <p class="mt-1 text-sm text-muted">Create a clean source workspace or load the example when you want a known-good reference.</p>
+            <h2 class="dx-section-title">Workspace tools</h2>
+            <p class="mt-1 text-sm text-muted">Open a source workspace or inspect the authoring demo.</p>
           </div>
         </div>
 
         <div class="grid gap-4 md:grid-cols-2">
-          <UPageCard
-            icon="i-lucide-file-plus-2"
-            title="Create Blank Workspace"
-            description="Scaffold folders, a starter model, one world, one scenario, one format, and one actor dossier."
-            :ui="{ root: 'dx-action-card', body: 'gap-4' }"
-          >
-            <UInput v-model="blankWorkspacePath" icon="i-lucide-folder-plus" size="sm" class="w-full" />
-            <UButton icon="i-lucide-file-plus-2" color="primary" variant="solid" size="sm" block :disabled="!blankWorkspacePath.trim()" :loading="busyAction === 'blank'" @click="createBlankWorkspace">
-              New Blank
-            </UButton>
-          </UPageCard>
+          <aside class="dx-light-card p-6">
+            <h2 class="dx-label">Open Existing</h2>
+            <div class="mt-4 grid gap-3">
+              <UInput aria-label="Existing workspace path" v-model="openWorkspacePath" icon="i-lucide-folder-open" size="md" class="w-full" placeholder="workspaces/my-simulation" />
+              <div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                <UButton icon="i-lucide-pencil-ruler" color="primary" variant="solid" size="md" block :disabled="!openWorkspacePath.trim()" @click="openWorkspace('/studio')">
+                  Open Studio
+                </UButton>
+                <UButton icon="i-lucide-theater" color="neutral" variant="subtle" size="md" block :disabled="!openWorkspacePath.trim()" @click="openWorkspace('/stage')">
+                  Open Stage
+                </UButton>
+                <UButton
+                  icon="i-lucide-trash-2"
+                  color="error"
+                  variant="ghost"
+                  size="md"
+                  square
+                  aria-label="Delete typed workspace from disk"
+                  :disabled="!openWorkspacePath.trim()"
+                  :loading="deletingWorkspace === openWorkspacePath.trim()"
+                  @click="deleteWorkspace(openWorkspacePath.trim())"
+                />
+              </div>
+            </div>
+          </aside>
 
           <UPageCard
             icon="i-lucide-sparkles"
@@ -109,7 +102,7 @@
             description="Create an executive-interviews workspace for authoring and inspection in Studio."
             :ui="{ root: 'dx-action-card', body: 'gap-4' }"
           >
-            <UInput v-model="demoWorkspacePath" icon="i-lucide-folder-symlink" size="sm" class="w-full" />
+            <UInput aria-label="Demo workspace path" v-model="demoWorkspacePath" icon="i-lucide-folder-symlink" size="sm" class="w-full" />
             <UButton icon="i-lucide-sparkles" color="neutral" variant="subtle" size="sm" block :disabled="!demoWorkspacePath.trim()" :loading="busyAction === 'demo'" @click="initDemoWorkspace">
               {{ demoButtonLabel }}
             </UButton>
@@ -120,21 +113,21 @@
       <section v-if="recentWorkspaces.length === 0" class="pb-12 pt-8">
         <div class="dx-section-heading">
           <div>
-            <h2 class="dx-section-title">Recent In This Browser</h2>
+            <h2 class="dx-section-title">Browser workspaces</h2>
             <p class="mt-1 text-sm text-muted">This browser's workspace history will appear here after you open or create one.</p>
           </div>
         </div>
 
         <div class="rounded-md border border-dashed border-muted bg-default p-8 text-center">
-          <p class="text-sm font-medium text-default">No recent workspaces yet.</p>
-          <p class="mt-1 text-sm text-muted">Create a blank workspace or initialize the demo to begin.</p>
+          <p class="text-sm font-medium text-default">No browser workspaces yet.</p>
+          <p class="mt-1 text-sm text-muted">Workspaces you open here will appear as shortcuts in this browser.</p>
         </div>
       </section>
 
       <UModal
         v-model:open="deleteModalOpen"
         title="Delete Workspace"
-        description="This removes the source folder from disk. Recent history removal alone is still available with the x button."
+        description="This removes the source folder from disk. Browser shortcut removal is still available with the x button."
         :dismissible="!deletingWorkspace"
       >
         <template #body>
@@ -235,7 +228,7 @@ async function createWorkspace(options: {
   action: Exclude<BusyAction, null>;
   navigateWhenExisting: boolean;
 }): Promise<void> {
-  if (!options.path) return;
+  if (!options.path || busyAction.value) return;
   busyAction.value = options.action;
   try {
     const result = await $fetch<{ created?: boolean; message?: string }>(`${apiBase.value}/source/init`, {

@@ -947,6 +947,18 @@
         margin-top: var(--dx-space-5);
       }
 
+      .library-entry { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--dx-space-8); }
+      .library-entry p { margin: var(--dx-space-4) 0; }
+      .continuous-script { max-width: 880px; margin-top: var(--dx-space-8); }
+      .script-turn { margin-bottom: var(--dx-space-8); }
+      .script-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--dx-space-3); }
+      .script-identity { display: inline-flex; align-items: center; gap: var(--dx-space-2); font-weight: var(--dx-type-label-weight); }
+      .script-avatar { display: inline-grid; place-items: center; width: var(--dx-space-6); height: var(--dx-space-6); border-radius: var(--dx-radius-pill); background: var(--dx-surface-raised); font-size: var(--dx-type-caption-size); }
+      .script-audience { color: var(--dx-text-muted); font-size: var(--dx-type-caption-size); }
+      .script-prose { padding-left: var(--dx-space-8); font-size: var(--dx-type-body-size); line-height: var(--dx-type-body-line); overflow-wrap: anywhere; }
+      .script-draft { border-left: 2px solid var(--dx-accent); background: var(--dx-accent-subtle); border-radius: var(--dx-radius-sm); padding: var(--dx-space-3); }
+      .script-draft .script-prose { padding-left: 0; }
+
       .badge-group {
         display: flex;
         flex-wrap: wrap;
@@ -2047,6 +2059,59 @@
               <p>Card borders can frame isolated showcase specimens, but product surfaces should avoid stacking borders when spacing, tone, or elevation already separates the content.</p>
             </article>
           </div>
+        </section>
+        <section aria-labelledby="living-library-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="living-library-title">Living Library · Home and continuous script</h2>
+              <p>The example and Studio creation lead Home. Browser workspaces are source shortcuts, not a saved simulation collection. Stage uses spacing, identity and prose; only drafts carry an operational boundary.</p>
+            </div>
+          </div>
+          <div class="library-entry">
+            <div>
+              <h3>The last crossing</h3>
+              <p>The last ferry before a storm. Choose who speaks next.</p>
+              <button class="dx-button primary" type="button">Play the example</button>
+              <p class="script-audience">Starts a scene or continues your saved example.</p>
+            </div>
+            <div>
+              <h3>Create your own</h3>
+              <p>Start a blank workspace, then author your world and actors in Studio.</p>
+              <button class="dx-button" type="button">Create your own</button>
+            </div>
+          </div>
+          <p class="script-audience">Browser workspaces · source workspace shortcuts stored in this browser.</p>
+          <div class="continuous-script" aria-label="Continuous script specimen">
+            <article class="script-turn">
+              <div class="script-heading">
+                <span class="script-identity"><span class="script-avatar" aria-hidden="true">M</span>Mara</span>
+                <span class="script-audience">To Nell, Corin</span>
+              </div>
+              <p class="script-prose">We have time for one more crossing. Tell me who is still waiting.</p>
+            </article>
+            <article class="script-turn">
+              <div class="script-heading">
+                <span class="script-identity"><span class="script-avatar" aria-hidden="true">N</span>Nell</span>
+                <span class="script-audience">To Mara</span>
+              </div>
+              <p class="script-prose">One passenger by the gate. I will ask whether he is coming aboard.</p>
+            </article>
+            <article class="script-draft" aria-label="Draft performance specimen">
+              <p class="eyebrow">Draft · Not accepted</p>
+              <div class="script-heading">
+                <span class="script-identity"><span class="script-avatar" aria-hidden="true">C</span>Corin</span>
+                <span class="script-audience">To Mara, Nell</span>
+              </div>
+              <p class="script-prose">Wait. I need to reach the other bank tonight.</p>
+              <div class="badge-group">
+                <button class="dx-button" type="button">Discard</button>
+                <button class="dx-button" type="button">Retry</button>
+                <button class="dx-button" type="button">Edit</button>
+                <button class="dx-button primary" type="button">Accept</button>
+              </div>
+            </article>
+          </div>
+          <p class="script-audience">Illustrative UI wording only. Production identity inspection exposes name, kind and ID. Pending and failed drafts retain explicit status text. Jump to latest appears above the dock only while the latest edge is offscreen; quiet actions remain reachable by keyboard and touch.</p>
         </section>
         <section aria-labelledby="light-title">
           <div class="section-heading">

@@ -85,3 +85,13 @@ test("design page keeps single canonical button and logo-case style blocks", () 
 function countOccurrences(text: string, pattern: RegExp) {
   return text.match(pattern)?.length ?? 0;
 }
+
+test("Living Library specimen adopts example entry and continuous script with an explicit draft boundary", () => {
+  assert.match(designHtml, /id="living-library-title"/);
+  assert.match(designHtml, /Play the example/);
+  assert.match(designHtml, /Create your own/);
+  assert.match(designHtml, /Browser workspaces/);
+  assert.match(designHtml, /class="script-turn"/);
+  assert.match(designHtml, /Draft · Not accepted/);
+  assert.match(designHtml, /\.script-prose[^}]*var\(--dx-type-body-size\)/);
+});

@@ -1,11 +1,11 @@
 <template>
   <UPopover>
-    <UButton color="neutral" variant="ghost" class="min-w-0 px-0 text-left" :aria-label="`About ${name}`">
+    <UButton color="neutral" variant="ghost" class="min-h-8 min-w-0 px-0 text-left" :aria-label="`About ${name}`">
       <UAvatar :alt="name" size="xs" />
       <span class="truncate font-semibold">{{ name }}</span>
     </UButton>
     <template #content>
-      <div class="max-w-64 p-4 text-sm">
+      <div class="max-w-64 p-4 text-sm break-words">
         <p class="font-semibold text-highlighted">{{ name }}</p>
         <p class="mt-1 text-muted">{{ actor?.kind || 'Actor' }}</p>
         <p class="mt-2 break-all font-mono text-xs text-muted">{{ actorId }}</p>
