@@ -1,126 +1,191 @@
 # Stage Experience
 
-**Status:** First bounded conversation-centred production slice approved. The production decisions below supersede earlier interaction hypotheses for this slice; notation experiments remain deferred. The opening decision is resolved below. This subset is implemented and locally verified in the working tree with deterministic runtime integration tests and production browser checks; this is not a release or live-inference claim.
+**Status:** Living Library + **Continuous script** is the selected interaction
+and visual direction. This contract separates that target from the implemented
+baseline at `c400e2a`. It supersedes earlier Stage study hypotheses; selection of
+a direction does not approve every prototype behavior. See the
+[adoption plan](LIVING_LIBRARY_ADOPTION.md) for dependency gates and acceptance checks,
+and the [design system](../../design-system/README.md) for visual treatment.
 
-## Follow-on slice: play one compelling scene
+## Implemented baseline
 
-[The last crossing](LAST_CROSSING.md) adds the approved authored example and a
-Home-to-Stage entry. Its three characters use the ordinary opening, audience,
-manual-turn and durable-draft contracts below. The earlier exclusions of a new
-example and Home work applied to the interaction proof; this follow-on permits
-only the bounded entry and content described in that scope.
+The existing Nuxt/Nuxt UI Stage uses shared
+[transport types](../../src/local-api/stage-contracts.ts) and a focused
+[session client](../../src/local-ui/lib/stage-session.ts):
 
-## Approved production subset
+- One conversation surface serves opening, history and generated draft review,
+  with a compact header, scrolling history and reachable composer/review actions.
+- **Direct / Perform** have independent prose buffers. Direct generates a durable
+  Pi draft for the selected actor and audience. **Perform immediately commits**
+  manual prose through the supported turn API; there is no manual preview lifecycle.
+- Actor and Audience pickers send explicit supported IDs from the pinned cast.
+  The current `all` picker expands that cast; it does not change the persistent
+  presence roster or supply an unrestricted API alias. The sender perceives its
+  own turn. Invalid IDs fail without widening delivery. No input routing parser ships.
+- Generated performances are read-first drafts with Edit, Retry, Accept and
+  Discard. Actor and audience are captured at generation and cannot be rebound
+  at acceptance. Retry creates a distinct durable candidate with the original
+  basis, actor, audience and private direction; the earlier draft stays reachable.
+- Saved drafts are discovered through owner/simulation/branch-scoped repository
+  reads, including after lost responses, browser reload and API restart. Stale
+  bases and failed/in-progress records remain visible; terminal records leave
+  pending discovery. Multiple candidates have deterministic ordering.
+- Refresh preserves unsaved review wording, including when another session makes
+  the selected record terminal. Saved artifact text is distinguished from local
+  edits, with navigation warnings. This is not browser-reload autosave of all input.
+- Opening orientation is **pinned scenario identity only** plus a neutral invitation.
+  Identity inspection exposes safe public identity (currently name, kind and ID),
+  not subjective context. The discovery list filters draft records server-side
+  through `stageDraft`. Generation/retry responses and draft-detail GET return full
+  records, including `stageWhispers` text, `context` and `prompt`; the Stage client
+  filters these after receipt. Its `StageDraft` view/type is not an HTTP redaction
+  boundary. Transport minimization and authorized provenance retrieval remain
+  explicit follow-on work, not existing guarantees.
+- [Home](../../src/local-ui/pages/index.vue) offers the supported example, workspace
+  creation/Studio access and browser-local recent workspaces. [The last crossing](LAST_CROSSING.md)
+  starts or resumes one database-backed example without recompiling on resume.
+  A persisted collection of simulations and featured-item policy do not yet exist.
 
-Implement this slice in the existing Nuxt/Nuxt UI Stage using canonical design-system tokens and existing assets. The disposable study is a visual reference only; its scripted replies, fictional fixtures, embedded assets and editor implementation are not production content or architecture.
+These are implementation boundaries, not a new live-inference or release claim.
+Older broad architecture status lists are not the Stage implementation inventory.
 
-- Use one conversation surface at opening, established history and pending draft: compact scene/run header, independently scrolling readable history, and anchored composer or review actions. Retain the accepted opening as the first turn in history. Empty scenes start at the top; updates preserve deliberate reading position and offer Jump to latest. Short laptop and mobile layouts must keep actions reachable.
-- Provide compact **Direct / Perform** controls with independent buffers and explicit submission labels. Direct stages private instruction for the selected actor and generates a durable Pi draft. Perform commits user-authored text through the supported manual-turn API. The Perform label makes that commitment explicit; this slice adds no durable manual-draft lifecycle. Switching modes never copies private direction into performance prose.
-- Use **Actor** and **Audience** pickers, with Actor on the left and Audience on the right and no arrow. Keep the chosen actor after acceptance or performance. Resolve `all` to the concrete supported authored actors listed by Stage from the pinned revision, and send explicit IDs through both APIs. This explicit whole-turn selection does not edit the persistent presence roster (which is initially empty); it is not a fallback from an empty roster. It is not an unrestricted audience alias. Invalid identities fail without widening delivery. Restricted delivery must produce restricted perceptions.
-- Display avatar and readable identity in transcript headers. Identity opens a small accessible overlay limited to safe identity/public authored metadata; it must not expose another actor's subjective context or beliefs. Turn numbers, accepted state and provenance belong in optional keyboard-accessible details.
-- Display generated text as an explicitly marked, read-first draft. Edit reveals the editor; Retry, Accept and Discard remain at the conversational edge. Review shows the captured actor and audience, which cannot be rebound at acceptance. Retry uses the durable lifecycle and preserves the original actor, audience and private direction where the basis still permits it. Accepted history remains immutable. Retry creates another durable candidate and keeps the earlier draft reachable in Saved drafts; it does not overwrite or silently discard it.
-- Discover recoverable drafts through a small owner/simulation/branch-scoped repository/API read, including when a generation response never reached the browser. Reopening or reloading must reveal ready, failed and in-progress records, detect stale bases, exclude terminal records from pending discovery, and expose multiple recoverable drafts in a deterministic, visible order. A browser pointer alone does not meet this requirement. Recovery must survive API restart.
-- Distinguish saved artifact text from unsaved review edits. Refresh must preserve unsaved edits; an explicit unsaved label and navigation warning are sufficient. No autosave subsystem is required. If another session accepts or discards the record, refresh shows its terminal status while retaining unsaved local wording for review.
-- Empty-state orientation uses pinned scenario identity only and creates neither turns nor perceptions. An opening performance is an ordinary turn: only Perform or acceptance advances history. Never fabricate scene action from hidden statements or grant stateless actors additional knowledge.
-- Remove repetitive machinery explanations, large heading cards and ornamental composer dividers. Text inputs do not advertise or interpret routing syntax in this slice.
+## Selected experience
 
-### Verification and exclusions
+Stage is where the player directs and performs one actor at a time. Turn 1 and
+turn 25 use the same working surface. Keep readable performances central and
+operational details available through quiet, keyboard-accessible disclosures.
 
-Changed semantics require focused RED/GREEN tests. Preserve command leases until both mutation and projection converge: lost responses, double clicks, retries and projection failures must not duplicate turns or drafts or discard a different artifact. Guard asynchronous results against API/simulation/branch changes. Generate, retry, discard and orientation display must leave canonical turn/perception counts and previous commits unchanged; only Perform or accepted generated drafts advance history. Private direction remains actor/head-bound and is consumed only on acceptance.
+Home features one recognizable return item with **Continue**, with other items in
+a quieter collection. First arrival offers a ready-to-play example and an explicit
+**Create your own** route into Studio. Featured-item selection (last active, pinned,
+or another rule), collection data and empty-collection treatment remain decisions;
+do not represent browser workspace recents as durable simulation history.
+**Production** remains a candidate UI noun, not a rename of simulation or branch.
 
-Verify discovery isolation, restart recovery, stale acceptance rejection, actual restricted perceptions, independent mode buffers, stable actor selection and preservation of unsaved edits. Check opening, established history and review at 1440×900, 1280×600, 390×844 and 360×640, including keyboard access, page overflow and older-history reading position. Required final gates are `check` and `ui:build` with Node >=24. Deterministic injected runtime checks demonstrate integration, not live inference.
+Use a continuous transcript with avatar/name identity, readable prose and compact
+audience information. Avoid separate cards or rules around every turn and repeated
+Accepted labels. Drafts, failures and active revisions retain explicit textual
+boundaries. Use **Actor state** for the target inspection entry, subject to the
+policy gate below; the current identity overlay must remain honestly labeled.
+Spacing polish is deferred; Continuous script is no longer an open comparison.
 
-Excluded: routing chips or parsers (including model-output parsing), Home/Studio redesign, a new demo world, new engine capabilities or memory systems, runtime/model selection UI, run management, branch trees, context inspectors, containers/deployment, new maintained dependencies and global format/compilation redesign.
+Established history opens at the latest turn. Non-navigational updates preserve
+the reader's position. Show **Jump to latest** just above the composer only when
+the latest turn is offscreen. Resume places the caret at the end of the draft,
+including its existing prose line after routing; repeated resume adds no blank
+lines and ordinary typing/picker changes do not reset selection.
 
-### Resolved opening: an ordinary turn
+## Composer, private direction and routing
 
-The opening is turn 1. An authored stateless actor such as Scene can be selected alongside supported agents, privately directed to generate a draft, or performed manually. Its opening remains in ordinary history after acceptance. A production without Scene starts with an ordinary character; Stage never injects an actor or mandates a narrator.
+The selected vocabulary is **Stage whisper / Perform**, **Generate draft**,
+**Original stage whisper**, and **draft performance**. The original private
+instruction and resulting performance are separate objects. Mode switching
+preserves input rather than copying private instruction into spoken prose.
+Manual Perform keeps its immediate, explicit commit until a separate manual
+preview decision is made.
 
-Scene-setting turns use the same audience, perceptions, expected-head, acceptance and ownership rules at turn 1 and later. Stateless ownership grants no omniscience, new access, canonical world-mutation privileges or memory behaviour. Verify ownership through both real manual and durable-generation seams without weakening privacy.
+Optional typed `#actor` / `@audience` notation and pickers share explicit routing
+state in both directions; typing syntax must never be required. Opening guidance,
+composer controls and notation operate on the same active draft, not separate
+setup forms. Preserve each mode's prose and routing across switching, reopening
+and refinement; candidate corrections retain their own state. Select one actor
+and an arbitrary audience subset. Within an explicit performance-routing scope,
+recipient occurrences form a deduplicated whole-turn union, including inline
+occurrences; there are no passage-level deliveries. Removing one occurrence keeps
+a recipient if another remains. Unknown identities or multiple actors require
+correction. Plain names in prose never route.
 
-An empty Stage may display pinned scenario identity and a concise neutral invitation to choose an actor. It displays neither synthetic setup prose nor hidden scenario content nor format listings. There is no special pre-transcript opening renderer. Selected-format state and any new format-selection contract remain deferred, not blockers for this slice.
+**All** is a bulk selection of concrete supported cast IDs from the pinned
+revision, with individual deselection available. It grants no new access and does
+not remove the sender's own perception. No new aliases such as `@none` or
+`@everyone`, or blank-audience behavior, are approved by the study. Preserve the
+supported explicit-ID API and sender-own perception invariant.
 
-## Purpose
+The endorsed direction allows a natural-language stage whisper to request a
+**draft plus proposed audience**, without mandatory audience selection up front.
+This is a target requiring engine/API work: the study used fixed replies and
+fixed audience proposals, so it proves neither inference nor validation.
 
-Stage is where one person directs and performs a scene. It should feel familiar to someone who uses text-based agents without disguising Doxvelt's distinctive semantics. A person should encounter the value of simulation before having to author a world in Studio.
+The selected actor receives the private whisper; the reviewed audience perceives
+the accepted performance. A request to tell one person about another must not
+silently include the person merely named. Explicit `@` scope inside a private
+whisper still needs a deliberate distinction from resulting output routing.
+The earlier hypothesis that every mention anywhere automatically routes the
+performance must not be carried into this new flow without that scope decision.
+Natural-language intent is a candidate interpretation,
+not a lossless counterpart of picker metadata.
 
-Design the beginning and the middle together: turn 1 is an empty-state variation of the same working surface used at turn 25, not a separate onboarding interface.
+Before enabling this flow, define a validated revised-candidate contract for
+proposed/corrected actor or audience, context and staged-effect revalidation, and
+explicit review of the final performance and concrete recipients. Generated
+routing is untrusted staged data and delivers nothing. Acceptance must never
+rebind a fixed candidate under new metadata. Until that contract exists, retain
+current fixed actor/audience generation and acceptance.
 
-## Experience invariants
+## Historical revision
 
-1. **Conversation is central.** Prioritise readable performances over setup, diagnostics, and administrative cards. Stage is a working surface, not a marketing page or inspection dashboard.
-2. **Orientation and action remain reachable.** Keep human-readable scene/run identity and the composer stable while history scrolls. Do not force a reader back to the latest turn merely because state changes; provide an explicit route back.
-3. **Typing has an explicit meaning.** Distinguish performing an actor's words/actions from privately directing a model-generated performance. Identify the acting character, input intent, and resulting audience before submission. Private direction is not in-world dialogue, canonical truth, or knowledge shared with other actors.
-4. **Generation is not acceptance.** Present a generated performance as a proposed next turn, outside accepted history, with a textual status that does not depend on colour. Review, edit, retry, and discard belong near the proposal. Prioritise reading before editing.
-5. **Consequences are legible.** Acceptance advances history; discarding a proposal does not. Explain the boundary without repeated modal confirmation for ordinary turns. Never suggest that accepted history can be silently rewritten; corrections require an alternate path under the engine's branch semantics.
-6. **Progressive disclosure preserves agency.** Keep actor, input intent, audience, and draft status visible. Reveal raw prompts, engine identifiers, provider metadata, source spans, and deeper inspection only when requested. A quieter screen must not become an ambiguous one.
-7. **The interface does not become the engine.** UI state cannot confer knowledge, grant access, choose canonical truth, or bypass expected-head and draft validation. Labels and controls must reflect real capabilities; unavailable features must not imply success.
-8. **Existing layouts are hypotheses.** Keep Doxvelt's visual tokens and engine guarantees, not accidental arrangements. Production remains Nuxt/Nuxt UI unless a concrete requirement warrants a separate decision. Disposable prototypes are not new maintained frontends.
+Revision belongs **inline at the selected historical turn**, with only one active
+editor. Hide and preserve the normal continuation composer, its mode buffers and
+any candidate while revising; cancel restores them. A waiting continuation must
+be resolved or explicitly cancelled before conflicting historical work begins.
 
-## Earlier interaction hypotheses (historical design study)
+Offer editing the performance, regenerating from that turn's own original stage
+whisper, or editing that whisper to generate again. Use its **pre-turn context**,
+never the latest head or another turn's whisper. If no originating whisper exists
+(or provenance is unavailable), say so and allow explicit new direction; do not
+invent a recovered instruction. Authorized provenance retrieval and durable
+historical operations are dependencies, not capabilities of today's Stage client.
 
-These treatments describe the earlier study. The approved production subset above takes precedence, including Actor/Audience terminology, immediate manual Perform and the resolved ordinary-turn opening:
+An accepted replacement creates an alternate path from the selected turn's parent.
+The original path and original candidate remain available. Old descendants,
+perceptions, memories and closures are not inherited by the replacement. A
+preserved continuation candidate stays bound to its original branch/head; returning
+to it must restore that basis, not offer it against the alternative history.
 
-- A compact scene header, independently scrolling transcript, and anchored composer.
-- Compact **Direct / Perform** choices within one composer, with distinct text buffers and submission labels. Never reinterpret existing input silently when switching intent.
-- A proposed performance at the transcript's leading edge of new history; acceptance promotes it into history without relocating the next-action area.
-- The special format-native opening hypothesis is superseded: scene-setting is an ordinary actor turn, retained at the start of history.
-- Scene identity uses pinned metadata. The earlier separate setup-brief hypothesis is superseded; private direction stays in the draft transaction.
-- Sender on the left of a turn header; recipients on the right. The audience control can reveal turn number, provenance and accepted state on tap or keyboard activation. Accepted history is the unmarked default; a draft keeps an explicit textual boundary.
-- Remove redundant composer dividers, next-turn counters, repeated role instructions and a second review-panel heading. Preserve actions, not duplicate explanations.
-- Keep the acting character explicit after acceptance; do not silently advance to a different actor unless a scenario-defined rule is disclosed.
+## Actor state and player orientation gates
 
-Whether manually written performances need a separate preview is an open design decision. Their commit semantics must be explicit either way. Audience controls and draft retries must map to actual domain operations before production integration; a prototype is not proof that those seams exist.
+Actor inspection should explain available runtime state at the historical turn
+through its avatar/name. **Before this turn** by default with an **After this turn**
+comparison is a proposed temporal treatment, not a settled policy. Decide owner
+and access authorization, temporal projection and available fields before exposing
+beliefs, memories, goals or perceptions. Show provenance and unavailable data
+honestly. Never invent model hidden reasoning, dump raw context, bypass the current
+safe identity contract, or pass one actor's hidden state to another actor.
 
-## Future notation semantics — deferred from production slice
+World/scenario-specific player orientation is requested, but its authored source
+and player-visible projection remain unresolved. A short authored briefing,
+reopenable through scene identity, is a proposed treatment. It must not become an
+implicit canonical source dump, accepted turn, actor knowledge or perception.
+Until a content/projection contract is decided, retain pinned scenario identity only.
 
-The following intended whole-turn semantics remain design direction only. This slice uses pickers; neither typed notation nor model output is parsed for routing.
+## Invariants and regression gates
 
-`#nell @mara “Mara. A word.” Nell steps toward the mooring post, away from the passenger.`
+- Exactly one supported actor owns each committed turn, including supported
+  stateless actors. Opening is an ordinary turn retained in history. No mandatory
+  narrator, injected scene actor, omniscience or model-selected automatic turns.
+- Accepted history is immutable. Context reads are pure. Private direction is
+  actor/head-bound, consumed only on acceptance, and not automatically truth or memory.
+  Generation, retry, discard and orientation create no canonical turns/perceptions.
+- Preserve expected-head validation, idempotent commands and command leases until
+  both mutation and projection converge. Lost responses, double clicks, projection
+  failures and late results must not duplicate work or act on another candidate.
+  Guard asynchronous results against API/simulation/branch changes.
+- Preserve durable discovery, API-restart recovery, stale rejection, restricted
+  perceptions, original candidates and unsaved-edit handling across all new flows.
+- Review opening, long history, pending/failed drafts and inline revision at
+  1440×900, 1280×600, 390×844 and 360×640, including keyboard/focus, scrolling,
+  overflow and reachable actions. Real phone keyboards and assistive technology
+  need production validation; scripted study checks are not accessibility certification.
 
-- `#` identifies the single sender. `@` identifies recipients. One other recipient means a direct turn without a separate direct-message mode.
-- **Every explicit @mention applies to the entire turn**, including mentions inside dialogue, private direction, or an agent's proposed response. There are no passage-level audience changes and no separate non-routing “reference mention” interpretation.
-- A plain name in prose has no routing effect. “Do not tell @ivo” nevertheless includes Ivo; use the plain name when not issuing a recipient instruction.
-- Resolve recipients from all mention occurrences, deduplicate them, and show the complete resulting audience before acceptance. The sender also perceives their own turn. Generated mentions remain staged draft data; they do not deliver anything during generation.
-- Leading routing notation may render as a from/to header; in-prose mentions may remain inline. Their audience semantics are identical. Removing one occurrence removes that recipient only if no remaining occurrence includes them.
-- Unknown identities and multiple senders require correction; never guess a recipient or silently fall back to public delivery.
-
-The current disposable study tests editable chips, keyboard completion, click/backspace removal, and equivalent #/@ picker buttons. It uses `@everyone` as an explicit fixture-wide recipient set and requires at least one recipient rather than inventing an implicit public default. These alias/default details and the exact editor behaviour remain prototype choices, not a new engine grammar or shipped capability.
-
-Keep prototype limitations in one plain, discoverable notice: example replies are not generated from direction, and nothing is saved. Do not repeat “canned alternative” metadata inside performances.
-
-## Review benchmark
-
-The notation/chip checks below apply only to future editor experiments. Production review uses the pickers and regression requirements in the approved subset.
-
-Evaluate the **same layout** with no accepted turns, a long established transcript, and a pending performance. Check a normal desktop, a short laptop viewport, and a narrow/mobile viewport, including keyboard navigation.
-
-- Can a user identify the situation, current run, acting character, and next action without assistance?
-- Can they distinguish writing dialogue/actions from privately directing a performance before submission?
-- Is the resulting audience explicit, including private or restricted turns?
-- Does an inline @mention, including one emitted in a draft response, update the whole-turn audience visibly without committing it? Does deletion respect other remaining occurrences?
-- Can a user type, select, remove and undo routing chips without losing prose or line breaks? Do intent switches preserve separate text?
-- Can they tell proposed from accepted content without colour or technical identifiers?
-- Can they read, edit, retry, accept, and discard without hunting for controls?
-- Does accepting a proposal preserve a predictable route to the next turn?
-- Can they read older history without losing their place or scrolling past all history to reach the composer?
-- Can the user start with any supported actor, including an authored stateless scene-setting actor, without a mandatory narrator or synthetic brief?
-- Are diagnostics optional while creative controls remain understandable?
-- Are keyboard focus, controls, and pending-state actions reachable on short and narrow screens?
-
-A convincing empty screen alone is not a pass. Prototype checks establish interaction feasibility, not user comprehension, accessibility certification, engine correctness, or persistence.
-
-## Decision gate and scope
-
-The disposable, explicitly scripted interaction study has led to approval of the bounded production subset above. The opening is resolved as an ordinary turn. Use these criteria in Stage reviews; revise them deliberately when evidence changes the design.
-
-Do not bundle Home redesign, Studio changes, a new demo world, run management, a branch tree, or a full context inspector into the interaction proof. A small synthetic scene is only a fixture, not a new supported content package.
-
-Resumability is a separate trust requirement: a stored draft is not a resumable experience unless reopening Stage can find it and clearly distinguish saved content from unsaved edits. Do not advertise persistence based on a disposable prototype.
+Implementation slices require focused behavioral checks and the repository's
+final `check` and `ui:build` gates with Node >=24. This docs-only handoff runs no
+production tests. Keep Nuxt/Nuxt UI, shared contracts and focused clients; the
+private disposable study remains reference material, never a maintained frontend
+or a source of production fixtures, portraits or engine code.
 
 ## Related contracts
 
 - [Target Architecture](ARCHITECTURE.md)
 - [Branching and Memory](BRANCHING_AND_MEMORY.md)
 - [System Loop](SYSTEM_LOOP.md)
-- [Canonical visual tokens](../../design-system/tokens.css)
+- [Adoption plan](LIVING_LIBRARY_ADOPTION.md)
