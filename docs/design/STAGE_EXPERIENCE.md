@@ -35,7 +35,12 @@ The existing Nuxt/Nuxt UI Stage uses shared
   edits, with navigation warnings. This is not browser-reload autosave of all input.
 - Opening orientation is **pinned scenario identity only** plus a neutral invitation.
   Identity inspection exposes safe public identity (currently name, kind and ID),
-  not subjective context. Draft review/discovery omits prompts, context and whispers.
+  not subjective context. The discovery list filters draft records server-side
+  through `stageDraft`. Generation/retry responses and draft-detail GET return full
+  records, including `stageWhispers` text, `context` and `prompt`; the Stage client
+  filters these after receipt. Its `StageDraft` view/type is not an HTTP redaction
+  boundary. Transport minimization and authorized provenance retrieval remain
+  explicit follow-on work, not existing guarantees.
 - [Home](../../src/local-ui/pages/index.vue) offers the supported example, workspace
   creation/Studio access and browser-local recent workspaces. [The last crossing](LAST_CROSSING.md)
   starts or resumes one database-backed example without recompiling on resume.

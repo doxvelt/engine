@@ -83,7 +83,10 @@ manual Perform until its own decision. Fixed study replies prove no live inferen
 
 **Baseline:** The engine supports immutable alternate history and pure head-relative
 context; Stage supports continuation drafts and durable retry, not historical
-revision controls. Its draft transport omits whispers and context. Saved candidates
+revision controls. Discovery is filtered server-side through `stageDraft`, but
+generation/retry and draft-detail HTTP responses carry full records with whisper
+text, context and prompt. The Stage client filters those responses after receipt;
+its view/type does not redact transport payloads. Saved candidates
 survive API restart; local unsaved edits survive refresh with navigation warnings.
 
 **Target:** One inline historical editor; hide/preserve the continuation composer
@@ -92,8 +95,10 @@ or edit that whisper against pre-turn context. Preserve original path/candidate;
 accept an alternative containing the prefix and replacement, excluding descendants.
 
 **Dependencies:** Map existing branch operations into durable historical commands
-and shared UI contracts. Provide authorized originating-whisper/provenance retrieval
-without widening general draft discovery. Use LL-02 for revised candidate routing;
+and shared UI contracts. Specify and verify transport minimization separately
+from client-view filtering; provide authorized originating-whisper/provenance
+retrieval without widening discovery or assuming existing detail/retry payloads
+are redacted. Use LL-02 for revised candidate routing;
 fixed-route revision can be bounded separately. Specify recovery of inline edits
 and suspended continuation state without claiming current all-input autosave.
 
@@ -106,6 +111,8 @@ original basis. Exercise ready/failed/in-progress recovery after reload/API rest
 lost responses, stale heads, multiple candidates, double actions, failed projection
 refresh and late responses after scope changes. Unsaved wording survives refresh
 and terminal changes; no duplicate commits or effects escape rejected candidates.
+Verify actual generation, retry, detail and discovery HTTP payloads against the
+decided disclosure policy, not only the client view or TypeScript types.
 
 **Exclusions:** Full branch-tree UI, rewriting accepted history, retaining incompatible
 descendants, invented whisper provenance, a new memory engine and model auto-turns.
@@ -169,4 +176,3 @@ evidence distinct. Preserve supported stateless actors and ordinary opening turn
 
 For this docs-only handoff: check local Markdown links, `git diff --check`, changed
 file scope and private-reference leakage. No production test results are claimed.
-
