@@ -15,6 +15,11 @@ Read these first:
 7. `docs/design/SYSTEM_LOOP.md`
 8. `docs/design/MVP_ARCHITECTURE.md`
 9. `docs/design/STAGE_EXPERIENCE.md` for Stage interaction work and reviews
+10. [Living Library adoption plan](docs/design/LIVING_LIBRARY_ADOPTION.md) and
+    [design-system guidance](design-system/README.md) for Home/Stage adoption work
+
+For the current Home/Stage baseline and selected target, use the Stage Experience
+contract and adoption plan; the broad architecture status below predates that work.
 
 ## Product Direction
 

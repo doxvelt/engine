@@ -200,7 +200,12 @@ Example: Fate, scene heading generator, complication generator.
 
 ## Stage Whisper
 
-Private, directed context from the player to the next actor for the next turn only. Stage whispers are hidden from other actors and are not automatically remembered.
+Private player direction for one actor's draft, hidden from other actors, consumed
+only on acceptance and not automatically canonical truth or memory. **Stage whisper** is the selected UI
+name for the current **Direct** mode; **Generate draft** is its action. **Original
+stage whisper** identifies the originating instruction, separately from the
+resulting draft performance. Proposed-audience generation requires the contract
+gates in [Stage Experience](STAGE_EXPERIENCE.md).
 
 ## Turn
 
@@ -232,3 +237,22 @@ Immutable laws and norms that govern the simulation or RPG. Worlds live next to 
 Examples: physics, social norms, legislative laws, genre constraints, market structure, company governance, training exercise rules.
 
 Worlds describe canonical truth only.
+
+## Stage UI terms
+
+These labels describe interaction; they do not rename domain records. See
+[Stage Experience](STAGE_EXPERIENCE.md) for implementation status and gates.
+
+- **Perform:** submit manually authored actor words/actions. Current Stage commits
+  immediately; a separate manual preview remains undecided.
+- **Draft performance:** proposed output awaiting acceptance, distinct from private
+  direction and accepted history.
+- **Actor / Audience:** one acting identity and the explicit whole-turn recipients.
+  Optional `#actor` / `@audience` notation is selected direction, not shipped grammar.
+  Plain names never route; sender-own perception remains independent.
+- **Continue:** the selected return action for resuming an existing simulation.
+- **Actor state:** the selected label for target runtime-state inspection; historical
+  timing and authorization remain gated. Current Stage exposes safe identity only.
+- **Production:** candidate UI wording for a running simulation, not an approved
+  domain, schema or API rename. A simulation descends from pinned authored content;
+  a branch selects one history path within it.
