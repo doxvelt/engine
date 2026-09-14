@@ -1,9 +1,28 @@
 <template>
   <div class="dx-home min-h-0 flex-1 overflow-y-auto">
     <div class="dx-home-container">
+      <section class="py-8" aria-label="Saved simulations" :aria-busy="collection.status === 'loading'">
+        <h1 class="dx-section-title">Your simulations</h1>
+        <p v-if="collection.status === 'loading'" role="status" class="mt-4 text-sm text-muted">Loading saved simulations…</p>
+        <UAlert v-else-if="collection.status === 'error'" role="alert" class="mt-4" color="error" title="Could not load saved simulations" :description="collection.error">
+          <template #actions><UButton color="neutral" variant="subtle" @click="collection.load(apiBase)">Retry</UButton></template>
+        </UAlert>
+        <template v-else>
+          <p v-if="collection.items.length === 0" class="mt-4 text-sm text-muted">No saved simulations yet. Play the example or create your own below.</p>
+          <div v-else class="mt-4 grid gap-4 md:grid-cols-2">
+            <UCard v-for="(item, index) in collection.items" :key="item.simulationId" :ui="{ root: index === 0 ? 'dx-light-card shadow-none md:col-span-2' : 'dx-action-card shadow-none' }">
+              <p v-if="index === 0" class="dx-label mb-2">{{ item.openedAt ? 'Last opened' : 'Recently created' }}</p>
+              <h2 class="text-lg font-semibold break-words">{{ item.scenarioName || item.simulationId }}</h2>
+              <p class="mt-1 text-xs text-muted break-all">{{ item.simulationId }}</p>
+              <p class="mt-2 text-xs text-muted">{{ item.openedAt ? 'Opened' : 'Created' }} <time :datetime="item.openedAt || item.createdAt">{{ displayDate(item.openedAt || item.createdAt) }}</time></p>
+              <UButton class="mt-4" :color="index === 0 ? 'primary' : 'neutral'" :variant="index === 0 ? 'solid' : 'subtle'" :to="collection.target(item)" :aria-label="`Continue ${item.scenarioName || item.simulationId} (${item.simulationId})`">Continue</UButton>
+            </UCard>
+          </div>
+        </template>
+      </section>
       <section class="dx-home-intro">
         <div>
-          <h1 class="dx-section-title">The last crossing</h1>
+          <h2 class="dx-section-title">The last crossing</h2>
           <div class="mt-4 grid gap-3">
             <p class="text-sm text-muted">The last ferry before a storm. A captain, a quay keeper, and a late passenger with a sealed letter. Choose who speaks next.</p>
             <div>
@@ -164,10 +183,13 @@
 </template>
 
 <script setup lang="ts">
+import { HomeCollectionController } from "../lib/home-collection";
 import { ExampleEntryController } from "../lib/example-entry";
 
+const collection = ref(new HomeCollectionController());
+function displayDate(value: string): string { return new Date(value).toLocaleString(); }
 const example = ref(new ExampleEntryController());
-onBeforeUnmount(() => example.value.dispose());
+onBeforeUnmount(() => { example.value.dispose(); collection.value.dispose(); });
 
 async function playExample(): Promise<void> {
   await example.value.play(apiBase.value, entry => navigateTo({
@@ -202,6 +224,7 @@ const pendingDeleteName = computed(() => workspaceName(pendingDeletePath.value))
 
 onMounted(() => {
   recentWorkspaces.value = readRecentWorkspaces();
+  void collection.value.load(apiBase.value);
 });
 
 async function createBlankWorkspace(): Promise<void> {

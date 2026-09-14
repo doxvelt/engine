@@ -24,7 +24,12 @@ Home has one featured, recognizable return item with **Continue** and a quieter
 collection beside or below it. First arrival pairs the example with **Create your
 own**, an understandable route to Studio. Keep the invitation to resume without
 unexplained volume numbers, literary filler or “reading desk” navigation wording.
-The featured-item rule and empty-collection treatment remain open.
+Feature the most recently successfully opened simulation. Opened runs precede
+unopened runs; the latter use creation time with stable simulation-ID ties. Show
+creation as creation, never as a played date. Keep the example and Create your own
+in empty and populated collections, and browser workspace shortcuts separate.
+Use existing Nuxt UI cards, buttons, fields and alerts; extract Doxvelt components
+only for recurring meaningful customization.
 
 Stage reads as a **continuous script**. Avatar and readable name anchor actor
 identity; prose flows without a card, separator rule or Accepted badge on every

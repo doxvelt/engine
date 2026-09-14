@@ -86,6 +86,15 @@ function countOccurrences(text: string, pattern: RegExp) {
   return text.match(pattern)?.length ?? 0;
 }
 
+test("resume warning uses readable theme text rather than inverted text on caution fill", async () => {
+  const stage = await readFile("src/local-ui/pages/stage.vue", "utf8");
+  const warning = stage.match(/<UAlert\s+v-if="navigationWarning"[^>]*\/>/)?.[0];
+  assert.ok(warning);
+  assert.match(warning, /variant="outline"/);
+  assert.match(warning, /title: 'text-highlighted'/);
+  assert.match(warning, /description: 'text-default'/);
+});
+
 test("Living Library specimen adopts example entry and continuous script with an explicit draft boundary", () => {
   assert.match(designHtml, /id="living-library-title"/);
   assert.match(designHtml, /Play the example/);

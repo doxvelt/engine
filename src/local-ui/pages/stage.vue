@@ -1,12 +1,15 @@
 <template>
   <main v-if="session.projection" class="stage-surface" aria-label="Stage">
-    <header class="stage-header">
-      <div class="min-w-0">
-        <h1 class="truncate text-lg font-semibold text-highlighted">{{ session.projection.scenarioName }}</h1>
-        <p class="truncate text-xs text-muted">{{ simulationId }} · {{ branchId }}</p>
-      </div>
-      <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" aria-label="Refresh Stage and saved drafts" :disabled="session.busy" @click="refreshPendingDraft" />
-    </header>
+    <div>
+      <header class="stage-header">
+        <div class="min-w-0">
+          <h1 class="truncate text-lg font-semibold text-highlighted">{{ session.projection.scenarioName }}</h1>
+          <p class="truncate text-xs text-muted">{{ simulationId }} · {{ branchId }}</p>
+        </div>
+        <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" aria-label="Refresh Stage and saved drafts" :disabled="session.busy" @click="refreshPendingDraft" />
+      </header>
+      <UAlert v-if="navigationWarning" color="warning" variant="outline" :ui="{ title: 'text-highlighted', description: 'text-default' }" title="Resume location not confirmed" :description="navigationWarning" role="alert" />
+    </div>
 
     <div class="stage-history-wrap">
       <section id="stage-history" ref="history" class="stage-history" aria-label="Conversation history" tabindex="0" @scroll="measureHistory">
@@ -110,9 +113,12 @@
       <UFormField label="API base"><UInput v-model="apiBase" class="w-full" :disabled="setupBusy" /></UFormField>
       <UFormField label="Simulation ID"><UInput v-model="simulationId" class="w-full" :disabled="setupBusy" /></UFormField>
       <UButton color="neutral" :loading="setupBusy" @click="openRun">Open run</UButton>
-      <UFormField label="Workspace"><UInput v-model="workspacePath" class="w-full" :disabled="setupBusy" @change="discoverSource" /></UFormField>
-      <UFormField label="Scenario"><USelect v-model="scenarioId" :items="scenarioItems" class="w-full" :disabled="setupBusy" /></UFormField>
-      <UButton color="primary" :loading="setupBusy" :disabled="!scenarioId || setupBusy" @click="startSimulation">Start</UButton>
+      <template v-if="!route.query.simulation">
+        <UFormField label="Workspace"><UInput v-model="workspacePath" class="w-full" :disabled="setupBusy" @change="discoverSource" /></UFormField>
+        <UFormField label="Scenario"><USelect v-model="scenarioId" :items="scenarioItems" class="w-full" :disabled="setupBusy" /></UFormField>
+        <UButton color="primary" :loading="setupBusy" :disabled="!scenarioId || setupBusy" @click="startSimulation">Start</UButton>
+      </template>
+      <UButton to="/" color="neutral" variant="link">Back to simulations</UButton>
     </section>
   </main>
 </template>
@@ -120,9 +126,10 @@
 <script setup lang="ts">
 import { StageSession, StageApiError } from "../lib/stage-session";
 import { classifyDraftReview, createCommandLease, runLeasedMutation } from "../lib/stage-play";
-import { stageSetupRequest, type RuntimeStatus, type SourceFile } from "../lib/stage-api";
+import { stageSetupRequest, type RuntimeStatus, type SourceFile, type NavigationState } from "../lib/stage-api";
 
 const route = useRoute();
+const initialHydration = useNuxtApp().isHydrating;
 const config = useRuntimeConfig();
 const apiBase = ref(String(config.public.apiBase));
 const simulationId = ref(String(route.query.simulation || "default"));
@@ -133,6 +140,8 @@ const runtime = ref<RuntimeStatus | null>(null);
 const sourceFiles = ref<SourceFile[]>([]);
 const setupBusy = ref(false);
 const setupError = ref("");
+const navigationWarning = ref("");
+let openingScope = "";
 const setupCommands = createCommandLease(() => crypto.randomUUID());
 const session = ref(new StageSession({ apiBase: apiBase.value, simulationId: simulationId.value, branchId: branchId.value }));
 const history = ref<HTMLElement | null>(null);
@@ -337,7 +346,13 @@ onBeforeRouteLeave(() => !session.value.unsaved || window.confirm('Leave Stage w
 onBeforeRouteUpdate(() => !session.value.unsaved || window.confirm('Change run with unsaved text? Saved drafts will be recoverable.'));
 let mounted = true;
 let setupVersion = 0;
-onMounted(async () => { window.addEventListener('beforeunload', warnBeforeUnload); window.addEventListener('resize', restoreHistory); await openRun(false); if (!session.value.projection) await discoverSource(); });
+onMounted(async () => {
+  window.addEventListener('beforeunload', warnBeforeUnload);
+  window.addEventListener('resize', restoreHistory);
+  const browserReload = initialHydration && (window.performance?.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'reload';
+  await openRun(false, captureSetupScope(), !browserReload);
+  if (!session.value.projection && !route.query.simulation) await discoverSource();
+});
 onBeforeUnmount(() => { mounted = false; setupVersion++; focusVersion++; historyObserver?.disconnect(); session.value.dispose(); window.removeEventListener('beforeunload', warnBeforeUnload); window.removeEventListener('resize', restoreHistory); });
 watch(() => [route.query.simulation, route.query.branch], async () => {
   const nextSimulation = String(route.query.simulation || 'default');
@@ -351,24 +366,41 @@ function captureSetupScope() {
 function matchesSetupScope(scope: ReturnType<typeof captureSetupScope>): boolean {
   return scope.apiBase === apiBase.value && scope.simulationId === simulationId.value && scope.branchId === branchId.value && scope.workspacePath === workspacePath.value;
 }
-async function openRun(updateRoute = true, scope = captureSetupScope()): Promise<void> {
+async function openRun(updateRoute = true, scope = captureSetupScope(), recordOpened = true): Promise<void> {
   if (!mounted || !matchesSetupScope(scope)) return;
+  const key = JSON.stringify(scope);
+  if (openingScope === key) return;
+  openingScope = key;
   const version = ++setupVersion;
   session.value.dispose();
   session.value = new StageSession(scope);
   const current = session.value;
   const ownsSetup = () => mounted && version === setupVersion && session.value === current && matchesSetupScope(scope);
-  setupBusy.value = true; setupError.value = '';
+  setupBusy.value = true; setupError.value = ''; navigationWarning.value = '';
   try {
     const status = await stageSetupRequest<RuntimeStatus>(scope.apiBase, '/runtime');
     if (!ownsSetup()) return;
     runtime.value = status;
+    let navigation: NavigationState | undefined;
+    let navigationError = '';
+    if (recordOpened) {
+      try { navigation = await current.request<NavigationState>(`/navigation?branchId=${encodeURIComponent(scope.branchId)}`); }
+      catch (error) { navigationError = error instanceof Error ? error.message : String(error); }
+      if (!ownsSetup()) return;
+    }
     await current.refresh();
-    if (!ownsSetup()) return;
+    if (!ownsSetup() || !current.projection) return;
+    if (navigation) {
+      const input = { branchId: scope.branchId, operationId: crypto.randomUUID(), expectedVersion: navigation.version };
+      try { await current.request('/navigation', input); }
+      catch (error) { navigationError = error instanceof Error ? error.message : String(error); }
+      if (!ownsSetup()) return;
+    }
+    if (navigationError) navigationWarning.value = `Could not confirm the resume location was saved. You can keep playing. ${navigationError}`;
     if (updateRoute) await navigateTo({ path: '/stage', query: { workspace: scope.workspacePath, simulation: scope.simulationId, branch: scope.branchId } }, { replace: true });
   } catch (error) {
-    if (ownsSetup() && !(error instanceof StageApiError && error.status === 404)) setupError.value = error instanceof Error ? error.message : String(error);
-  } finally { if (ownsSetup()) setupBusy.value = false; }
+    if (ownsSetup() && (route.query.simulation || !(error instanceof StageApiError && error.status === 404))) setupError.value = error instanceof Error ? error.message : String(error);
+  } finally { if (version === setupVersion) openingScope = ""; if (ownsSetup()) setupBusy.value = false; }
 }
 async function discoverSource(): Promise<void> {
   const base = apiBase.value; const workspace = workspacePath.value;
