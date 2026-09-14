@@ -10,7 +10,7 @@ import * as apiModule from "../src/local-ui/lib/stage-api.ts";
 
 // Execute the actual page script, with real Vue reactivity and its actual API/session
 // modules. Only Nuxt navigation/lifecycle and the HTTP transport are test boundaries.
-async function pageFixture(t: test.TestContext) {
+async function pageFixture(t: test.TestContext, initialHydration = false) {
   const source = await readFile(new URL("../src/local-ui/pages/stage.vue", import.meta.url), "utf8");
   const script = source.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)?.[1];
   assert.ok(script);
@@ -18,6 +18,7 @@ async function pageFixture(t: test.TestContext) {
   const route = reactive({ query: { simulation: "starting", branch: "main", workspace: "workspace" } });
   const navigation: unknown[] = [];
   let unmount = () => {};
+  let mount = async () => {};
   const scope = effectScope();
   const modules: Record<string, unknown> = { "../lib/stage-session": sessionModule, "../lib/stage-play": playModule, "../lib/stage-api": apiModule };
   const bindings = {
@@ -26,14 +27,16 @@ async function pageFixture(t: test.TestContext) {
     useRoute: () => route,
     useRuntimeConfig: () => ({ public: { apiBase: "http://stage.invalid" } }),
     navigateTo: async (target: unknown) => { navigation.push(target); },
-    onMounted: () => {},
+    useNuxtApp: () => ({ isHydrating: initialHydration }),
+    onMounted: (callback: () => Promise<void>) => { mount = callback; },
     onBeforeUnmount: (callback: () => void) => { unmount = callback; },
     onBeforeRouteLeave: () => {}, onBeforeRouteUpdate: () => {},
-    window: { removeEventListener: () => {} },
+    window: { removeEventListener: () => {}, addEventListener: () => {}, performance: { getEntriesByType: () => [{ type: "reload" }] } },
   };
-  const page = scope.run(() => new Function(...Object.keys(bindings), `${code}\nreturn { startSimulation, openRun, session, setupBusy, setupError, apiBase, simulationId, scenarioId };`)(...Object.values(bindings))) as {
+  const page = scope.run(() => new Function(...Object.keys(bindings), `${code}\nreturn { startSimulation, openRun, session, setupBusy, setupError, apiBase, simulationId, scenarioId, navigationWarning, refreshPendingDraft };`)(...Object.values(bindings))) as {
     startSimulation(): Promise<void>; openRun(updateRoute?: boolean): Promise<void>;
     session: Ref<sessionModule.StageSession>; setupBusy: Ref<boolean>; setupError: Ref<string>;
+    navigationWarning: Ref<string>; refreshPendingDraft(): Promise<void>;
     apiBase: Ref<string>; simulationId: Ref<string>; scenarioId: Ref<string>;
   };
   page.scenarioId.value = "scenario";
@@ -44,6 +47,10 @@ async function pageFixture(t: test.TestContext) {
   const delayedStart = new Promise<Response>((resolve, reject) => { resolveStart = resolve; rejectStart = reject; });
   let delay = true;
   let projectionFailures = 0;
+  let missingProjection = false;
+  let navigationFailure = false;
+  let recordRelease: (response: Response) => void = () => {};
+  let delayRecord = false;
   let delayProjection = false;
   let resolveProjection: (response: Response) => void = () => {};
   const delayedProjection = new Promise<Response>(resolve => { resolveProjection = resolve; });
@@ -54,14 +61,28 @@ async function pageFixture(t: test.TestContext) {
     if (target.pathname === "/simulations/start") return delay ? delayedStart : Response.json({});
     if (target.pathname === "/runtime") return Response.json({ configured: true });
     if (target.pathname.endsWith("/stage")) {
+      if (missingProjection) return Response.json({ error: "Saved branch missing" }, { status: 404 });
       if (delayProjection && target.pathname.includes("/starting/")) return delayedProjection;
       if (projectionFailures-- > 0) throw new Error("Projection unavailable");
-      return Response.json({ scenarioName: target.pathname.split("/")[2], branch: { id: "main", headCommitId: "head" }, actors: [], transcript: [], audience: [] });
+      return Response.json({ scenarioName: target.pathname.split("/")[2], branch: { id: target.searchParams.get("branchId"), headCommitId: "head" }, actors: [], transcript: [], audience: [] });
+    }
+    if (target.pathname.endsWith("/navigation")) {
+      if (body) {
+        if (navigationFailure) throw new Error("Navigation offline");
+        if (delayRecord && target.pathname.includes("/starting/")) return new Promise<Response>(resolve => { recordRelease = resolve; });
+        return Response.json({ version: body.operationId, openedAt: "2026-01-01" });
+      }
+      return Response.json({ version: null });
     }
     if (target.pathname.endsWith("/drafts")) return Response.json({ drafts: [] });
     throw new Error(`Unexpected request ${url}`);
   });
   return {
+    mount: () => mount(),
+    missingProjection: () => { missingProjection = true; },
+    failNavigation: () => { navigationFailure = true; },
+    delayRecord: () => { delayRecord = true; },
+    releaseRecord: () => recordRelease(Response.json({ error: "Old navigation failure" }, { status: 500 })),
     page, route, navigation, calls, unmount: () => unmount(),
     release: () => resolveStart(Response.json({})),
     reject: () => rejectStart(new Error("Old Start failed")),
@@ -180,3 +201,88 @@ test("page Start retries a lost response with its original immutable request", a
   assert.equal(f.page.setupError.value, "");
   assert.equal(f.navigation.length, 1);
 });
+
+
+test("intentional Stage entry records once after projection; ordinary refresh and failed entry never promote", async t => {
+  const f = await pageFixture(t);
+  f.failProjection(); await f.page.openRun(false);
+  assert.equal(f.calls.filter(c => c.url.endsWith('/navigation') && c.body).length, 0);
+  await f.page.openRun(false);
+  const writes = () => f.calls.filter(c => c.url.endsWith('/navigation') && c.body);
+  assert.equal(writes().length, 1);
+  assert.equal(writes()[0]!.body!.branchId, 'main');
+  assert.ok(f.calls.findIndex(c => c.url.includes('/stage?')) < f.calls.indexOf(writes()[0]!));
+  await f.page.refreshPendingDraft();
+  assert.equal(writes().length, 1);
+});
+
+test("metadata failure warns honestly without removing the playable projection or editor text", async t => {
+  const f = await pageFixture(t); f.failNavigation();
+  await f.page.openRun(false);
+  assert.ok(f.page.session.value.projection);
+  assert.match(f.page.navigationWarning.value, /could not confirm/i);
+  f.page.session.value.performance = 'Keep my prose';
+  await f.page.refreshPendingDraft();
+  assert.equal(f.page.session.value.performance, 'Keep my prose');
+  assert.match(f.page.navigationWarning.value, /could not confirm/i);
+});
+
+test("late navigation responses cannot overwrite a newer view or unmounted state", async t => {
+  const f = await pageFixture(t); f.delayRecord();
+  const opening = f.page.openRun(false);
+  await until(() => f.calls.some(c => c.url.endsWith('/navigation') && c.body));
+  f.unmount(); f.page.navigationWarning.value = 'Keep current notice';
+  f.releaseRecord(); await opening;
+  assert.equal(f.page.navigationWarning.value, 'Keep current notice');
+});
+
+
+test("direct non-default entry records that branch and suppresses duplicate loads", async t => {
+  const f = await pageFixture(t); f.delayProjection();
+  f.route.query.branch = 'alternate';
+  await until(() => f.calls.some(c => c.url.includes('/stage?branchId=alternate')));
+  await f.page.openRun(false);
+  assert.equal(f.calls.filter(c => c.url.includes('/stage?branchId=alternate')).length, 1);
+  f.releaseProjection();
+  await until(() => !f.page.setupBusy.value);
+  const writes = f.calls.filter(c => c.url.endsWith('/navigation') && c.body);
+  assert.equal(writes.length, 1); assert.equal(writes[0]!.body!.branchId, 'alternate');
+});
+
+test("late projection never records the abandoned scope; late record errors never replace newer notices", async t => {
+  const f = await pageFixture(t); f.delayProjection();
+  const opening = f.page.openRun(false);
+  await until(() => f.calls.some(c => c.url.includes('/starting/stage')));
+  f.route.query.simulation = 'existing';
+  await until(() => !f.page.setupBusy.value);
+  f.releaseProjection(); await opening;
+  assert.deepEqual(f.calls.filter(c => c.url.endsWith('/navigation') && c.body).map(c => new URL(c.url).pathname), ['/simulations/existing/navigation']);
+});
+
+test("late metadata failure cannot overwrite newer scope or its editor", async t => {
+  const f = await pageFixture(t); f.delayRecord();
+  const opening = f.page.openRun(false);
+  await until(() => f.calls.some(c => c.url.endsWith('/navigation') && c.body));
+  f.route.query.simulation = 'existing';
+  await until(() => !f.page.setupBusy.value);
+  f.page.session.value.performance = 'Newer prose';
+  f.page.navigationWarning.value = 'Newer notice';
+  f.releaseRecord(); await opening;
+  assert.equal(f.page.session.value.performance, 'Newer prose');
+  assert.equal(f.page.navigationWarning.value, 'Newer notice');
+});
+
+test("known missing Stage entry reports failure without source discovery or automatic Start", async t => {
+  const f = await pageFixture(t); f.missingProjection(); await f.mount();
+  assert.match(f.page.setupError.value, /Saved branch missing/);
+  assert.equal(f.page.session.value.projection, null);
+  assert.ok(!f.calls.some(c => c.url.includes('/source') || c.url.includes('/start') && c.body));
+});
+
+for (const hydration of [true, false]) {
+  test(`browser reload suppression applies only to initial hydration (${hydration})`, async t => {
+    const f = await pageFixture(t, hydration); await f.mount();
+    assert.ok(f.page.session.value.projection);
+    assert.equal(f.calls.filter(c => c.url.endsWith('/navigation') && c.body).length, hydration ? 0 : 1);
+  });
+}

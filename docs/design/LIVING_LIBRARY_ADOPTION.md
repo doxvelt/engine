@@ -3,7 +3,8 @@
 Docs-only handoff based on `c400e2a`. The selected contract is
 [Stage Experience](STAGE_EXPERIENCE.md), with
 [visual guidance](../../design-system/README.md). The private study is an existing
-reference, not a maintained frontend or required preview. This PR changes documentation only; linked issues track subsequent implementation.
+reference, not a maintained frontend or required preview. The original handoff was
+docs-only; the bounded collection implementation below updates LL-01 without closing its browser and accessibility gates.
 
 These five stable slice IDs define independently reviewable delivery boundaries.
 Each slice preserves immutable branches, subjective context, local/hosted domain
@@ -15,17 +16,26 @@ parity and the durable-operation guarantees in Stage Experience.
 
 **Baseline:** Home starts/resumes the database-backed example and offers workspace
 creation/Studio routes plus browser-local recents. Stage has avatars, safe identity
-popovers, draft review and conditional Jump to latest. It has no durable simulation
-collection or featured-item rule.
+popovers, draft review and conditional Jump to latest. Continuous transcript and
+navigation adoption preceded this bounded collection slice.
 
 **Target:** Featured return item with Continue, quieter collection, example plus
 Create your own into Studio; continuous avatar-led script, quiet actions, compact
 controls, stable reading position and resume caret at the draft end. No repeated
 Accepted labels. Retain a clearly marked pending draft.
 
-**Dependencies:** Choose featured-item and empty-collection policy; define any
-minimal persisted listing/resume metadata before showing a simulation collection.
-Workspace recents cannot substitute for it. Agree token/specimen changes before
+**Approved bounded collection slice:** Feature the most recently successfully
+opened simulation, with opened runs ahead of unopened creation-time fallback and
+stable simulation-ID ties. Continue opens its saved branch at the current head;
+missing targets fail without source Start fallback. Installation-local navigation
+is owner scoped, additive, separate from canonical history and excluded from archives.
+Only successful intentional Stage entry records it; reads, polling, browser reload
+and failed loads do not. Version conflicts/metadata failure warn without blocking play.
+See [the exact collection contract](STAGE_EXPERIENCE.md#ll-01-collection-and-durable-resume).
+Home retains example and Create your own/Studio in empty and populated states.
+Workspace recents remain separate source shortcuts.
+
+**Dependencies:** Agree token/specimen changes before
 introducing new palette/type values. Historical Actor state remains gated by LL-04;
 this slice keeps safe identity inspection. Visual transcript work can proceed
 independently of the collection decision.

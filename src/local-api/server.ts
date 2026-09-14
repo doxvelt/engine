@@ -1,3 +1,4 @@
+import { navigationToken } from "../application/simulation-collection.ts";
 import path from "node:path";
 import { playLastCrossing } from "./example.ts";
 import { stageDraft, type StageProjection } from "./stage-contracts.ts";
@@ -154,6 +155,8 @@ export async function handleLocalApiRequest(
         diagnostics: started.compiled.diagnostics,
       });
     }
+    if (method === "GET" && parts[0] === "simulations" && parts.length === 1)
+      return send(response, 200, { simulations: store.listSimulations(LOCAL_OWNER_SCOPE) });
     if (parts[0] !== "simulations" || !parts[1])
       throw new HttpError(404, `No route for ${method} ${url.pathname}.`);
     const simulationId = parts[1];
@@ -161,6 +164,22 @@ export async function handleLocalApiRequest(
     const simulation = store.getSimulation(ownerScope, simulationId);
     if (!simulation)
       throw new HttpError(404, `Simulation not found: ${simulationId}`);
+    if (parts[2] === "navigation" && parts.length === 3) {
+      if (method === "GET") {
+        const branchId = required({ branchId: url.searchParams.get("branchId") }, "branchId");
+        if (!store.getBranch(ownerScope, simulationId, branchId)) throw new DomainNotFoundError("Saved branch not found.");
+        return send(response, 200, { version: store.getNavigationVersion(ownerScope) });
+      }
+      if (method === "POST") {
+        const body = await bodyOf(request);
+        if (Object.keys(body).some(key => !["branchId", "operationId", "expectedVersion"].includes(key)))
+          throw new HttpError(400, "Unexpected navigation field.");
+        const expectedVersion = body.expectedVersion;
+        if (expectedVersion !== null) navigationToken(expectedVersion);
+        return send(response, 200, store.recordSimulationOpened({ ownerScope, simulationId,
+          branchId: required(body, "branchId"), operationId: required(body, "operationId"), expectedVersion }));
+      }
+    }
     if (method === "GET" && parts[2] === "stage" && parts.length === 3) {
       const projection = projectBranch(store, query(url, simulation));
       const revision = content(store, ownerScope, simulationId);

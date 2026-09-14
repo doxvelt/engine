@@ -1,3 +1,4 @@
+import { navigationToken, savedIdentity, type SimulationCollectionRepository, type SimulationCollectionItem, type RecordSimulationOpened, type NavigationReceipt } from "../application/simulation-collection.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -72,7 +73,7 @@ export function openBranchStore(
 }
 
 export class SqliteSimulationRepository
-  implements SimulationRepository, ActorTurnDraftRepository {
+  implements SimulationRepository, ActorTurnDraftRepository, SimulationCollectionRepository {
   private db: DatabaseSync | null = null;
   readonly dbPath: string;
   constructor(dbPath: string) {
@@ -86,6 +87,14 @@ export class SqliteSimulationRepository
       "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;",
     );
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS application_navigation_version (
+        owner_scope TEXT PRIMARY KEY, version TEXT NOT NULL, previous_version TEXT,
+        simulation_id TEXT NOT NULL, branch_id TEXT NOT NULL, opened_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS application_simulation_navigation (
+        owner_scope TEXT NOT NULL, simulation_id TEXT NOT NULL, branch_id TEXT NOT NULL,
+        opened_at TEXT NOT NULL, PRIMARY KEY(owner_scope, simulation_id)
+      );
       CREATE TABLE IF NOT EXISTS content_revisions (
         id TEXT PRIMARY KEY, owner_scope TEXT NOT NULL, digest TEXT NOT NULL,
         compiled_json TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -413,6 +422,58 @@ export class SqliteSimulationRepository
         recordStartOutcome(result),
       );
       return result;
+    });
+  }
+
+  listSimulations(ownerScope: string): SimulationCollectionItem[] {
+    savedIdentity(ownerScope);
+    // Extract only the pinned label in SQL; collection transport never carries content.
+    return this.sql().prepare(`
+      SELECT s.id AS simulationId,
+        (SELECT json_extract(scenario.value, '$.name')
+         FROM json_each(r.compiled_json, '$.scenarios') AS scenario
+         WHERE json_extract(scenario.value, '$.id') = s.scenario_id LIMIT 1) AS scenarioName,
+        s.created_at AS createdAt, n.opened_at AS openedAt,
+        COALESCE(n.branch_id, s.default_branch_id) AS branchId
+      FROM branch_simulations s
+      JOIN content_revisions r ON r.id = s.content_revision_id AND r.owner_scope = s.owner_scope
+      LEFT JOIN application_simulation_navigation n ON n.owner_scope = s.owner_scope AND n.simulation_id = s.id
+      WHERE s.owner_scope = ?
+      ORDER BY (n.opened_at IS NOT NULL) DESC, n.opened_at DESC, s.created_at DESC, s.id COLLATE BINARY ASC
+    `).all(ownerScope) as SimulationCollectionItem[];
+  }
+
+  getNavigationVersion(ownerScope: string): string | null {
+    savedIdentity(ownerScope);
+    const row = this.sql().prepare("SELECT version FROM application_navigation_version WHERE owner_scope = ?").get(ownerScope);
+    return row ? String(row.version) : null;
+  }
+
+  recordSimulationOpened(input: RecordSimulationOpened): NavigationReceipt {
+    for (const id of [input.ownerScope, input.simulationId, input.branchId]) savedIdentity(id);
+    navigationToken(input.operationId);
+    if (input.expectedVersion !== null) navigationToken(input.expectedVersion);
+    return this.transaction(() => {
+      if (!this.getSimulation(input.ownerScope, input.simulationId) || !this.getBranch(input.ownerScope, input.simulationId, input.branchId))
+        throw new DomainNotFoundError("Saved simulation or branch not found.");
+      const previous = this.sql().prepare("SELECT * FROM application_navigation_version WHERE owner_scope = ?").get(input.ownerScope);
+      if (previous?.version === input.operationId) {
+        if (previous.simulation_id !== input.simulationId || previous.branch_id !== input.branchId || previous.previous_version !== input.expectedVersion)
+          throw new CommandIdentityError(input.operationId);
+        return { version: input.operationId, openedAt: String(previous.opened_at) };
+      }
+      if ((previous?.version ?? null) !== input.expectedVersion)
+        throw new DomainValidationError("Resume location changed in another entry. This entry was not saved.");
+      // Server time; preserve strict ordering even for two writes in the same millisecond.
+      const openedAt = new Date(Math.max(Date.now(), previous ? Date.parse(String(previous.opened_at)) + 1 : 0)).toISOString();
+      this.sql().prepare(`INSERT INTO application_navigation_version VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(owner_scope) DO UPDATE SET version=excluded.version, previous_version=excluded.previous_version,
+        simulation_id=excluded.simulation_id, branch_id=excluded.branch_id, opened_at=excluded.opened_at`)
+        .run(input.ownerScope, input.operationId, input.expectedVersion, input.simulationId, input.branchId, openedAt);
+      this.sql().prepare(`INSERT INTO application_simulation_navigation VALUES (?, ?, ?, ?)
+        ON CONFLICT(owner_scope, simulation_id) DO UPDATE SET branch_id=excluded.branch_id, opened_at=excluded.opened_at`)
+        .run(input.ownerScope, input.simulationId, input.branchId, openedAt);
+      return { version: input.operationId, openedAt };
     });
   }
 

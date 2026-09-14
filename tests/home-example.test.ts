@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
 import { computed, ref } from "vue";
+import * as collectionModule from "../src/local-ui/lib/home-collection.ts";
 import * as exampleModule from "../src/local-ui/lib/example-entry.ts";
 
 async function home(t: test.TestContext) {
@@ -15,7 +16,7 @@ async function home(t: test.TestContext) {
   const navigation: unknown[] = [];
   let unmount = () => {};
   const bindings = {
-    require: (id: string) => { assert.equal(id, "../lib/example-entry"); return exampleModule; }, exports: {},
+    require: (id: string) => { if (id === "../lib/home-collection") return collectionModule; assert.equal(id, "../lib/example-entry"); return exampleModule; }, exports: {},
     ref, computed, useRuntimeConfig: () => ({ public: { apiBase: "http://home.invalid" } }),
     useToast: () => ({ add: () => {} }), onMounted: () => {},
     onBeforeUnmount: (callback: () => void) => { unmount = callback; },

@@ -44,7 +44,7 @@ The existing Nuxt/Nuxt UI Stage uses shared
 - [Home](../../src/local-ui/pages/index.vue) offers the supported example, workspace
   creation/Studio access and browser-local recent workspaces. [The last crossing](LAST_CROSSING.md)
   starts or resumes one database-backed example without recompiling on resume.
-  A persisted collection of simulations and featured-item policy do not yet exist.
+  This historical baseline predates the collection slice documented below.
 
 These are implementation boundaries, not a new live-inference or release claim.
 Older broad architecture status lists are not the Stage implementation inventory.
@@ -57,9 +57,8 @@ operational details available through quiet, keyboard-accessible disclosures.
 
 Home features one recognizable return item with **Continue**, with other items in
 a quieter collection. First arrival offers a ready-to-play example and an explicit
-**Create your own** route into Studio. Featured-item selection (last active, pinned,
-or another rule), collection data and empty-collection treatment remain decisions;
-do not represent browser workspace recents as durable simulation history.
+**Create your own** route into Studio. Feature the most recently successfully
+opened simulation, with other saved simulations quieter. Keep browser workspace recents separate as source shortcuts.
 **Production** remains a candidate UI noun, not a rename of simulation or branch.
 
 Use a continuous transcript with avatar/name identity, readable prose and compact
@@ -74,6 +73,43 @@ the reader's position. Show **Jump to latest** just above the composer only when
 the latest turn is offscreen. Resume places the caret at the end of the draft,
 including its existing prose line after routing; repeated resume adds no blank
 lines and ordinary typing/picker changes do not reset selection.
+
+## LL-01 collection and durable resume
+
+Home lists one entry per saved simulation in the current database/owner scope,
+including the example, legacy and imported runs. The pinned scenario name is the
+label; simulation ID disambiguates duplicate names and supplies the missing-name
+fallback. Only IDs, that label, creation/opened timestamps and the resume branch
+cross the collection transport boundary.
+
+Successfully opened runs precede never-opened runs. Order opened runs by last
+successful intentional Stage entry, then creation time and simulation ID for ties;
+unopened runs use newest creation time and stable ID ties. Never infer a played
+date from creation. Empty Home retains Play the example and Create your own;
+populated Home also retains those routes. Listing never creates the example.
+
+Continue carries simulation and branch IDs and loads that branch's current head
+from pinned content, independent of source paths, compilation or model availability.
+A known missing simulation/branch shows a recoverable failure and Back to simulations,
+without silently switching branches or offering the source Start flow.
+
+Navigation is installation-local application data in separate additive tables,
+not canonical events, drafts or portable archive content. Stage records it only
+after successful projection/recovery load during intentional entry. Polling,
+refresh, browser reload, failed loads and background work do not promote items.
+An owner-scoped version check rejects stale writes; a stable operation identity
+makes duplicate receipt retries harmless. Concurrent entries use first successful
+write wins; a conflicting entry remains playable with an honest warning. A lost
+response is reported as an unconfirmed save, because the server may have applied it.
+There is one version row per owner and one resume row per simulation, without a
+navigation event log. Late results cannot replace another view's state. Metadata
+failure leaves the playable projection and editor intact.
+
+This bounded slice adds Home collection and Stage entry metadata/error handling.
+The continuous transcript and navigation baseline was already delivered before
+this slice; composer/routing, historical revision, Actor state and briefing remain
+under their existing contracts. Production browser integration, real phone keyboards
+and assistive-technology validation remain separate; LL-01/#15 is not closed here.
 
 ## Composer, private direction and routing
 

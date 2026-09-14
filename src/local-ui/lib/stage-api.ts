@@ -1,3 +1,4 @@
+export type { NavigationState } from "../../application/simulation-collection.ts";
 export type RuntimeStatus = { configured: boolean; provider: string | null; model: string | null };
 export type SourceFile = { id: string; name: string; kind: string };
 

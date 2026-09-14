@@ -87,7 +87,10 @@ Keep Nuxt and Nuxt UI unless a concrete product requirement disproves the choice
 - Keep API contracts outside page components.
 - Prefer generated or shared transport types.
 - Move API access and orchestration into focused clients, composables, or stores.
-- Use Nuxt UI as the canonical component layer; native controls require a semantic reason.
+- Use Nuxt UI as the canonical component layer; maximize existing Nuxt UI components.
+  Extract a Doxvelt Vue component only for recurring, meaningful customization,
+  not speculative wrappers: as many components as necessary, as few as possible.
+  Native controls require a semantic reason.
 - Split large page components when behavior stabilizes and decomposition reduces change risk.
 - Do not invent parallel palettes, typography scales, badge semantics, or component treatments without updating the design system.
 

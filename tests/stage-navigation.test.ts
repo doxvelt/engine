@@ -32,6 +32,7 @@ async function fixture(t: test.TestContext) {
     require: (id: string) => modules[id], exports: {}, ref, computed, watch, nextTick,
     requestAnimationFrame: (cb: () => void) => setImmediate(cb),
     useRoute: () => ({ query: {} }), useRuntimeConfig: () => ({ public: { apiBase: "http://stage.invalid" } }),
+    useNuxtApp: () => ({ isHydrating: false }),
     onMounted: () => {}, onBeforeUnmount: (cb: () => void) => { unmount = cb; },
     onBeforeRouteLeave: () => {}, onBeforeRouteUpdate: () => {}, document,
     window: { removeEventListener() {}, confirm: () => true },
@@ -152,7 +153,9 @@ for (const change of ["session", "focus", "unmount"] as const) {
 
 test("Home and identity composition stay inside the approved disclosure and navigation boundary", async () => {
   const home = await readFile("src/local-ui/pages/index.vue", "utf8");
-  assert.match(home, /<h1[^>]*>The last crossing<\/h1>/);
+  assert.match(home, /<h2[^>]*>The last crossing<\/h2>/);
+  assert.match(home, /<h1[^>]*>Your simulations<\/h1>/);
+  assert.match(home, /:to="collection.target\(item\)"/);
   assert.match(home, /Create your own/);
   assert.match(home, /Browser workspaces/);
   assert.match(home, /@click="createBlankWorkspace"/);
