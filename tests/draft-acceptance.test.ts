@@ -20,6 +20,7 @@ import {
 import {
   BranchConflictError,
   CommandIdentityError,
+  DomainNotFoundError,
   DomainValidationError,
 } from "../src/core/ports.ts";
 import {
@@ -1121,4 +1122,149 @@ test("acceptance replay rejects forged result caches while commits stay canonica
   database.close();
   assert.deepEqual(store.getCommit("owner", "sim", accepted.commit.id), canonical);
   assert.throws(() => acceptActorTurnDraft(store, request), /command result is invalid|result cache does not match authoritative history/);
+});
+
+// Interleave real database writes with the losing connection's preflight reads.
+// Each hook fires once; subsequent reads and transactional checks use the store.
+function interleaveAcceptance(
+  store: SqliteSimulationRepository,
+  seam: "after replay lookup" | "after ready read",
+  winner: () => void,
+): () => void {
+  const replay = store.replayAcceptedActorTurnDraft.bind(store);
+  const getDraft = store.getActorTurnDraft.bind(store);
+  let fired = false;
+  const runWinner = () => {
+    if (fired) return;
+    fired = true;
+    winner();
+  };
+  if (seam === "after replay lookup") {
+    store.replayAcceptedActorTurnDraft = (request) => {
+      const result = replay(request);
+      runWinner();
+      return result;
+    };
+  } else {
+    store.getActorTurnDraft = (...args) => {
+      const snapshot = getDraft(...args);
+      runWinner();
+      return snapshot;
+    };
+  }
+  return () => {
+    store.replayAcceptedActorTurnDraft = replay;
+    store.getActorTurnDraft = getDraft;
+  };
+}
+
+for (const seam of ["after replay lookup", "after ready read"] as const) {
+  test(`concurrent acceptance ${seam} replays only the matching canonical receipt`, async (t) => {
+    for (const variant of [
+      "same", "edited", "changed text", "changed draft", "changed command",
+      "other owner", "other simulation", "unrelated head", "discard", "corrupt receipt",
+    ] as const) {
+      await t.test(variant, async (t) => {
+        const { store, dbPath, draft, started } = await readyDraft(t);
+        const second = await openBranchStore(dbPath).open();
+        const request = {
+          ownerScope: "owner",
+          simulationId: "sim",
+          draftId: draft.id,
+          commandId: "interleaved-accept",
+          ...(variant === "edited" ? { finalText: "Edited acceptance." } : {}),
+        };
+        const losingRequest = {
+          ...request,
+          ...(variant === "changed text" ? { finalText: "Different text." } : {}),
+          ...(variant === "changed draft" ? { draftId: "other-draft" } : {}),
+          ...(variant === "changed command" ? { commandId: "other-command" } : {}),
+          ...(variant === "other owner" ? { ownerScope: "other-owner" } : {}),
+          ...(variant === "other simulation" ? { simulationId: "other-sim" } : {}),
+        };
+        let accepted: ReturnType<typeof acceptActorTurnDraft> | undefined;
+        let afterWinner: SimulationArchive | undefined;
+        const restore = interleaveAcceptance(store, seam, () => {
+          if (variant === "unrelated head") {
+            commitManualTurn(second, {
+              ownerScope: "owner", simulationId: "sim", branchId: "main",
+              expectedHead: started.root.id, commandId: "advance",
+              payload: { actorId: "cfo", text: "Unrelated turn.", audience: [] },
+            });
+          } else if (variant === "discard") {
+            discardActorTurnDraft(second, { ...request, commandId: "discard" });
+          } else {
+            accepted = acceptActorTurnDraft(second, request);
+            assert.equal(accepted.replayed, false);
+            if (variant === "corrupt receipt") {
+              const database = new DatabaseSync(dbPath);
+              try {
+                database.prepare(
+                  "UPDATE command_results SET result_json = '{}' WHERE command_id = ?",
+                ).run(request.commandId);
+              } finally {
+                database.close();
+              }
+            }
+          }
+          if (variant !== "corrupt receipt")
+            afterWinner = second.exportSimulation("owner", "sim");
+        });
+        try {
+          if (variant === "same" || variant === "edited") {
+            const result = acceptActorTurnDraft(store, losingRequest);
+            assert.equal(result.replayed, true);
+            assert.deepEqual(result.commit, accepted!.commit);
+            assert.deepEqual(result.branch, accepted!.branch);
+          } else {
+            assert.throws(
+              () => acceptActorTurnDraft(store, losingRequest),
+              variant === "changed text" || variant === "changed draft"
+                ? CommandIdentityError
+                : variant === "other owner" || variant === "other simulation"
+                  ? DomainNotFoundError
+                : variant === "corrupt receipt"
+                  ? /Persisted recorded outcome kind must be a string/
+                : variant === "unrelated head" ||
+                    (variant === "changed command" && seam === "after ready read")
+                  ? BranchConflictError
+                  : DomainValidationError,
+            );
+          }
+          if (afterWinner) {
+            const archive = store.exportSimulation("owner", "sim");
+            assert.deepEqual(archive, afterWinner);
+            assert.equal(archive.commandResults.filter(
+              (entry) => entry.commandId === request.commandId,
+            ).length, accepted ? 1 : 0);
+            assert.equal(archive.commits.flatMap((commit) => commit.events)
+              .filter((event) => event.type === "message_accepted").length,
+            variant === "discard" ? 0 : 1);
+          } else {
+            assert.deepEqual(store.getCommit("owner", "sim", accepted!.commit.id), accepted!.commit);
+          }
+        } finally {
+          restore();
+          second.close();
+        }
+      });
+    }
+  });
+}
+
+test("acceptance preserves the original preflight error when no receipt exists", async (t) => {
+  const { store, draft, started } = await readyDraft(t);
+  const original = new DomainValidationError("Unavailable draft snapshot.");
+  const getDraft = store.getActorTurnDraft.bind(store);
+  const before = store.exportSimulation("owner", "sim");
+  store.getActorTurnDraft = () => { throw original; };
+  try {
+    assert.throws(() => acceptActorTurnDraft(store, {
+      ownerScope: "owner", simulationId: "sim", draftId: draft.id, commandId: "failed-read",
+    }), (error) => error === original);
+  } finally {
+    store.getActorTurnDraft = getDraft;
+  }
+  assert.deepEqual(store.exportSimulation("owner", "sim"), before);
+  assertNoAcceptanceLeak(store, draft.id, started.root.id, "failed-read");
 });
