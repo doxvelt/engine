@@ -2,6 +2,7 @@ import { navigationToken, savedIdentity, type SimulationCollectionRepository, ty
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { DatabaseSync } from "node:sqlite";
 import { prepareCompiledRevision } from "../core/content-revision.ts";
 import {
@@ -82,11 +83,28 @@ export class SqliteSimulationRepository
 
   async open(): Promise<this> {
     await mkdir(path.dirname(this.dbPath), { recursive: true });
-    this.db = new DatabaseSync(this.dbPath);
-    this.db.exec(
-      "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;",
-    );
-    this.db.exec(`
+    const db = new DatabaseSync(this.dbPath);
+    const deadline = performance.now() + 5000;
+    const remaining = () => Math.max(0, Math.floor(deadline - performance.now()));
+    const setWait = () => db.exec(`PRAGMA busy_timeout = ${remaining()}`);
+    try {
+      setWait();
+      db.exec("PRAGMA foreign_keys = ON");
+      // WAL conversion can return BUSY without invoking SQLite's busy handler.
+      // Retry only this initialization step, sharing one budget with later DDL.
+      for (;;) {
+        setWait();
+        try {
+          db.exec("PRAGMA journal_mode = WAL");
+          break;
+        } catch (error) {
+          const code = (error as { errcode?: number } | null)?.errcode;
+          if (typeof code !== "number" || !Number.isInteger(code) || (code & 0xff) !== 5 || remaining() === 0)
+            throw error;
+          await delay(Math.min(25, remaining()));
+        }
+      }
+      const schema = `
       CREATE TABLE IF NOT EXISTS application_navigation_version (
         owner_scope TEXT PRIMARY KEY, version TEXT NOT NULL, previous_version TEXT,
         simulation_id TEXT NOT NULL, branch_id TEXT NOT NULL, opened_at TEXT NOT NULL
@@ -177,10 +195,25 @@ export class SqliteSimulationRepository
         result_fingerprint TEXT, result_json TEXT, error TEXT, created_at TEXT NOT NULL,
         UNIQUE(job_id, attempt, status), FOREIGN KEY(job_id) REFERENCES memory_jobs(id)
       );
-    `);
-    const jobColumns = this.db.prepare("PRAGMA table_info(memory_jobs)").all() as Array<{ name: string }>;
-    if (!jobColumns.some((column) => column.name === "result_json"))
-      this.db.exec("ALTER TABLE memory_jobs ADD COLUMN result_json TEXT");
+    `;
+      // Refresh before each statement, never replay a partially applied schema.
+      for (const statement of schema.split(";").filter((sql) => sql.trim())) {
+        setWait();
+        db.exec(statement);
+      }
+      setWait();
+      const jobColumns = db.prepare("PRAGMA table_info(memory_jobs)").all() as Array<{ name: string }>;
+      if (!jobColumns.some((column) => column.name === "result_json")) {
+        setWait();
+        db.exec("ALTER TABLE memory_jobs ADD COLUMN result_json TEXT");
+      }
+      db.exec("PRAGMA busy_timeout = 5000");
+      this.db = db;
+    } catch (error) {
+      try { db.close(); } catch { /* Preserve the initialization error. */ }
+      this.db = null;
+      throw error;
+    }
     return this;
   }
 
