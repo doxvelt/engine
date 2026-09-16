@@ -236,13 +236,16 @@ export function validateReadyDraft(
     audience: draft.audience,
     stageWhispers: whispers,
   });
+  // Saved candidates without correctionSource retain their original frozen
+  // prompt/context interpretation, including pre-fix routed corrections.
   const routed = draft.routing ? projectRoutingContext(repository, {
     ownerScope: draft.ownerScope, simulationId: draft.simulationId, branchId: draft.branchId,
     expectedHead: draft.basisHeadCommitId, commandId: draft.generationCommandId,
     payload: { actorId: draft.actorId, audience: draft.audience, stageWhisperIds: draft.stageWhispers.map(item => item.id),
       runtimeProfile: draft.runtimeProfile, promptPolicy: draft.promptPolicy, outputSchema: draft.outputSchema,
       skillDigests: draft.skillDigests, routing: routingInput(draft.routing) },
-  }, whispers) : null;
+  }, whispers, draft.context && typeof draft.context === "object" && "correctionSource" in draft.context
+    ? draft.routing.source : null) : null;
   if (routed && !same(prepareRouting(repository, {
     ownerScope: draft.ownerScope, simulationId: draft.simulationId, branchId: draft.branchId,
     expectedHead: draft.basisHeadCommitId, commandId: draft.generationCommandId,

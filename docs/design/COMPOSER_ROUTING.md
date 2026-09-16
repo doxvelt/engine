@@ -31,6 +31,16 @@ source/original identity, original whispers and explicit correction input. Corre
 recipients are authoritative; a generated contradiction fails. Exact request replay
 returns the same candidate. A different actor requires a fresh operation.
 
+Generated corrections receive the validated immediate source performance and its
+proposed audience as clearly labeled **UNACCEPTED draft material** in the frozen
+runtime prompt/context. This material supports relative instructions such as
+“make that less accusatory”; it is never an observation, canonical history or an
+input to recipient eligibility. Chained corrections use the immediate source,
+while original identity and source artifact provenance remain retained separately.
+Saved candidates lacking this source-material context retain their original
+prompt/context hashes and acceptance interpretation. Preserved wording still
+requires no model call.
+
 The director can explicitly preserve the current editor wording in a new candidate.
 This is a director-derived artifact, with source artifact/provenance retained; it
 does not claim a model generated that wording under the new context. Context and

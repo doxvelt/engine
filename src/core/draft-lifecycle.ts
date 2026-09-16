@@ -130,8 +130,10 @@ export function generateActorTurnDraft(
     audience: normalized.payload.audience,
     stageWhispers: whispers,
   });
-  const routed = normalized.payload.routing ? projectRoutingContext(repository, normalized, whispers) : null;
-  const routing = routed ? prepareRouting(repository, normalized, routed.availableRecipientIds) : undefined;
+  const routing = normalized.payload.routing ? prepareRouting(repository, normalized, []) : undefined;
+  const routed = routing ? projectRoutingContext(repository, normalized, whispers,
+    routing.preservedText === null ? routing.source : null) : null;
+  if (routing && routed) routing.availableRecipientIds = routed.availableRecipientIds;
   const portableContext = routed ? routed.context : canonicalDraftContext(context);
   const prompt = routed ? routed.prompt : context!.promptPreview;
   const createdAt = new Date().toISOString();

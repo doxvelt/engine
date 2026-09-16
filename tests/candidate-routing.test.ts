@@ -7,13 +7,15 @@ import { compileWorkspace } from "../src/core/compiler.ts";
 import { commitRuntimeEffects, inspectActorContext, projectBranch, startBranchSimulationFromCompiled } from "../src/core/branch-kernel.ts";
 import { acceptActorTurnDraft, discardActorTurnDraft, generateActorTurnDraft } from "../src/core/draft-lifecycle.ts";
 import { validateSimulationArchive } from "../src/core/archive-verifier.ts";
-import { decodeActorTurnDraftRecord } from "../src/core/draft-contracts.ts";
-import { finalDraftAudience, ROUTING_POLICY } from "../src/core/candidate-routing.ts";
-import { fingerprintCommand } from "../src/core/domain-rules.ts";
+import { decodeActorTurnDraftRecord, sha256 } from "../src/core/draft-contracts.ts";
+import { finalDraftAudience, projectRoutingContext, ROUTING_POLICY } from "../src/core/candidate-routing.ts";
+import { fingerprintCommand, stableStringify } from "../src/core/domain-rules.ts";
+import { validateReadyDraft } from "../src/core/draft-acceptance.ts";
 import type { GenerateActorTurnDraftCommand } from "../src/core/ports.ts";
 import type { ActorTurnDraftRecord } from "../src/core/types.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
 import { DeterministicFakeRuntime } from "./helpers/deterministic-fake-runtime.ts";
+import type { RunActorTurnRequest } from "../src/agent-runtime/contracts.ts";
 
 async function fixture(t: test.TestContext) {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-routing-"));
@@ -57,6 +59,102 @@ function correction(source: ActorTurnDraftRecord, id: string, audience: string[]
         sourceDraftId: source.id, correctedAudience: audience, correction: "Use only these recipients.", preservedText },
     } };
 }
+
+test("generated correction sends immediate UNACCEPTED source performance to the actual runtime", async t => {
+  const f = await fixture(t);
+  const sourceText = "SOURCE-PERFORMANCE-27: Ask @coo about the missing report.";
+  const original = (await generateActorTurnDraft(f.store, runtime(["ceo", "cfo"], sourceText), f.command("source", ["cfo"]))).draft;
+  const before = f.store.exportSimulation("owner", "sim");
+  const command = correction(original, "relative-correction", ["cfo"], null);
+  command.payload.routing!.correction = "Make that less accusatory.";
+  const requests: RunActorTurnRequest[] = [];
+  const correctedText = "IMMEDIATE-SOURCE-27: Could we review the report together?";
+  const capture = new DeterministicFakeRuntime([
+    { type: "completed", text: JSON.stringify({ text: correctedText, audience: ["ceo", "cfo"] }) },
+  ], request => { requests.push(request); });
+  const revised = (await generateActorTurnDraft(f.store, capture, command)).draft;
+  assert.equal(revised.status, "ready");
+  const request = requests[0]!;
+  assert.ok(request.prompt.includes(sourceText), "actual runtime prompt must include source performance marker");
+  assert.ok(request.prompt.includes(command.payload.routing!.correction));
+  assert.match(request.prompt, /UNACCEPTED/);
+  assert.ok(request.prompt.includes(JSON.stringify(original.artifact!.proposedAudience)));
+  assert.deepEqual((request.context as { correctionSource: unknown }).correctionSource, {
+    draftId: original.id, actorId: original.actorId, basisHeadCommitId: original.basisHeadCommitId,
+    text: sourceText, audience: original.artifact!.proposedAudience,
+  });
+  assert.deepEqual(revised.routing!.availableRecipientIds, original.routing!.availableRecipientIds);
+  assert.equal(revised.routing!.availableRecipientIds.includes("coo"), false);
+  assert.doesNotMatch(request.prompt, /HIDDEN-COO-SURFACE-SENTINEL|CFO-SURFACE-SENTINEL/);
+  assert.deepEqual((request.context as { subjective: unknown }).subjective, (original.context as { subjective: unknown }).subjective);
+  assert.equal(Object.isFrozen(request), true);
+  assert.equal(request.prompt, revised.prompt);
+  assert.equal(request.promptHash, sha256(request.prompt));
+  assert.equal(request.contextHash, sha256(stableStringify(request.context)));
+  assert.deepEqual(revised.routing!.source!.artifact, original.artifact);
+  assert.deepEqual(f.store.getActorTurnDraft("owner", "sim", original.id), original);
+  assert.deepEqual((await generateActorTurnDraft(f.store, capture, command)).draft, revised);
+  assert.equal(capture.calls, 1);
+
+  // A saved pre-fix routed correction keeps its old projection and hashes.
+  const legacy = structuredClone(revised);
+  const oldProjection = projectRoutingContext(f.store, command, []);
+  Object.assign(legacy, { context: oldProjection.context, contextHash: oldProjection.contextHash,
+    prompt: oldProjection.prompt, promptHash: oldProjection.promptHash });
+  const acceptance = { ...f.query, draftId: revised.id, commandId: "validate" };
+  assert.doesNotThrow(() => validateReadyDraft(f.store, acceptance, legacy));
+  const tampered = structuredClone(revised);
+  (tampered.context as { correctionSource: { text: string } }).correctionSource.text = "Forged source";
+  assert.throws(() => validateReadyDraft(f.store, acceptance, tampered), /context hash/);
+
+  const chainedCommand = correction(revised, "chained", ["cfo"], null);
+  chainedCommand.payload.routing!.correction = "Make that shorter.";
+  const chained = (await generateActorTurnDraft(f.store, capture, chainedCommand)).draft;
+  assert.equal(chained.status, "ready");
+  assert.ok(requests[1]!.prompt.includes(correctedText));
+  assert.equal(requests[1]!.prompt.includes(sourceText), false);
+  assert.equal(chained.routing!.source!.draftId, revised.id);
+  assert.equal(chained.routing!.originalDraftId, original.id);
+  assert.deepEqual(f.store.exportSimulation("owner", "sim"), before);
+  acceptActorTurnDraft(f.store, { ...f.query, draftId: chained.id, commandId: "accept-chain" });
+  const projection = projectBranch(f.store, f.query);
+  assert.equal(projection.transcript.length, 1);
+  assert.deepEqual(projection.perceptions.map(item => item.actorId), ["ceo", "cfo"]);
+  assert.equal(JSON.stringify(projection).includes(sourceText), false);
+  validateSimulationArchive(f.store.exportSimulation("owner", "sim"));
+});
+
+test("correction source validation rejects mismatches before runtime dispatch", async t => {
+  const f = await fixture(t);
+  const source = (await generateActorTurnDraft(f.store, runtime(["ceo"]), f.command("source"))).draft;
+  const noCall = runtime(["ceo"]);
+  const mutations: ((command: GenerateActorTurnDraftCommand) => void)[] = [
+    command => { command.payload.routing!.sourceDraftId = "missing"; },
+    command => { command.payload.actorId = "cfo"; },
+    command => { command.payload.routing!.initialAudience = ["cfo"]; },
+    command => { command.expectedHead = "wrong-basis"; },
+  ];
+  for (const [index, mutate] of mutations.entries()) {
+    const command = correction(source, `invalid-${index}`, ["ceo"], null);
+    mutate(command);
+    assert.throws(() => generateActorTurnDraft(f.store, noCall, command));
+  }
+  const failed = (await generateActorTurnDraft(f.store, runtime(["coo"]), f.command("failed-source"))).draft;
+  assert.equal(failed.status, "failed");
+  assert.throws(() => generateActorTurnDraft(f.store, noCall, correction(failed, "invalid-status", ["ceo"], null)), /ready routed source/);
+  const whisper = f.store.createStageWhisper({ ...f.query, expectedHead: f.head, commandId: "extra-whisper",
+    targetActorId: "ceo", text: "Additional direction." });
+  const changedWhispers = correction(source, "changed-whispers", ["ceo"], null);
+  changedWhispers.payload.stageWhisperIds = [whisper.id];
+  assert.throws(() => generateActorTurnDraft(f.store, noCall, changedWhispers), /source actor, basis/);
+  const advanced = commitRuntimeEffects(f.store, { ...f.query, expectedHead: f.head, commandId: "advance",
+    payload: { audienceChanges: [{ actorId: "ceo", action: "add" }] } });
+  const changedBasis = correction(source, "changed-basis", ["ceo"], null);
+  changedBasis.expectedHead = advanced.commit.id;
+  assert.throws(() => generateActorTurnDraft(f.store, noCall, changedBasis), /source actor, basis/);
+  assert.equal(noCall.calls, 0);
+  assert.equal(projectBranch(f.store, f.query).transcript.length, 0);
+});
 
 test("tentative and proposed delivery never grant surfaces; legacy context retains its interpretation", async t => {
   const f = await fixture(t);
