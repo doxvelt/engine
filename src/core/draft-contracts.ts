@@ -7,6 +7,8 @@ import type {
   ActorTurnDraftFailure,
   ActorTurnDraftRecord,
   DraftRuntimeProvenance,
+  DraftRouting,
+  DraftRoutingInput,
   NormalizedRuntimeUsage,
   RuntimeStopReason,
 } from "./types.ts";
@@ -25,6 +27,11 @@ const COMPLETED_STOP_REASONS = [null, "stop", "length", "other"] as const;
 
 export function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+/** New structured artifacts bind wording and delivery; legacy text digests stay unchanged. */
+export function artifactDigest(text: string, proposedAudience?: string[]): string {
+  return sha256(proposedAudience === undefined ? text : JSON.stringify({ text, proposedAudience }));
 }
 
 export function canonicalDraftContext(value: unknown): unknown {
@@ -166,10 +173,11 @@ export function assertCompletedArtifact(
   value: unknown,
 ): asserts value is ActorTurnDraftArtifact {
   const artifact = object(value, "Generated artifact");
-  exact(artifact, ["text", "digest", "provenance"], "Generated artifact");
+  exact(artifact, ["text", "digest", "provenance", ...(Object.hasOwn(artifact, "proposedAudience") ? ["proposedAudience"] : [])], "Generated artifact");
+  if (Object.hasOwn(artifact, "proposedAudience")) identityArray(artifact.proposedAudience, "Proposed audience");
   assertRuntimeText(artifact.text, "Generated artifact text");
   assertSha256(artifact.digest, "Generated artifact digest");
-  if (sha256(artifact.text) !== artifact.digest)
+  if (artifactDigest(artifact.text, artifact.proposedAudience as string[] | undefined) !== artifact.digest)
     throw invalid("Generated artifact digest is invalid.");
   assertRuntimeProvenance(artifact.provenance, "completed");
   if (
@@ -211,6 +219,7 @@ export function decodeActorTurnDraftRecord(
       "failure",
       "createdAt",
       "updatedAt",
+      ...(Object.hasOwn(draft, "routing") ? ["routing"] : []),
     ],
     "Actor turn draft",
   );
@@ -280,6 +289,7 @@ export function decodeActorTurnDraftRecord(
     draft.artifact,
     draft.failure,
   );
+  validateRoutingBinding(draft as unknown as ActorTurnDraftRecord);
   return structuredClone(draft) as ActorTurnDraftRecord;
 }
 
@@ -304,10 +314,12 @@ export function decodeAcceptDraftReceipt(value: unknown): AcceptDraftReceipt {
       "promptHash",
       "generatedArtifact",
       "accepted",
+      ...(Object.hasOwn(receipt, "routing") ? ["routing"] : []),
     ],
     "Accept draft receipt",
   );
-  if (receipt.receiptVersion !== 1)
+  if ((receipt.receiptVersion !== 1 && receipt.receiptVersion !== 2) ||
+      (receipt.receiptVersion === 2) !== Object.hasOwn(receipt, "routing"))
     throw invalid("Accept draft receipt version is invalid.");
   for (const key of [
     "draftId",
@@ -346,12 +358,16 @@ export function decodeAcceptDraftReceipt(value: unknown): AcceptDraftReceipt {
   assertSha256(receipt.promptHash, "Accept draft prompt hash");
   assertCompletedArtifact(receipt.generatedArtifact);
   const accepted = object(receipt.accepted, "Accept draft accepted text");
-  if (accepted.textSource === "generated_verbatim")
+  if (accepted.textSource === "generated_verbatim" || accepted.textSource === "director_preserved")
     exact(accepted, ["textSource"], "Accept draft accepted text");
   else if (accepted.textSource === "acceptor_edited") {
     exact(accepted, ["textSource", "text"], "Accept draft accepted text");
     assertRuntimeText(accepted.text, "Accept draft edited text");
   } else throw invalid("Accept draft text source is invalid.");
+  if (accepted.textSource !== "acceptor_edited" &&
+      (accepted.textSource === "director_preserved") !== ((receipt.routing as DraftRouting | undefined)?.preservedText != null))
+    throw invalid("Accepted text attribution contradicts derivation.");
+  validateRoutingBinding({ ...receipt, id: receipt.draftId, artifact: receipt.generatedArtifact } as unknown as ActorTurnDraftRecord, true);
   return structuredClone(receipt) as AcceptDraftReceipt;
 }
 
@@ -449,4 +465,101 @@ function credentialShapedSegment(value: string): boolean {
 }
 function invalid(message: string): DomainValidationError {
   return new DomainValidationError(message);
+}
+
+export function validateRoutingInput(value: unknown): asserts value is DraftRoutingInput {
+  const input = object(value, "Routing input");
+  exact(input, ["version", "initialAudience", "correction", "correctedAudience", "preservedText", "sourceDraftId"], "Routing input");
+  if (input.version !== 1) throw invalid("Unsupported routing version.");
+  for (const key of ["initialAudience", "correctedAudience"])
+    if (input[key] !== null) identityArray(input[key], key);
+  if (typeof input.correction !== "string" || input.correction.length > MAX_RUNTIME_TEXT_CHARS)
+    throw invalid("Invalid director correction.");
+  if (input.sourceDraftId !== null) requiredSafeIdentifier(input.sourceDraftId, "Source draft");
+  if (input.preservedText !== null) assertRuntimeText(input.preservedText, "Preserved text");
+  if (input.sourceDraftId === null && (input.correctedAudience !== null || input.preservedText !== null || input.correction !== ""))
+    throw invalid("Corrections require a source candidate.");
+  if (input.sourceDraftId !== null && input.correctedAudience === null)
+    throw invalid("Correction requires explicit recipients.");
+}
+
+export function validateRoutingBinding(draft: ActorTurnDraftRecord, receipt = false): void {
+  if (!draft.routing) {
+    if (draft.promptPolicy.id === "audience-proposal-v1" || draft.outputSchema.id === "audience-proposal")
+      throw invalid("Routing policy requires routing ancestry.");
+    if (draft.artifact?.proposedAudience !== undefined)
+      throw invalid("Audience proposal requires routing policy.");
+    return;
+  }
+  const routing = object(draft.routing, "Routing");
+  exact(routing, ["version", "initialAudience", "correction", "correctedAudience", "preservedText", "sourceDraftId",
+    "availableRecipientIds", "originalDraftId", "originalGenerationCommandId", "source"], "Routing");
+  const { version, initialAudience, correction, correctedAudience, preservedText, sourceDraftId } = routing;
+  validateRoutingInput({ version, initialAudience, correction, correctedAudience, preservedText, sourceDraftId });
+  identityArray(routing.availableRecipientIds, "Available recipients");
+  requiredSafeIdentifier(routing.originalDraftId, "Original draft ID");
+  requiredSafeIdentifier(routing.originalGenerationCommandId, "Original generation ID");
+  const typed = routing as unknown as DraftRouting;
+  if (!receipt && typed.originalDraftId !== domainId("actor_turn_draft", draft.ownerScope, draft.simulationId, typed.originalGenerationCommandId))
+    throw invalid("Original routing identity mismatch.");
+  if (!receipt && JSON.stringify(draft.audience) !== JSON.stringify([...new Set([draft.actorId,
+      ...(typed.correctedAudience ?? typed.initialAudience ?? [])])]))
+    throw invalid("Draft direction audience mismatch.");
+  if (!typed.availableRecipientIds.includes(draft.actorId)) throw invalid("Actor missing from available identities.");
+  for (const id of [...(typed.initialAudience || []), ...(typed.correctedAudience || [])])
+    if (!typed.availableRecipientIds.includes(id)) throw invalid("Directed identity is unavailable.");
+  if (draft.promptPolicy.id !== "audience-proposal-v1" || draft.promptPolicy.version !== "v1" ||
+      draft.outputSchema.id !== "audience-proposal" || draft.outputSchema.digest !== "v1")
+    throw invalid("Routing policy/schema mismatch.");
+  if (typed.sourceDraftId === null) {
+    if (typed.source !== null || typed.originalDraftId !== draft.id || typed.originalGenerationCommandId !== draft.generationCommandId)
+      throw invalid("Original candidate identity mismatch.");
+  } else {
+    if (typed.originalDraftId === draft.id || typed.originalGenerationCommandId === draft.generationCommandId)
+      throw invalid("Sourced candidate cannot be its own original routing ancestor.");
+    const source = object(typed.source, "Routing source");
+    exact(source, ["draftId", "generationCommandId", "actorId", "branchId", "basisHeadCommitId", "contentRevisionId",
+      "audience", "artifact", "contextHash", "promptHash"], "Routing source");
+    for (const key of ["draftId", "generationCommandId", "actorId", "branchId", "basisHeadCommitId", "contentRevisionId"])
+      requiredSafeIdentifier(source[key], `Source ${key}`);
+    identityArray(source.audience, "Source audience");
+    if (source.audience[0] !== draft.actorId) throw invalid("Source audience must include its actor first.");
+    assertCompletedArtifact(source.artifact);
+    assertSha256(source.contextHash, "Source context hash");
+    assertSha256(source.promptHash, "Source prompt hash");
+    if (!receipt && source.draftId !== domainId("actor_turn_draft", draft.ownerScope, draft.simulationId, String(source.generationCommandId)))
+      throw invalid("Source generation identity mismatch.");
+    if (source.draftId !== typed.sourceDraftId || source.draftId === draft.id || source.generationCommandId === draft.generationCommandId ||
+        (source.draftId === typed.originalDraftId) !== (source.generationCommandId === typed.originalGenerationCommandId) || source.actorId !== draft.actorId ||
+        source.contentRevisionId !== draft.contentRevisionId || (!receipt &&
+          (source.branchId !== draft.branchId || source.basisHeadCommitId !== draft.basisHeadCommitId)))
+      throw invalid("Routing source basis mismatch.");
+    if (JSON.stringify((source.artifact as ActorTurnDraftArtifact).proposedAudience) !== JSON.stringify(source.audience))
+      throw invalid("Source artifact audience mismatch.");
+  }
+  if (draft.artifact) {
+    const proposed = draft.artifact.proposedAudience;
+    if (!proposed || proposed[0] !== draft.actorId || proposed.some(id => !typed.availableRecipientIds.includes(id)))
+      throw invalid("Invalid proposed recipient binding.");
+    if (typed.correctedAudience && !sameIdentities(proposed, [draft.actorId, ...typed.correctedAudience]))
+      throw invalid("Artifact contradicts director recipients.");
+    if (receipt && JSON.stringify(proposed) !== JSON.stringify(draft.audience))
+      throw invalid("Receipt audience differs from proposal.");
+    if (typed.preservedText !== null) {
+      const p = draft.artifact.provenance;
+      if (draft.artifact.text !== typed.preservedText || p.adapter.id !== "director-preserved" || p.adapter.version !== "v1" ||
+          p.providerId !== null || p.modelId !== null || p.usage.totalTokens !== 0 || p.stopReason !== "stop")
+        throw invalid("Invalid director-preserved artifact provenance.");
+    } else if (draft.artifact.provenance.adapter.id === "director-preserved")
+      throw invalid("Preserved provenance requires explicit director wording.");
+  }
+}
+
+function identityArray(value: unknown, label: string): asserts value is string[] {
+  stringArray(value, label);
+  unique(value, label);
+  for (const id of value) if (requiredSafeIdentifier(id, label) !== id) throw invalid(`${label} is not normalized.`);
+}
+function sameIdentities(left: string[], right: string[]): boolean {
+  return JSON.stringify([...new Set(left)].sort()) === JSON.stringify([...new Set(right)].sort());
 }

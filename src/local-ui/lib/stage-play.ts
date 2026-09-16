@@ -1,6 +1,6 @@
 import { canOwnTurn } from "../../core/turn-ownership.ts";
 
-export type CommandAction = "start" | "whisper" | "generate" | "accept" | "discard" | "perform" | "retry";
+export type CommandAction = "start" | "whisper" | "generate" | "accept" | "discard" | "perform" | "retry" | "revise";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 

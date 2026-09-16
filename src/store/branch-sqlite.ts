@@ -1295,9 +1295,9 @@ export class SqliteSimulationRepository
       throw new CommandIdentityError(input.commandId);
     const expectedSource =
       input.finalText === undefined
-        ? "generated_verbatim"
+        ? (receipt.routing?.preservedText != null ? "director_preserved" : "generated_verbatim")
         : input.finalText === receipt.generatedArtifact.text
-          ? "generated_verbatim"
+          ? (receipt.routing?.preservedText != null ? "director_preserved" : "generated_verbatim")
           : "acceptor_edited";
     const finalText = acceptedTextFromReceipt(receipt);
     if (

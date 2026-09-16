@@ -113,6 +113,11 @@ and assistive-technology validation remain separate; LL-01/#15 is not closed her
 
 ## Composer, private direction and routing
 
+The bounded picker implementation now follows [Composer Routing](COMPOSER_ROUTING.md).
+Its versioned proposal policy separates observation from delivery; legacy drafts
+retain fixed routing and their historical context interpretation. The notation
+requirements below remain a target, not shipped grammar.
+
 The selected vocabulary is **Stage whisper / Perform**, **Generate draft**,
 **Original stage whisper**, and **draft performance**. The original private
 instruction and resulting performance are separate objects. Mode switching

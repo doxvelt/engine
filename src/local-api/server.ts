@@ -1,3 +1,4 @@
+import { ROUTING_POLICY, routingInput } from "../core/candidate-routing.ts";
 import { navigationToken } from "../application/simulation-collection.ts";
 import path from "node:path";
 import { playLastCrossing } from "./example.ts";
@@ -338,11 +339,15 @@ export async function handleLocalApiRequest(
     if (method === "POST" && parts[2] === "drafts" && !parts[3]) {
       const body = await bodyOf(request);
       rejectRuntimeSelection(body);
+      if (body.draftingPolicy !== undefined && body.draftingPolicy !== ROUTING_POLICY)
+        throw new HttpError(400, "Unsupported drafting policy.");
       if (!options.actorTurnRuntime)
         throw new HttpError(503, "No local actor-turn runtime is configured.");
       const base = envelope(body, ownerScope, simulationId);
       const audience =
-        body.audience === undefined
+        body.draftingPolicy === ROUTING_POLICY
+          ? (body.audience == null ? [] : strings(body, "audience"))
+          : body.audience === undefined
           ? projectBranch(store, {
               ownerScope,
               simulationId,
@@ -359,12 +364,15 @@ export async function handleLocalApiRequest(
           audience,
           stageWhisperIds: strings(body, "stageWhisperIds"),
           runtimeProfile: { id: "local-character", version: "v1" },
-          promptPolicy: { id: "default", version: "v1" },
-          outputSchema: { id: "screenplay", digest: "schema-v1" },
+          promptPolicy: { id: body.draftingPolicy === ROUTING_POLICY ? ROUTING_POLICY : "default", version: "v1" },
+          outputSchema: body.draftingPolicy === ROUTING_POLICY ? { id: "audience-proposal", digest: "v1" } : { id: "screenplay", digest: "schema-v1" },
+          ...(body.draftingPolicy === ROUTING_POLICY ? { routing: { version: 1 as const,
+            initialAudience: body.audience == null ? null : audience, correction: "", correctedAudience: null,
+            preservedText: null, sourceDraftId: null } } : {}),
           skillDigests: [],
         },
       });
-      return send(response, 200, result);
+      return send(response, 200, result.draft.routing ? { ...result, draft: stageDraft(result.draft) } : result);
     }
     if (method === "GET" && parts[2] === "drafts" && parts.length === 3) {
       const branchId = url.searchParams.get("branchId");
@@ -375,29 +383,56 @@ export async function handleLocalApiRequest(
         drafts: store.listRecoverableActorTurnDrafts(ownerScope, simulationId, branchId).map(stageDraft),
       });
     }
+    if (method === "POST" && parts[2] === "drafts" && parts[3] && parts[4] === "revise" && parts.length === 5) {
+      const body = await bodyOf(request);
+      if (Object.keys(body).some(key => !["commandId", "audience", "correction", "preservedText"].includes(key)))
+        throw new HttpError(400, "Unexpected revision field.");
+      const original = store.getActorTurnDraft(ownerScope, simulationId, parts[3]);
+      if (!original?.routing) throw new HttpError(400, "Revision requires a routed source draft.");
+      const audience = requiredStrings(body, "audience");
+      const correction = body.correction;
+      if (typeof correction !== "string") throw new HttpError(400, "correction must be text.");
+      if (body.preservedText !== undefined && typeof body.preservedText !== "string")
+        throw new HttpError(400, "preservedText must be text.");
+      if (body.preservedText === undefined && !options.actorTurnRuntime)
+        throw new HttpError(503, "No local actor-turn runtime is configured.");
+      const result = await generateActorTurnDraft(store, options.actorTurnRuntime || directorOnlyRuntime, {
+        ownerScope, simulationId, branchId: original.branchId, expectedHead: original.basisHeadCommitId,
+        commandId: required(body, "commandId"), payload: {
+          actorId: original.actorId, audience, stageWhisperIds: original.stageWhispers.map(item => item.id),
+          runtimeProfile: original.runtimeProfile, promptPolicy: original.promptPolicy,
+          outputSchema: original.outputSchema, skillDigests: original.skillDigests,
+          routing: { version: 1, initialAudience: original.routing.initialAudience,
+            correctedAudience: audience, correction, sourceDraftId: original.id,
+            preservedText: typeof body.preservedText === "string" ? body.preservedText : null },
+        },
+      });
+      return send(response, 200, { ...result, draft: stageDraft(result.draft) });
+    }
     if (method === "POST" && parts[2] === "drafts" && parts[3] && parts[4] === "retry" && parts.length === 5) {
       const body = await bodyOf(request);
       if (Object.keys(body).some(key => key !== "commandId"))
         throw new HttpError(400, "Retry accepts only a commandId; routing is captured by the original draft.");
       const original = store.getActorTurnDraft(ownerScope, simulationId, parts[3]);
       if (!original) throw new HttpError(404, "Draft not found.");
-      if (!options.actorTurnRuntime) throw new HttpError(503, "No local actor-turn runtime is configured.");
-      const result = await generateActorTurnDraft(store, options.actorTurnRuntime, {
+      if (!options.actorTurnRuntime && original.routing?.preservedText == null) throw new HttpError(503, "No local actor-turn runtime is configured.");
+      const result = await generateActorTurnDraft(store, options.actorTurnRuntime || directorOnlyRuntime, {
         ownerScope, simulationId, branchId: original.branchId,
         expectedHead: original.basisHeadCommitId, commandId: required(body, "commandId"),
         payload: {
           actorId: original.actorId, audience: original.audience,
+          ...(original.routing ? { routing: routingInput(original.routing) } : {}),
           stageWhisperIds: original.stageWhispers.map(whisper => whisper.id),
           runtimeProfile: original.runtimeProfile, promptPolicy: original.promptPolicy,
           outputSchema: original.outputSchema, skillDigests: original.skillDigests,
         },
       });
-      return send(response, 200, result);
+      return send(response, 200, result.draft.routing ? { ...result, draft: stageDraft(result.draft) } : result);
     }
     if (method === "GET" && parts[2] === "drafts" && parts[3] && !parts[4]) {
       const draft = store.getActorTurnDraft(ownerScope, simulationId, parts[3]);
       if (!draft) throw new HttpError(404, `Draft not found: ${parts[3]}`);
-      return send(response, 200, draft);
+      return send(response, 200, draft.routing ? stageDraft(draft) : draft);
     }
     if (
       method === "POST" &&
@@ -407,6 +442,8 @@ export async function handleLocalApiRequest(
       parts.length === 5
     ) {
       const body = await bodyOf(request);
+      if (Object.keys(body).some(key => !["commandId", "finalText"].includes(key)))
+        throw new HttpError(400, "Acceptance cannot change candidate routing.");
       return send(response, 200, acceptActorTurnDraft(store, {
         ownerScope,
         simulationId,
@@ -423,12 +460,13 @@ export async function handleLocalApiRequest(
       parts.length === 5
     ) {
       const body = await bodyOf(request);
-      return send(response, 200, discardActorTurnDraft(store, {
+      const result = discardActorTurnDraft(store, {
         ownerScope,
         simulationId,
         draftId: parts[3],
         commandId: required(body, "commandId"),
-      }));
+      });
+      return send(response, 200, result.draft.routing ? { ...result, draft: stageDraft(result.draft) } : result);
     }
     if (method === "POST" && parts[2] === "audience") {
       const body = await bodyOf(request);
@@ -965,3 +1003,9 @@ class HttpError extends Error {
     this.status = status;
   }
 }
+
+// No provider is invoked for an explicitly director-preserved replacement.
+const directorOnlyRuntime: import("../agent-runtime/contracts.ts").ActorTurnRuntime = {
+  identity: { id: "director-preserved", version: "v1" },
+  async *runActorTurn() { throw new Error("Director preservation must not invoke a runtime."); },
+};

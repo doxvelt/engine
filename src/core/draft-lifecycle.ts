@@ -1,11 +1,14 @@
+import { parseAudienceProposal, prepareRouting, preservedArtifact, projectRoutingContext } from "./candidate-routing.ts";
 export { acceptActorTurnDraft } from "./draft-acceptance.ts";
 
 import { createHash } from "node:crypto";
 import {
   canonicalDraftContext,
+  artifactDigest,
   decodeActorTurnDraftRecord,
   MAX_RUNTIME_TEXT_CHARS,
   requiredSafeIdentifier,
+  validateRoutingInput,
 } from "./draft-contracts.ts";
 import type {
   ActorTurnRuntime,
@@ -56,6 +59,12 @@ export function generateActorTurnDraft(
   options: GenerateActorTurnDraftOptions = {},
 ): Promise<{ draft: ActorTurnDraftRecord; replayed: boolean }> {
   const normalized = normalizeGenerationCommand(command);
+  if (normalized.payload.routing) {
+    const input = normalized.payload.routing;
+    validateRoutingInput(input);
+    if (stableStringify(normalized.payload.audience) !== stableStringify(normalizeAudience(normalized.payload.actorId, input.correctedAudience ?? input.initialAudience ?? [])))
+      throw new DomainValidationError("Routing direction and audience disagree.");
+  }
   const commandFingerprint = digest(stableStringify(normalized));
   const draftId = domainId(
     "actor_turn_draft",
@@ -112,7 +121,7 @@ export function generateActorTurnDraft(
       throw new DomainNotFoundError(`Actor not found: ${audienceActorId}`);
   }
   const whispers = selectWhispers(repository, normalized);
-  const context = inspectActorContext(repository, {
+  const context = normalized.payload.routing ? null : inspectActorContext(repository, {
     ownerScope: normalized.ownerScope,
     simulationId: normalized.simulationId,
     branchId: normalized.branchId,
@@ -121,10 +130,13 @@ export function generateActorTurnDraft(
     audience: normalized.payload.audience,
     stageWhispers: whispers,
   });
-  const portableContext = canonicalDraftContext(context);
-  const prompt = context.promptPreview;
+  const routed = normalized.payload.routing ? projectRoutingContext(repository, normalized, whispers) : null;
+  const routing = routed ? prepareRouting(repository, normalized, routed.availableRecipientIds) : undefined;
+  const portableContext = routed ? routed.context : canonicalDraftContext(context);
+  const prompt = routed ? routed.prompt : context!.promptPreview;
   const createdAt = new Date().toISOString();
   const draft = decodeActorTurnDraftRecord({
+    ...(routing ? { routing } : {}),
     id: draftId,
     ownerScope: normalized.ownerScope,
     simulationId: normalized.simulationId,
@@ -192,6 +204,8 @@ async function runDraft(
 ): Promise<ActorTurnDraftRecord> {
   const adapterIdentity = captureRuntimeIdentity(runtime);
   try {
+    if (draft.routing?.preservedText !== null && draft.routing?.preservedText !== undefined)
+      return finishOrCurrent(repository, draft, preservedArtifact(draft));
     const outcome = await validateRuntimeStream(runtime, draft, options);
     if (outcome.status === "failed")
       return failOrCurrent(
@@ -204,9 +218,16 @@ async function runDraft(
           "runtime_failure",
         ),
       );
+    let proposal: { text: string; audience: string[] } | null = null;
+    if (draft.routing) {
+      try { proposal = parseAudienceProposal(outcome.completion.text, draft); }
+      catch { throw new InvalidRuntimeStreamError(outcome.observation); }
+    }
+    const text = proposal?.text ?? outcome.completion.text;
     const artifact: ActorTurnDraftArtifact = {
-      text: outcome.completion.text,
-      digest: digest(outcome.completion.text),
+      text,
+      digest: artifactDigest(text, proposal?.audience),
+      ...(proposal ? { proposedAudience: proposal.audience } : {}),
       provenance: completedProvenance(
         adapterIdentity,
         draft,

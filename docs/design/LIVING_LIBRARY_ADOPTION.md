@@ -57,6 +57,16 @@ polish follows structural adoption; no alternative transcript comparison is need
 
 **Issue URL:** https://github.com/doxvelt/engine/issues/16.
 
+**Bounded implementation:** The picker-driven candidate contract is documented in
+[Composer Routing](COMPOSER_ROUTING.md). New Stage requests use a fixed actor,
+tentative or unspecified initial recipients, validated proposals and explicit
+director corrections through new candidates. Observation comes from branch-bound
+presence, independently of delivery. Director-preserved wording is an explicit
+derived artifact. Legacy text-only drafts retain their original interpretation.
+Notation grammar/roundtrip and device/accessibility acceptance remain open; this
+implementation does not close LL-02. Bounded automated browser evidence and
+independent aggregate gate results accompany the implementation PR.
+
 **Baseline:** Direct/Perform preserve separate prose; explicit picker IDs capture
 actor/audience before generation. Manual Perform commits immediately. Generated
 acceptance can edit text but cannot rebind actor/audience. No routing parser ships.

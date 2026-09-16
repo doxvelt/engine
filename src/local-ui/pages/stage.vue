@@ -28,8 +28,19 @@
             <p class="dx-label mb-2">Draft · {{ draftStatus }}</p>
             <div class="mb-2 flex items-center justify-between gap-3">
               <StageIdentity :actor-id="session.selectedDraft.actorId" :actors="session.actors" />
-              <StageAudience :audience="session.selectedDraft.audience" :actors="session.actors" draft />
+              <StageAudience v-if="!session.selectedDraft.routingReview || session.selectedDraft.artifact" :audience="session.selectedDraft.audience" :actors="session.actors" draft />
             </div>
+            <section v-if="session.selectedDraft.routingReview" class="mb-3 space-y-2 text-sm" aria-label="Audience review">
+              <p class="dx-label">Original stage whisper</p>
+              <p v-for="(whisper, i) in session.selectedDraft.routingReview.originalWhisper" :key="i" class="stage-prose">{{ whisper }}</p>
+              <p v-if="!session.selectedDraft.routingReview.originalWhisper.length">No original whisper.</p>
+              <p>Initial direction: {{ session.selectedDraft.routingReview.initialAudience === null ? 'No selected audience' : recipientNames(session.selectedDraft.routingReview.initialAudience) || 'No other recipients' }}</p>
+              <p v-if="session.selectedDraft.artifact"><strong>{{ session.selectedDraft.routingReview.preserved ? 'Director-corrected audience' : 'Proposed audience' }}:</strong> {{ recipientNames(session.selectedDraft.audience) }}</p>
+              <p v-if="session.selectedDraft.routingReview.correctedAudience !== null">Director-required recipients: {{ recipientNames([session.selectedDraft.actorId, ...session.selectedDraft.routingReview.correctedAudience]) }}</p>
+              <p role="status">{{ audienceChanges }}</p>
+              <p v-if="session.selectedDraft.routingReview.correction">Director correction: {{ session.selectedDraft.routingReview.correction }}</p>
+              <p v-if="session.selectedDraft.routingReview.preserved">Wording preserved by director in a new candidate; no new model generation.</p>
+            </section>
             <p v-if="session.stale" class="dx-warning-note mb-3 rounded-sm p-2 text-sm" role="status">The branch has moved. This draft cannot be accepted or retried here.</p>
             <template v-if="session.selectedDraft.artifact">
               <UFormField v-if="session.editing" label="Edit draft" :hint="session.unsavedReview ? 'Unsaved edits' : 'Saved generated text'">
@@ -62,15 +73,41 @@
         <UButton v-if="session.needsReconcile" class="ml-1" color="neutral" variant="link" :loading="session.busy" @click="session.resume()">Retry request</UButton>
       </div>
       <p v-else-if="session.notice" class="mb-2 text-xs text-muted" role="status">{{ session.notice }}</p>
-      <div v-if="session.drafts.length" class="mb-2 flex items-center gap-2">
+      <div v-if="session.reviewDrafts.length" class="mb-2 flex items-center gap-2">
         <USelect :model-value="session.selectedDraftId || 'compose'" :items="draftItems" class="min-w-0 flex-1" aria-label="Saved drafts" :content="{ onCloseAutoFocus: onDraftCloseAutoFocus }" @update:open="onDraftPickerOpen" :disabled="locked" @update:model-value="chooseDraft" />
-        <span class="shrink-0 text-xs text-muted">{{ session.drafts.length }} saved</span>
+        <span class="shrink-0 text-xs text-muted">{{ session.reviewDrafts.length }} saved</span>
+      </div>
+      <div v-if="session.selectedDraft && (session.unsavedReview || session.hasCorrectionChanges) && session.selectedDraft.status !== 'ready'" class="mb-3 space-y-2" role="status">
+        <p>Unsent edits remain attached to this {{ session.selectedDraft.status }} candidate. Copy them before starting a new candidate, or explicitly clear them.</p>
+        <p>Replacement recipients: {{ recipientNames([session.selectedDraft.actorId, ...session.correctionAudienceIds]) }}</p>
+        <UTextarea :model-value="session.correctionText" readonly aria-label="Preserved unsent correction" class="w-full" />
+        <UButton color="neutral" variant="subtle" :disabled="locked" @click="session.clearReviewChanges()">Clear unsent edits</UButton>
+      </div>
+      <div v-if="session.selectedDraft?.routingReview && session.selectedDraft.status === 'ready'" class="mb-3 space-y-2">
+        <UPopover>
+          <UButton color="neutral" variant="subtle" :disabled="locked || session.stale">Correct audience</UButton>
+          <template #content>
+            <div class="max-h-72 w-72 overflow-y-auto space-y-3 p-4">
+              <p class="dx-label">Recipients for replacement candidate</p>
+              <UButton color="neutral" variant="link" :disabled="locked || session.stale" @click="session.correctionAudienceIds = session.availableAudience.filter(actor => actor.id !== session.selectedDraft?.actorId).map(actor => actor.id)">Select all</UButton>
+              <UCheckboxGroup v-model="session.correctionAudienceIds" :items="correctionAudienceItems" :disabled="locked || session.stale" />
+              <p class="text-xs">The actor also perceives their own turn.</p>
+            </div>
+          </template>
+        </UPopover>
+        <p class="text-sm">Replacement recipients: {{ recipientNames([session.selectedDraft.actorId, ...session.correctionAudienceIds]) }}</p>
+        <UTextarea v-model="session.correctionText" :rows="2" aria-label="Director correction" placeholder="Private correction (optional)…" :disabled="locked || session.stale" />
+        <p v-if="session.hasCorrectionChanges" class="text-sm" role="status">Create and review a replacement candidate to apply this correction.</p>
+        <div class="flex flex-wrap gap-2">
+          <UButton color="neutral" variant="subtle" :disabled="locked || session.stale || !session.reviewText.trim()" @click="session.revise(true)">Keep wording · create candidate</UButton>
+          <UButton color="neutral" variant="subtle" :disabled="locked || session.stale || !runtime?.configured" @click="session.revise(false)">Generate corrected candidate</UButton>
+        </div>
       </div>
       <div v-if="session.selectedDraft" class="flex flex-wrap items-center justify-end gap-2">
         <UButton v-if="recoverable" color="neutral" variant="ghost" :disabled="locked" @click="discard">Discard</UButton>
-        <UButton v-if="recoverable" color="neutral" variant="subtle" :disabled="locked || session.stale || !runtime?.configured" @click="retry">Retry</UButton>
+        <UButton v-if="recoverable" color="neutral" variant="subtle" :disabled="locked || session.stale || session.hasCorrectionChanges || !runtime?.configured" @click="retry">Retry</UButton>
         <UButton v-if="session.selectedDraft.artifact" color="neutral" variant="subtle" :disabled="locked" @click="toggleEditing">{{ session.editing ? 'Read' : 'Edit' }}</UButton>
-        <UButton v-if="review.kind === 'ready'" color="primary" :disabled="locked || session.stale || !session.reviewText.trim()" @click="session.accept()">Accept</UButton>
+        <UButton v-if="review.kind === 'ready'" color="primary" :disabled="locked || session.stale || session.hasCorrectionChanges || !session.reviewText.trim()" @click="session.accept()">Accept</UButton>
         <UButton v-else-if="review.kind === 'pending'" color="primary" :disabled="session.busy" @click="refreshPendingDraft">Check again</UButton>
       </div>
       <form v-else ref="composer" class="stage-composer" @submit.prevent="submit">
@@ -81,24 +118,25 @@
           <UFormField label="Audience" class="text-right">
             <UPopover>
               <UButton color="neutral" variant="subtle" class="w-full justify-end" :disabled="locked" aria-label="Choose audience">
-                <span class="truncate">{{ session.audienceMode === 'all' ? 'all' : audienceLabel }}</span>
+                <span class="truncate">{{ session.audienceMode === 'unspecified' ? 'No initial selection' : session.audienceMode === 'all' ? 'all' : audienceLabel }}</span>
                 <UIcon name="i-lucide-chevron-down" />
               </UButton>
               <template #content>
                 <div class="max-h-72 w-64 overflow-y-auto p-4 text-left">
-                  <URadioGroup v-model="session.audienceMode" :items="[{ label: 'all listed actors', value: 'all' }, { label: 'Selected actors', value: 'selected' }]" />
+                  <URadioGroup v-model="session.audienceMode" :items="session.mode === 'direct' ? [{ label: 'No initial selection', value: 'unspecified' }, { label: 'Selected actors', value: 'selected' }] : [{ label: 'All listed actors', value: 'all' }, { label: 'Selected actors', value: 'selected' }]" />
+                  <UButton color="neutral" variant="link" @click="session.selectAllAudience()">Select all · allow deselection</UButton>
                   <UCheckboxGroup v-if="session.audienceMode === 'selected'" v-model="session.audienceIds" :items="audienceItems" class="mt-3" />
                   <p class="mt-3 text-xs text-muted">The actor also perceives their own turn.</p>
-                  <p class="mt-2 text-xs">Audience: {{ audienceLabel }}</p>
+                  <p class="mt-2 text-xs">{{ session.audienceMode === 'unspecified' ? 'No initial audience selected; review the generated proposal.' : `Audience: ${audienceLabel}` }}</p>
                 </div>
               </template>
             </UPopover>
           </UFormField>
         </div>
-        <UTextarea v-if="session.mode === 'direct'" v-model="session.direction" :rows="3" class="w-full" aria-label="Private direction" placeholder="Private direction (optional)…" :disabled="locked" />
+        <UTextarea v-if="session.mode === 'direct'" v-model="session.direction" :rows="3" class="w-full" aria-label="Stage whisper" placeholder="Stage whisper (optional)…" :disabled="locked" />
         <UTextarea v-else v-model="session.performance" :rows="3" class="w-full" aria-label="Performance" placeholder="Write the actor’s words or actions…" :disabled="locked" />
         <div class="mt-2 flex items-center justify-between gap-2">
-          <UTabs v-model="session.mode" :items="[{ label: 'Direct', value: 'direct' }, { label: 'Perform', value: 'perform' }]" :content="false" @mousedown.capture="beginComposerMode" @click="activateComposerMode" size="xs" :ui="{ list: 'w-36' }" />
+          <UTabs v-model="session.mode" :items="[{ label: 'Stage whisper', value: 'direct' }, { label: 'Perform', value: 'perform' }]" :content="false" @mousedown.capture="beginComposerMode" @click="activateComposerMode" size="xs" :ui="{ list: 'w-52' }" />
           <UButton type="submit" color="primary" :loading="session.busy" :disabled="!canSubmit">{{ session.mode === 'direct' ? 'Generate draft' : 'Perform' }}</UButton>
         </div>
         <p v-if="session.mode === 'direct' && runtime && !runtime.configured" class="mt-2 text-xs text-muted">Generation unavailable. Perform is ready to use.</p>
@@ -161,12 +199,24 @@ const locked = computed(() => session.value.busy || session.value.needsReconcile
 const actorItems = computed(() => session.value.actors.map(actor => ({ label: actor.name, value: actor.id })));
 const audienceItems = computed(() => session.value.availableAudience.filter(actor => actor.id !== session.value.actorId).map(actor => ({ label: actor.name, value: actor.id })));
 const actorName = (id: string) => session.value.actors.find(actor => actor.id === id)?.name || id;
+const recipientNames = (ids: string[]) => [...new Set(ids)].map(actorName).join(', ');
+const correctionAudienceItems = computed(() => session.value.availableAudience.filter(actor => actor.id !== session.value.selectedDraft?.actorId).map(actor => ({ label: actor.name, value: actor.id })));
+const audienceChanges = computed(() => {
+  const draft = session.value.selectedDraft;
+  if (!draft?.routingReview || !draft.artifact) return 'Recipients await a valid proposal.';
+  const before = draft.routingReview.sourceAudience ?? draft.routingReview.initialAudience;
+  if (before === null) return 'Audience proposed from no initial selection. Review every recipient.';
+  const previous = [...new Set([draft.actorId, ...before])];
+  const added = draft.audience.filter(id => !previous.includes(id));
+  const removed = previous.filter(id => !draft.audience.includes(id));
+  return added.length || removed.length ? `Added: ${recipientNames(added) || 'none'}. Removed: ${recipientNames(removed) || 'none'}.` : 'Recipients unchanged.';
+});
 const audienceLabel = computed(() => session.value.resolvedAudience.map(actorName).join(', '));
 const scenarioItems = computed(() => sourceFiles.value.filter(file => file.kind === 'scenario').map(file => ({ label: file.name, value: file.id })));
 const review = computed(() => session.value.selectedDraft ? classifyDraftReview(session.value.selectedDraft) : { kind: 'unavailable' as const, message: '' });
 const recoverable = computed(() => ['ready', 'failed', 'generating'].includes(session.value.selectedDraft?.status || ''));
 const draftStatus = computed(() => ({ ready: 'Not accepted', generating: 'Generating', failed: 'Generation failed', accepted: 'Accepted', discarded: 'Discarded' })[session.value.selectedDraft?.status || 'ready']);
-const draftItems = computed(() => [{ label: 'Compose a new turn', value: 'compose' }, ...session.value.drafts.map((draft, index) => ({ value: draft.id, label: `${index + 1}. ${actorName(draft.actorId)} · ${draft.status}${draft.basisHeadCommitId !== session.value.projection?.branch.headCommitId ? ' · stale' : ''}` }))]);
+const draftItems = computed(() => [{ label: 'Compose a new turn', value: 'compose' }, ...session.value.reviewDrafts.map((draft, index) => ({ value: draft.id, label: `${index + 1}. ${actorName(draft.actorId)} · ${draft.status}${session.value.hasBufferedReview(draft.id) ? ' · unsent edits' : ''}${draft.basisHeadCommitId !== session.value.projection?.branch.headCommitId ? ' · stale' : ''}` }))]);
 const canSubmit = computed(() => !locked.value && !!session.value.actorId && (session.value.mode === 'perform' ? !!session.value.performance.trim() : !!runtime.value?.configured));
 
 // Prose is a single Vue text node. Read Range geometry without touching DOM or

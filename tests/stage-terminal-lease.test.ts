@@ -3,7 +3,7 @@ import test from "node:test";
 import { StageSession } from "../src/local-ui/lib/stage-session.ts";
 
 function fixture() {
-  const records: { id: string; generationCommandId: string; branchId: string; basisHeadCommitId: string; actorId: string; audience: string[]; status: string; artifact: null; failure: null; createdAt: string }[] = [];
+  const records: { id: string; generationCommandId: string; branchId: string; basisHeadCommitId: string; actorId: string; audience: string[]; status: string; artifact: null; failure: null; createdAt: string; routingReview?: import("../src/local-api/stage-contracts.ts").StageDraft["routingReview"] }[] = [];
   const commands: string[] = [];
   const discardCommands: string[] = [];
   let loseResponse = true;
@@ -15,11 +15,14 @@ function fixture() {
       return Response.json({ scenarioName: "Scene", branch: { id: "main", headCommitId: "head" }, transcript: [], audience: [], actors: [{ id: "scene", name: "Scene", kind: "stateless" }, { id: "z", name: "Z", kind: "agent" }] });
     }
     if (path.endsWith("/drafts") && options?.method === "POST") {
-      const { commandId, actorId, audience } = JSON.parse(String(options.body)) as { commandId: string; actorId: string; audience: string[] };
+      const { commandId, actorId, audience } = JSON.parse(String(options.body)) as { commandId: string; actorId: string; audience: string[] | null };
       commands.push(commandId);
       let record = records.find(item => item.generationCommandId === commandId);
       if (!record) {
-        record = { id: `draft-${records.length}`, generationCommandId: commandId, branchId: "main", basisHeadCommitId: "head", actorId, audience, status: "generating", artifact: null, failure: null, createdAt: "2026-01-01" };
+        record = { id: `draft-${records.length}`, generationCommandId: commandId, branchId: "main", basisHeadCommitId: "head", actorId, audience: [actorId, ...(audience || []).filter(id => id !== actorId)], status: "generating", artifact: null, failure: null, createdAt: "2026-01-01" };
+        // Mirror the v1 proposal API: null direction is distinct from normalized draft delivery.
+        record.routingReview = { initialAudience: audience, correctedAudience: null, originalWhisper: [], correction: "",
+          sourceDraftId: null, sourceAudience: null, originalDraftId: record.id, preserved: false };
         records.push(record);
       }
       if (loseResponse) { loseResponse = false; throw new Error("Lost POST response"); }
