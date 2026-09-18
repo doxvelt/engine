@@ -1,3 +1,4 @@
+import { finalDraftAudience, prepareRouting, projectRoutingContext, routingInput } from "./candidate-routing.ts";
 import {
   assertCompletedArtifact,
   assertRuntimeText,
@@ -84,9 +85,9 @@ export function acceptActorTurnDraft(
 }
 
 export function acceptedTextFromReceipt(receipt: AcceptDraftReceipt): string {
-  return receipt.accepted.textSource === "generated_verbatim"
-    ? receipt.generatedArtifact.text
-    : receipt.accepted.text;
+  return receipt.accepted.textSource === "acceptor_edited"
+    ? receipt.accepted.text
+    : receipt.generatedArtifact.text;
 }
 
 export function receiptFor(
@@ -97,12 +98,13 @@ export function receiptFor(
   if (!generatedArtifact)
     throw new DomainValidationError("Ready draft has no generated artifact.");
   return {
-    receiptVersion: 1,
+    receiptVersion: draft.routing ? 2 : 1,
+    ...(draft.routing ? { routing: structuredClone(draft.routing) } : {}),
     draftId: draft.id,
     generationCommandId: draft.generationCommandId,
     contentRevisionId: draft.contentRevisionId,
     actorId: draft.actorId,
-    audience: [...draft.audience],
+    audience: [...finalDraftAudience(draft)],
     stageWhispers: draft.stageWhispers.map((whisper) => ({ ...whisper })),
     runtimeProfile: { ...draft.runtimeProfile },
     promptPolicy: { ...draft.promptPolicy },
@@ -114,7 +116,7 @@ export function receiptFor(
     generatedArtifact,
     accepted:
       acceptedText === generatedArtifact.text
-        ? { textSource: "generated_verbatim" }
+        ? { textSource: draft.routing?.preservedText != null ? "director_preserved" : "generated_verbatim" }
         : { textSource: "acceptor_edited", text: acceptedText },
   };
 }
@@ -225,7 +227,7 @@ export function validateReadyDraft(
       );
     return whisper;
   });
-  const context = inspectActorContext(repository, {
+  const context = draft.routing ? null : inspectActorContext(repository, {
     ownerScope: draft.ownerScope,
     simulationId: draft.simulationId,
     branchId: draft.branchId,
@@ -234,15 +236,36 @@ export function validateReadyDraft(
     audience: draft.audience,
     stageWhispers: whispers,
   });
-  const portableContext = canonicalDraftContext(context);
+  // Saved candidates without correctionSource retain their original frozen
+  // prompt/context interpretation, including pre-fix routed corrections.
+  const routed = draft.routing ? projectRoutingContext(repository, {
+    ownerScope: draft.ownerScope, simulationId: draft.simulationId, branchId: draft.branchId,
+    expectedHead: draft.basisHeadCommitId, commandId: draft.generationCommandId,
+    payload: { actorId: draft.actorId, audience: draft.audience, stageWhisperIds: draft.stageWhispers.map(item => item.id),
+      runtimeProfile: draft.runtimeProfile, promptPolicy: draft.promptPolicy, outputSchema: draft.outputSchema,
+      skillDigests: draft.skillDigests, routing: routingInput(draft.routing) },
+  }, whispers, draft.context && typeof draft.context === "object" && "correctionSource" in draft.context
+    ? draft.routing.source : null) : null;
+  if (routed && !same(prepareRouting(repository, {
+    ownerScope: draft.ownerScope, simulationId: draft.simulationId, branchId: draft.branchId,
+    expectedHead: draft.basisHeadCommitId, commandId: draft.generationCommandId,
+    payload: { actorId: draft.actorId, audience: draft.audience, stageWhisperIds: draft.stageWhispers.map(item => item.id),
+      runtimeProfile: draft.runtimeProfile, promptPolicy: draft.promptPolicy, outputSchema: draft.outputSchema,
+      skillDigests: draft.skillDigests, routing: routingInput(draft.routing!) },
+  }, routed.availableRecipientIds), draft.routing))
+    throw new DomainValidationError("Source candidate provenance changed.");
+  if (routed && !same(routed.availableRecipientIds, draft.routing!.availableRecipientIds))
+    throw new DomainValidationError("Available recipient projection changed.");
+  const portableContext = routed ? routed.context : canonicalDraftContext(context);
+  const prompt = routed ? routed.prompt : context!.promptPreview;
   if (
     sha256(stableStringify(portableContext)) !== draft.contextHash ||
     !same(portableContext, draft.context)
   )
     throw new DomainValidationError("Draft context hash is invalid.");
   if (
-    sha256(context.promptPreview) !== draft.promptHash ||
-    context.promptPreview !== draft.prompt
+    sha256(prompt) !== draft.promptHash ||
+    prompt !== draft.prompt
   )
     throw new DomainValidationError("Draft prompt hash is invalid.");
   return { draft, acceptedText, whispers };
@@ -271,7 +294,7 @@ export function buildAcceptedCommit(
     ),
     actorId: draft.actorId,
     text,
-    audience: [...draft.audience],
+    audience: [...finalDraftAudience(draft)],
     provenance: {
       mode: "generated",
       operation: "turn",
@@ -292,7 +315,7 @@ export function buildAcceptedCommit(
   const events: RuntimeEvent[] = [{ type: "message_accepted", message }];
   events.push(
     ...deriveFirstImpressionEvents({
-      audience: draft.audience,
+      audience: finalDraftAudience(draft),
       surfaces: revision.compiled.surfaces,
       existing: projection.firstImpressions,
     }),

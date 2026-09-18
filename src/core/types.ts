@@ -236,7 +236,7 @@ export type MessageVersionRecord = {
         mode: "generated";
         operation: "turn";
         sourceArtifactDigest: string;
-        finalTextSource: "generated_verbatim" | "acceptor_edited";
+        finalTextSource: "generated_verbatim" | "director_preserved" | "acceptor_edited";
       };
 };
 
@@ -553,6 +553,34 @@ export type ActorTurnDraftArtifact = {
   text: string;
   digest: string;
   provenance: DraftRuntimeProvenance;
+  proposedAudience?: string[];
+};
+
+export type DraftRoutingInput = {
+  version: 1;
+  initialAudience: string[] | null;
+  correction: string;
+  correctedAudience: string[] | null;
+  preservedText: string | null;
+  sourceDraftId: string | null;
+};
+
+export type DraftRouting = DraftRoutingInput & {
+  availableRecipientIds: string[];
+  originalDraftId: string;
+  originalGenerationCommandId: string;
+  source: null | {
+    draftId: string;
+    generationCommandId: string;
+    actorId: string;
+    branchId: string;
+    basisHeadCommitId: string;
+    contentRevisionId: string;
+    audience: string[];
+    artifact: ActorTurnDraftArtifact;
+    contextHash: string;
+    promptHash: string;
+  };
 };
 
 export type ActorTurnDraftFailure = {
@@ -569,6 +597,7 @@ export type ActorTurnDraftStatus =
   | "accepted";
 
 export type ActorTurnDraftRecord = {
+  routing?: DraftRouting;
   id: string;
   ownerScope: string;
   simulationId: string;
@@ -596,7 +625,8 @@ export type ActorTurnDraftRecord = {
 };
 
 export type AcceptDraftReceipt = {
-  receiptVersion: 1;
+  routing?: DraftRouting;
+  receiptVersion: 1 | 2;
   draftId: string;
   generationCommandId: string;
   contentRevisionId: string;
@@ -612,6 +642,6 @@ export type AcceptDraftReceipt = {
   promptHash: string;
   generatedArtifact: ActorTurnDraftArtifact;
   accepted:
-    | { textSource: "generated_verbatim" }
+    | { textSource: "generated_verbatim" | "director_preserved" }
     | { textSource: "acceptor_edited"; text: string };
 };

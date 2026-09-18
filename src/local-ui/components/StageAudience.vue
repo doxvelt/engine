@@ -7,7 +7,7 @@
       <div class="max-h-64 max-w-72 overflow-y-auto p-4 text-sm break-words">
         <p class="dx-label">Audience</p>
         <p class="mt-2">{{ names.join(', ') }}</p>
-        <p v-if="draft" class="mt-3 text-xs text-muted">Captured when generated.</p>
+        <p v-if="draft" class="mt-3 text-xs text-muted">Bound to this candidate.</p>
         <p v-else class="mt-3 text-xs text-muted">Turn {{ number }}</p>
         <slot />
       </div>

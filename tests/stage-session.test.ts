@@ -93,6 +93,7 @@ test("an empty persistent roster still exposes authored actors for explicit whol
   await session.refresh();
   session.actorId = 'scene';
   assert.deepEqual(session.availableAudience.map(actor => actor.id), ['a', 'scene']);
+  session.selectAllAudience(); // New whisper default is unspecified; All remains an explicit cast selection.
   assert.deepEqual(session.resolvedAudience, ['scene', 'a']);
 });
 
@@ -251,4 +252,86 @@ test("success notices stay with their action and clear for a new proposal or com
   session.compose();
   assert.equal(session.notice, "");
   assert.equal(session.error, "Recovery unavailable");
+});
+
+test("a recovered pending proposal adopts its final recipients without creating an unsent correction", async () => {
+  const review = { initialAudience: null, correctedAudience: null, originalWhisper: [], correction: "", sourceDraftId: null,
+    sourceAudience: null, originalDraftId: "draft", preserved: false };
+  let ready = false;
+  const fetcher: typeof fetch = async url => String(url).includes('/stage?')
+    ? Response.json({ scenarioName: 'Scene', branch: { id: 'main', headCommitId: 'head' }, transcript: [], audience: [],
+      actors: [{ id: 'scene', name: 'Scene', kind: 'stateless' }, { id: 'a', name: 'A', kind: 'agent' }] })
+    : Response.json({ drafts: [{ ...draft, status: ready ? 'ready' : 'generating',
+      audience: ready ? ['scene', 'a'] : ['scene'], artifact: ready ? draft.artifact : null, routingReview: review }] });
+  const session = new StageSession({ apiBase: 'http://stage.invalid', simulationId: 'sim', branchId: 'main' }, fetcher);
+  await session.refresh();
+  assert.equal(session.hasCorrectionChanges, false);
+  session.compose();
+  session.selectDraft('draft');
+  ready = true;
+  await session.refresh();
+  assert.deepEqual(session.correctionAudienceIds, ['a']);
+  assert.equal(session.hasCorrectionChanges, false);
+  assert.equal(session.reviewText, 'Saved opening.');
+  session.correctionAudienceIds = [];
+  await session.accept();
+  await session.retry();
+  assert.equal(session.needsReconcile, false, 'Retry must not ignore an unsent correction');
+  assert.equal(session.selectedDraftId, 'draft', 'unsent correction must not accept the older binding');
+});
+
+for (const status of ['discarded', 'accepted', 'failed'] as const) {
+  for (const compose of [false, true]) {
+    test(`unsent correction survives remote ${status} while ${compose ? 'composing' : 'selected'}`, async () => {
+      const review = { initialAudience: null, correctedAudience: null, originalWhisper: [], correction: '',
+        sourceDraftId: null, sourceAudience: null, originalDraftId: 'draft', preserved: false };
+      let remote = { ...draft, routingReview: review };
+      const fetcher: typeof fetch = async url => {
+        const path = String(url);
+        if (path.includes('/stage?')) return Response.json({ branch: { id: 'main', headCommitId: status === 'accepted' && remote.status === status ? 'new-head' : 'head' },
+          actors: [{ id: 'scene', name: 'Scene', kind: 'stateless' }, { id: 'a', name: 'A', kind: 'agent' }], audience: [], transcript: [] });
+        if (path.includes('/drafts?')) return Response.json({ drafts: remote.status === 'ready' || remote.status === 'failed' ? [remote] : [] });
+        return Response.json(remote);
+      };
+      const session = new StageSession({ apiBase: 'http://stage.invalid', simulationId: 'sim', branchId: 'main' }, fetcher);
+      await session.refresh();
+      session.correctionText = 'Important unsent correction';
+      session.correctionAudienceIds = [];
+      if (compose) { session.reviewText = 'Unsent wording'; session.compose(); }
+      remote = { ...remote, status };
+      await session.refresh();
+      assert.equal(session.selectedDraftId, compose ? null : 'draft');
+      assert.equal(session.unsaved, true);
+      if (compose) session.selectDraft('draft');
+      assert.equal(session.selectedDraft?.status, status);
+      assert.equal(session.correctionText, 'Important unsent correction');
+      assert.deepEqual(session.correctionAudienceIds, []);
+      assert.equal(session.reviewText, compose ? 'Unsent wording' : draft.artifact.text);
+      session.clearReviewChanges();
+      assert.equal(session.unsaved, false);
+    });
+  }
+}
+
+test('failed corrected candidate keeps unsent edits when refresh discovers a valid result', async () => {
+  let ready = false;
+  const fetcher: typeof fetch = async url => String(url).includes('/stage?')
+    ? Response.json({ branch: { id: 'main', headCommitId: 'head' }, actors: [], audience: [], transcript: [] })
+    : Response.json({ drafts: [{ ...draft, status: ready ? 'ready' : 'failed', artifact: ready ? draft.artifact : null,
+      routingReview: { initialAudience: ['a'], correctedAudience: ['a'], originalWhisper: [], correction: 'Saved correction',
+        sourceDraftId: 'original', sourceAudience: ['scene'], originalDraftId: 'original', preserved: false } }] });
+  const session = new StageSession({ apiBase: 'http://stage.invalid', simulationId: 'sim', branchId: 'main' }, fetcher);
+  await session.refresh();
+  session.correctionText = 'Later unsent correction';
+  session.correctionAudienceIds = [];
+  session.compose();
+  await session.refresh();
+  session.selectDraft('draft');
+  ready = true;
+  await session.refresh();
+  assert.equal(session.selectedDraft?.status, 'ready');
+  assert.equal(session.reviewText, draft.artifact.text);
+  assert.equal(session.correctionText, 'Later unsent correction');
+  assert.deepEqual(session.correctionAudienceIds, []);
+  assert.equal(session.hasCorrectionChanges, true);
 });

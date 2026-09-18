@@ -1688,7 +1688,7 @@ function validateMessage(value: unknown): void {
     stringsOf(provenance, ["sourceArtifactDigest"], "generated message provenance");
     oneOf(
       provenance.finalTextSource,
-      ["generated_verbatim", "acceptor_edited"],
+      ["generated_verbatim", "director_preserved", "acceptor_edited"],
       "generated final text source",
     );
   }
@@ -2173,6 +2173,19 @@ function validateAcceptedDraftCommandShape(
   ) throw invalidCommandResult(command.commandId, "accepted draft audience is not normalized");
   for (const actorId of receipt.audience)
     requireArchiveActor(archive, command.commandId, actorId);
+  if (receipt.routing) {
+    const routing = receipt.routing;
+    if (routing.originalDraftId !== domainId("actor_turn_draft", archive.simulation.ownerScope,
+        archive.simulation.id, routing.originalGenerationCommandId))
+      throw invalidCommandResult(command.commandId, "original routing identity mismatch");
+    for (const id of routing.availableRecipientIds) requireArchiveActor(archive, command.commandId, id);
+    const source = routing.source;
+    if (source) for (const id of source.audience) requireArchiveActor(archive, command.commandId, id);
+    if (source && (source.draftId !== domainId("actor_turn_draft", archive.simulation.ownerScope,
+        archive.simulation.id, source.generationCommandId) || source.branchId !== input.branchId ||
+        source.basisHeadCommitId !== input.expectedHead))
+      throw invalidCommandResult(command.commandId, "source routing identity mismatch");
+  }
   const artifact = receipt.generatedArtifact;
   // Prompt policy, output schema, skills, and context/prompt hashes occur once in
   // the self-contained receipt. Their shape is validated by the codec, but they
@@ -2181,9 +2194,9 @@ function validateAcceptedDraftCommandShape(
     stableStringify(artifact.provenance.runtimeProfile) !==
       stableStringify(receipt.runtimeProfile)
   ) throw invalidCommandResult(command.commandId, "accepted draft artifact provenance is invalid");
-  const finalText = receipt.accepted.textSource === "generated_verbatim"
-    ? artifact.text
-    : receipt.accepted.text;
+  const finalText = receipt.accepted.textSource === "acceptor_edited"
+    ? receipt.accepted.text
+    : artifact.text;
   if (
     receipt.accepted.textSource === "acceptor_edited" &&
     receipt.accepted.text === artifact.text

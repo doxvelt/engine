@@ -552,7 +552,7 @@ function decodeMessage(value: unknown): void {
     enumString(provenance.operation, "generated message operation", ["turn"] as const);
     string(provenance.sourceArtifactDigest, "generated source artifact digest");
     enumString(provenance.finalTextSource, "generated final text source", [
-      "generated_verbatim", "acceptor_edited",
+      "generated_verbatim", "director_preserved", "acceptor_edited",
     ] as const);
   }
 }

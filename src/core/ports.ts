@@ -65,6 +65,7 @@ export type StageWhisperCommand = {
 };
 
 export type GenerateActorTurnDraftPayload = {
+  routing?: import("./types.ts").DraftRoutingInput;
   actorId: string;
   audience: string[];
   stageWhisperIds: string[];

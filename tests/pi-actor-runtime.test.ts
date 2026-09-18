@@ -391,3 +391,24 @@ test("Pi runtime snapshots model dispatch and provenance from one deep copy", as
   assert.equal(providerReads, 1);
   assert.equal(modelReads, 1);
 });
+
+test("Pi carries the structured proposal through the text-only no-tools transport", async t => {
+  const { store, started } = await fixture(t);
+  const { runtime } = runtimeWithFaux([context => {
+    assert.deepEqual(context.tools, []);
+    assert.equal(context.messages.length, 1);
+    assert.match(textOf(context.messages[0]!), /audience-proposal-v1/);
+    return fauxAssistantMessage(JSON.stringify({ text: "Private response.", audience: ["ceo", "cfo"] }));
+  }]);
+  const original = generation(started.root.id);
+  const request = { ...original, payload: { ...original.payload,
+    promptPolicy: { id: "audience-proposal-v1", version: "v1" },
+    outputSchema: { id: "audience-proposal", digest: "v1" },
+    routing: { version: 1 as const, initialAudience: ["cfo"], correction: "", correctedAudience: null, preservedText: null, sourceDraftId: null },
+  } };
+  const result = await generateActorTurnDraft(store, runtime, request);
+  assert.equal(result.draft.status, "ready");
+  assert.equal(result.draft.artifact?.text, "Private response.");
+  assert.deepEqual(result.draft.artifact?.proposedAudience, ["ceo", "cfo"]);
+  assert.equal(result.draft.artifact?.provenance.adapter.id, "pi-agent-core");
+});
