@@ -462,3 +462,39 @@ test("complete whisper audience overrides remove obsolete explicit references an
   invalidPreserve.payload.routing!.preservedText = "Unchanged performance.";
   assert.throws(() => generateActorTurnDraft(f.store, runtime([]), invalidPreserve), /whisper/i);
 });
+
+test("complete whisper dollar tokens reach runtime literally across repeated revisions", async t => {
+  for (const token of ["$&", "$$", "$`", "$'", "$1", "$<name>"]) {
+    await t.test(token, async t => {
+      const f = await fixture(t);
+      let source = (await generateActorTurnDraft(f.store, runtime(["ceo"], "PRIOR-PERFORMANCE"), f.command("dollar-source"))).draft;
+      const requests: RunActorTurnRequest[] = [];
+      const capture = new DeterministicFakeRuntime([
+        { type: "completed", text: JSON.stringify({ text: "PRIOR-PERFORMANCE", audience: ["ceo"] }) },
+      ], request => requests.push(request));
+      for (const revision of [1, 2]) {
+        const text = `Revision ${revision}: say ${token} literally.\nKeep ${token} unchanged.`;
+        const command = correction(source, `dollar-revision-${revision}`, [], null);
+        Object.assign(command.payload.routing!, { version: 2, correction: "", completeWhisper: text });
+        const candidate = (await generateActorTurnDraft(f.store, capture, command)).draft;
+        assert.equal(candidate.status, "ready");
+        const request = requests.at(-1)!;
+        const context = request.context as { routingDirection: { completeWhisper: string } };
+        const saved = f.store.getActorTurnDraft("owner", "sim", candidate.id)!;
+        assert.equal(saved.routing!.completeWhisper, text);
+        assert.equal(context.routingDirection.completeWhisper, text);
+        const start = request.prompt.indexOf("# Private Stage Whispers\n") + "# Private Stage Whispers\n".length;
+        const end = request.prompt.indexOf("\n\n# Accessible Transcript", start);
+        assert.equal(request.prompt.slice(start, end), text, "runtime prompt must contain the literal complete whisper");
+        assert.deepEqual(saved.context, request.context);
+        assert.equal(saved.prompt, request.prompt);
+        assert.equal(saved.promptHash, sha256(request.prompt));
+        assert.doesNotMatch(request.prompt, /PRIOR-PERFORMANCE/);
+        if (revision === 2) assert.doesNotMatch(request.prompt, /Revision 1:/);
+        assert.deepEqual(f.store.getActorTurnDraft("owner", "sim", source.id), source);
+        source = candidate;
+      }
+      assert.equal(requests.length, 2);
+    });
+  }
+});
