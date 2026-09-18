@@ -373,3 +373,92 @@ test("retained belief provenance alone permits a recipient after presence loss; 
   const unseen = (await generateActorTurnDraft(f.store, runtime(["ceo", "coo"]), command)).draft;
   assert.equal(unseen.status, "failed");
 });
+
+test("complete whisper replacement deletes elephant and implicit identities across repeated generations", async t => {
+  const f = await fixture(t);
+  const whisper = f.store.createStageWhisper({ ...f.query, expectedHead: f.head, commandId: "elephant-whisper",
+    targetActorId: "ceo", text: "Describe an elephant to @coo." });
+  const first = f.command("elephant");
+  first.payload.stageWhisperIds = [whisper.id];
+  const original = (await generateActorTurnDraft(f.store, runtime(["ceo"], "ELEPHANT-PERFORMANCE @coo"), first)).draft;
+  const before = f.store.exportSimulation("owner", "sim");
+  const requests: RunActorTurnRequest[] = [];
+  const capture = new DeterministicFakeRuntime([{ type: "completed", text: JSON.stringify({ text: "Fresh reply.", audience: ["ceo"] }) }], request => requests.push(request));
+  let source = original;
+  for (const [index, text] of ["Describe a quiet room to @cfo.", "Describe a quiet room.", ""].entries()) {
+    const command = correction(source, `complete-${index}`, [], null);
+    Object.assign(command.payload.routing!, { version: 2, correction: "", correctedAudience: null, completeWhisper: text });
+    const candidate = (await generateActorTurnDraft(f.store, capture, command)).draft;
+    assert.equal(candidate.status, "ready");
+    const request = requests.at(-1)!;
+    assert.equal((request.context as { routingDirection: { completeWhisper: string } }).routingDirection.completeWhisper, text);
+    if (text) assert.ok(request.prompt.includes(text));
+    assert.doesNotMatch(JSON.stringify(request.context), /elephant|ELEPHANT|@coo|Fresh reply/);
+    assert.doesNotMatch(request.prompt, /elephant|ELEPHANT|@coo|Fresh reply|UNACCEPTED/);
+    assert.equal(candidate.routing!.availableRecipientIds.includes("coo"), false);
+    assert.equal(candidate.routing!.availableRecipientIds.includes("cfo"), index === 0);
+    const subjective = (request.context as { subjective: Record<string, unknown> }).subjective;
+    const originalSubjective = (original.context as { subjective: Record<string, unknown> }).subjective;
+    for (const key of Object.keys(subjective).filter(key => key !== "stageWhispers")) assert.deepEqual(subjective[key], originalSubjective[key]);
+    assert.deepEqual(candidate.routing!.source!.artifact, source.artifact);
+    assert.deepEqual(f.store.getActorTurnDraft("owner", "sim", original.id), original);
+    assert.equal((await generateActorTurnDraft(f.store, capture, command)).replayed, true);
+    const retry = structuredClone(command); retry.commandId += "-retry";
+    const retried = (await generateActorTurnDraft(f.store, capture, retry)).draft;
+    assert.equal(retried.promptHash, candidate.promptHash);
+    assert.equal(retried.contextHash, candidate.contextHash);
+    assert.doesNotThrow(() => validateReadyDraft(f.store, { ...f.query, draftId: candidate.id, commandId: "validate" }, candidate));
+    source = candidate;
+  }
+  assert.deepEqual(f.store.exportSimulation("owner", "sim"), before);
+  const accept = { ...f.query, draftId: source.id, commandId: "accept-complete" };
+  acceptActorTurnDraft(f.store, accept);
+  const archive = f.store.exportSimulation("owner", "sim");
+  validateSimulationArchive(archive);
+  const imported = await openBranchStore(path.join(f.root, "complete-import.sqlite")).open();
+  try { imported.importSimulation(archive); assert.equal(acceptActorTurnDraft(imported, accept).replayed, true); }
+  finally { imported.close(); }
+});
+
+test("retry preserves the captured pre-source-material legacy interpretation", async t => {
+  const f = await fixture(t);
+  const original = (await generateActorTurnDraft(f.store, runtime(["ceo"]), f.command("original-legacy"))).draft;
+  const command = correction(original, "old-correction", [], null);
+  const modern = (await generateActorTurnDraft(f.store, runtime(["ceo"]), command)).draft;
+  const oldProjection = projectRoutingContext(f.store, command, []);
+  const legacy = { ...modern, context: oldProjection.context, contextHash: oldProjection.contextHash,
+    prompt: oldProjection.prompt, promptHash: oldProjection.promptHash };
+  // Emulate a read of an existing pre-source-material record, without rewriting it.
+  const get = f.store.getActorTurnDraft.bind(f.store);
+  f.store.getActorTurnDraft = (owner, simulation, id) => id === legacy.id ? legacy : get(owner, simulation, id);
+  const retry = structuredClone(command); retry.commandId = "retry-old-correction";
+  const options = Object.assign({}, { retryDraftId: legacy.id });
+  const retried = (await generateActorTurnDraft(f.store, runtime(["ceo"]), retry, options)).draft;
+  assert.equal(retried.promptHash, legacy.promptHash);
+  assert.equal(retried.contextHash, legacy.contextHash);
+  assert.doesNotMatch(retried.prompt, /UNACCEPTED/);
+});
+
+test("complete whisper audience overrides remove obsolete explicit references and reject contradictory proposals", async t => {
+  const f = await fixture(t);
+  const original = (await generateActorTurnDraft(f.store, runtime(["ceo"]), f.command("initial-explicit", ["coo"]))).draft;
+  const command = correction(original, "replace-explicit", [], null);
+  Object.assign(command.payload.routing!, { version: 2, correction: "", completeWhisper: "Consider the room." });
+  const replacement = (await generateActorTurnDraft(f.store, runtime(["ceo"]), command)).draft;
+  assert.equal(replacement.status, "ready");
+  assert.deepEqual(replacement.routing!.availableRecipientIds, ["ceo"]);
+  assert.doesNotMatch(replacement.prompt, /coo/);
+  const contradict = structuredClone(command); contradict.commandId = "contradict-v2";
+  contradict.payload.audience = ["cfo"];
+  contradict.payload.routing!.correctedAudience = ["cfo"];
+  const failed = (await generateActorTurnDraft(f.store, runtime(["ceo"]), contradict)).draft;
+  assert.equal(failed.status, "failed");
+  const retry = structuredClone(contradict); retry.commandId = "retry-v2-failed";
+  const ready = (await generateActorTurnDraft(f.store, runtime(["ceo", "cfo"]), retry, { retryDraftId: failed.id })).draft;
+  assert.equal(ready.status, "ready");
+  assert.equal(ready.contextHash, failed.contextHash);
+  assert.equal(ready.promptHash, failed.promptHash);
+  const invalidPreserve = structuredClone(command); invalidPreserve.commandId = "false-preserve";
+  invalidPreserve.payload.routing!.preservedText = "Unchanged performance.";
+  assert.throws(() => generateActorTurnDraft(f.store, runtime([]), invalidPreserve), /whisper/i);
+});

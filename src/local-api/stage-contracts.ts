@@ -12,7 +12,7 @@ export type StageDraft = Pick<ActorTurnDraftRecord,
   "id" | "branchId" | "basisHeadCommitId" | "actorId" | "audience" |
   "status" | "artifact" | "failure" | "createdAt" | "generationCommandId"
 > & {
-  routingReview?: { initialAudience: string[] | null; correctedAudience: string[] | null; originalWhisper: string[]; correction: string;
+  routingReview?: { completeWhisper?: string | null; initialAudience: string[] | null; correctedAudience: string[] | null; originalWhisper: string[]; correction: string;
     sourceDraftId: string | null; sourceAudience: string[] | null; originalDraftId: string; preserved: boolean };
 };
 
@@ -20,7 +20,9 @@ export type StageDraft = Pick<ActorTurnDraftRecord,
 export function stageDraft(draft: StageDraft | ActorTurnDraftRecord): StageDraft {
   const { id, branchId, basisHeadCommitId, actorId, audience, status, artifact, failure, createdAt, generationCommandId } = draft;
   const routing = "routing" in draft ? draft.routing : undefined;
-  const routingReview = routing ? { initialAudience: routing.initialAudience, correctedAudience: routing.correctedAudience,
+  const snapshots = "stageWhispers" in draft ? draft.stageWhispers : [];
+  const routingReview = routing ? { completeWhisper: routing.version === 2 ? routing.completeWhisper!
+    : routing.sourceDraftId !== null || snapshots.length > 1 ? null : snapshots[0]?.text ?? "", initialAudience: routing.initialAudience, correctedAudience: routing.correctedAudience,
     originalWhisper: (draft as ActorTurnDraftRecord).stageWhispers.map(item => item.text),
     correction: routing.correction, sourceDraftId: routing.sourceDraftId, sourceAudience: routing.source?.audience || null,
     originalDraftId: routing.originalDraftId, preserved: routing.preservedText !== null }
@@ -35,7 +37,7 @@ export type ExampleEntry = { simulationId: string; branchId: string; workspacePa
 
 export type ReviseStageDraftBody = {
   commandId: string;
-  audience: string[];
-  correction: string;
+  audience: string[] | null;
+  completeWhisper: string;
   preservedText?: string;
 };

@@ -97,7 +97,9 @@ A runtime may suggest another actor or future action, but it cannot choose or co
 The player may:
 
 - edit the draft;
-- regenerate from the same input and context;
+- regenerate from the same captured input and context;
+- edit the complete stage whisper and generate afresh at the same pre-turn context,
+  excluding earlier whispers and unaccepted performances from model input;
 - change the runtime profile or model;
 - reject the draft;
 - accept it.

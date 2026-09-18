@@ -30,9 +30,11 @@ export class StageSession {
   };
   private retainedReviews = new Map<string, StageDraft>();
   private editorBuffers = new Map<string, string>();
-  private correctionBuffers = new Map<string, { audience: string[]; text: string }>();
+  private correctionBuffers = new Map<string, { audience: string[]; text: string; required: boolean; confirmed: boolean }>();
   correctionAudienceIds: string[] = [];
   correctionText = "";
+  audienceRequired = false;
+  completeWhisperConfirmed = false;
   get actorId() { return this.modeRouting[this.mode].actorId || this.actors[0]?.id || ""; }
   set actorId(value: string) { this.modeRouting[this.mode].actorId = value; }
   get audienceMode() { return this.modeRouting[this.mode].audienceMode; }
@@ -74,10 +76,26 @@ export class StageSession {
   }
   get stale(): boolean { return !!this.selectedDraft && !!this.projection && isStaleDraftBasis(this.selectedDraft, this.projection.branch); }
   get unsavedReview(): boolean { return !!this.selectedDraft?.artifact && this.reviewText !== this.selectedDraft.artifact.text; }
-  get hasCorrectionChanges(): boolean {
+  get savedCompleteWhisper(): string | null {
+    const review = this.selectedDraft?.routingReview;
+    if (!review) return null;
+    if (review.completeWhisper !== undefined) return review.completeWhisper;
+    return review.sourceDraftId !== null || review.originalWhisper.length > 1 ? null : review.originalWhisper[0] ?? "";
+  }
+  get whisperChanged(): boolean {
+    return this.correctionText !== (this.savedCompleteWhisper ?? "") || (this.savedCompleteWhisper === null && this.completeWhisperConfirmed);
+  }
+  get audienceChanged(): boolean {
     const draft = this.selectedDraft;
-    if (!draft?.routingReview) return false;
-    return !!this.correctionText.trim() || JSON.stringify([...new Set([draft.actorId, ...this.correctionAudienceIds])].sort()) !== JSON.stringify([...draft.audience].sort());
+    return !!draft && JSON.stringify([...new Set([draft.actorId, ...this.correctionAudienceIds])].sort()) !== JSON.stringify([...draft.audience].sort());
+  }
+  get hasCorrectionChanges(): boolean {
+    const review = this.selectedDraft?.routingReview;
+    return !!review && (this.whisperChanged || this.audienceChanged || this.audienceRequired !== (review.correctedAudience !== null));
+  }
+  setAudienceRequired(required: boolean): void {
+    this.audienceRequired = required;
+    if (!required) this.correctionAudienceIds = this.selectedDraft?.audience.filter(id => id !== this.selectedDraft?.actorId) ?? [];
   }
   hasBufferedReview(id: string): boolean {
     return this.editorBuffers.has(id) || this.correctionBuffers.has(id);
@@ -158,7 +176,9 @@ export class StageSession {
           if (!textDirty) this.reviewText = this.selectedDraft.artifact?.text || "";
           if (!dirty && previous && !previous.artifact && this.selectedDraft.artifact) {
             this.correctionAudienceIds = this.selectedDraft.audience.filter(id => id !== this.selectedDraft!.actorId);
-            this.correctionText = "";
+            this.correctionText = this.savedCompleteWhisper ?? "";
+            this.audienceRequired = this.selectedDraft.routingReview?.correctedAudience != null;
+            this.completeWhisperConfirmed = false;
           }
         } else if (!dirty) this.selectDraft(null);
       }
@@ -185,7 +205,7 @@ export class StageSession {
     if (this.selectedDraftId) {
       if (this.unsavedReview) this.editorBuffers.set(this.selectedDraftId, this.reviewText);
       else this.editorBuffers.delete(this.selectedDraftId);
-      if (this.hasCorrectionChanges) this.correctionBuffers.set(this.selectedDraftId, { audience: [...this.correctionAudienceIds], text: this.correctionText });
+      if (this.hasCorrectionChanges) this.correctionBuffers.set(this.selectedDraftId, { audience: [...this.correctionAudienceIds], text: this.correctionText, required: this.audienceRequired, confirmed: this.completeWhisperConfirmed });
       else this.correctionBuffers.delete(this.selectedDraftId);
     }
     if (this.selectedDraft) {
@@ -197,18 +217,23 @@ export class StageSession {
     this.reviewText = (id ? this.editorBuffers.get(id) : undefined) ?? this.selectedDraft?.artifact?.text ?? "";
     const correction = id ? this.correctionBuffers.get(id) : undefined;
     this.correctionAudienceIds = correction?.audience || this.selectedDraft?.audience.filter(actor => actor !== this.selectedDraft?.actorId) || [];
-    this.correctionText = correction?.text || "";
+    this.correctionText = correction?.text ?? this.savedCompleteWhisper ?? "";
+    this.audienceRequired = correction?.required ?? (this.selectedDraft?.routingReview?.correctedAudience != null);
+    this.completeWhisperConfirmed = correction?.confirmed ?? false;
     this.editing = false;
   }
   clearReviewChanges(): void {
     if (!this.selectedDraft) return;
     const draft = this.selectedDraft;
+    const completeWhisper = this.savedCompleteWhisper;
     this.retainedReviews.delete(draft.id);
     this.editorBuffers.delete(draft.id);
     this.correctionBuffers.delete(draft.id);
     this.reviewText = draft.artifact?.text || "";
     this.correctionAudienceIds = draft.audience.filter(id => id !== draft.actorId);
-    this.correctionText = "";
+    this.correctionText = completeWhisper ?? "";
+    this.audienceRequired = draft.routingReview?.correctedAudience != null;
+    this.completeWhisperConfirmed = false;
   }
   compose(): void { if (!this.busy && !this.pending) this.selectDraft(null); }
 
@@ -287,7 +312,7 @@ export class StageSession {
   }
   async retry(): Promise<void> {
     const original = this.selectedDraft;
-    if (!original || this.stale || this.hasCorrectionChanges || this.busy || this.pending) return;
+    if (!original || !["ready", "failed", "generating"].includes(original.status) || this.stale || this.hasCorrectionChanges || this.busy || this.pending) return;
     const input = { draftId: original.id };
     await this.execute(async () => {
       await runLeasedMutation(this.commands, "retry", input,
@@ -299,13 +324,15 @@ export class StageSession {
   async revise(preserveWording: boolean): Promise<void> {
     const original = this.selectedDraft;
     if (!original?.routingReview || original.status !== "ready" || this.stale || this.busy || this.pending) return;
-    const input = { draftId: original.id, audience: [...this.correctionAudienceIds], correction: this.correctionText,
+    if (this.savedCompleteWhisper === null && !this.completeWhisperConfirmed && !this.correctionText.trim()) return;
+    if (preserveWording && this.whisperChanged) return;
+    const input = { draftId: original.id, audience: this.audienceRequired || this.audienceChanged || preserveWording ? [...this.correctionAudienceIds] : null, completeWhisper: this.correctionText,
       ...(preserveWording ? { preservedText: this.reviewText } : {}) };
     if (preserveWording && !this.reviewText.trim()) return;
     await this.execute(async () => {
       await runLeasedMutation(this.commands, "revise", input,
         commandId => this.request<{ draft: StageDraft }>(`/drafts/${encodeURIComponent(original.id)}/revise`, {
-          commandId, audience: input.audience, correction: input.correction,
+          commandId, audience: input.audience, completeWhisper: input.completeWhisper,
           ...(input.preservedText === undefined ? {} : { preservedText: input.preservedText }),
         } satisfies ReviseStageDraftBody), result => this.receiveGeneratedDraft(result.draft));
       if (!this.disposed) this.notice = "Replacement candidate selected. Review its exact wording and recipients before accepting.";

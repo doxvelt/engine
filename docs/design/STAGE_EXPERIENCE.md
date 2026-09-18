@@ -163,6 +163,26 @@ routing is untrusted staged data and delivers nothing. Acceptance must never
 rebind a fixed candidate under new metadata. Until that contract exists, retain
 current fixed actor/audience generation and acceptance.
 
+## Complete-whisper replacement (#29)
+
+Ordinary draft refinement edits the **complete stage whisper** used for the prior
+candidate. Generate afresh uses only the latest complete version, including an
+intentional empty whisper, with the same actor and pre-turn context. Earlier
+whispers and unaccepted performances remain immutable provenance outside model
+input. Recompute implicit recipient references after deletion; preserve explicit
+audience decisions separately and validate the resulting proposal before review.
+Each successive generation opens its own captured complete whisper for editing.
+
+Performance editing remains text-only. **Keep performance · apply audience**
+creates an explicitly director-derived candidate without generation, and cannot
+pretend to apply a changed whisper. Retry repeats captured input; unsent whisper
+or audience changes block Retry/Accept until applied or cleared. Session-local
+buffers retain empty deletions across candidate switching and terminal recovery.
+Legacy additive inputs remain labeled as legacy; a complete replacement must be
+provided explicitly rather than synthesized from original-plus-correction text.
+See [Composer Routing](COMPOSER_ROUTING.md) for versioning and receipt semantics.
+Historical editing, browser-close autosave and notation remain separate work.
+
 ## Historical revision
 
 Revision belongs **inline at the selected historical turn**, with only one active

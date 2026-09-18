@@ -204,7 +204,10 @@ Private player direction for one actor's draft, hidden from other actors, consum
 only on acceptance and not automatically canonical truth or memory. **Stage whisper** is the selected UI
 name for the current **Direct** mode; **Generate draft** is its action. **Original
 stage whisper** identifies the originating instruction, separately from the
-resulting draft performance. Proposed-audience generation requires the contract
+resulting draft performance. Refinement edits the latest **complete stage whisper**
+and generates afresh at the same pre-turn context; prior whispers/performances
+remain provenance, not model input. Legacy additive corrections are not silently
+converted into complete whispers. Proposed-audience generation requires the contract
 gates in [Stage Experience](STAGE_EXPERIENCE.md).
 
 ## Turn

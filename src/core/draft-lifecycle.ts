@@ -1,4 +1,4 @@
-import { parseAudienceProposal, prepareRouting, preservedArtifact, projectRoutingContext } from "./candidate-routing.ts";
+import { parseAudienceProposal, prepareRouting, preservedArtifact, projectRoutingContext, routingInput } from "./candidate-routing.ts";
 export { acceptActorTurnDraft } from "./draft-acceptance.ts";
 
 import { createHash } from "node:crypto";
@@ -48,6 +48,8 @@ const MAX_RUNTIME_EVENTS = 10_000;
 
 export type GenerateActorTurnDraftOptions = {
   signal?: AbortSignal;
+  /** Trusted repository identity whose frozen input must be repeated. */
+  retryDraftId?: string;
 };
 
 type DraftLifecycleRepository = SimulationRepository & ActorTurnDraftRepository;
@@ -120,6 +122,17 @@ export function generateActorTurnDraft(
     if (!audienceActor || !canOwnTurn(audienceActor))
       throw new DomainNotFoundError(`Actor not found: ${audienceActorId}`);
   }
+  const captured = options.retryDraftId ? repository.getActorTurnDraft(normalized.ownerScope, normalized.simulationId, options.retryDraftId) : null;
+  if (options.retryDraftId) {
+    if (!captured) throw new DomainNotFoundError("Retry source not found.");
+    const capturedCommand = normalizeGenerationCommand({ ownerScope: captured.ownerScope, simulationId: captured.simulationId,
+      branchId: captured.branchId, expectedHead: captured.basisHeadCommitId, commandId: normalized.commandId,
+      payload: { actorId: captured.actorId, audience: captured.audience, stageWhisperIds: captured.stageWhispers.map(item => item.id),
+        runtimeProfile: captured.runtimeProfile, promptPolicy: captured.promptPolicy, outputSchema: captured.outputSchema,
+        skillDigests: captured.skillDigests, ...(captured.routing ? { routing: routingInput(captured.routing) } : {}) } });
+    if (stableStringify(capturedCommand) !== stableStringify(normalized))
+      throw new DomainValidationError("Retry must repeat captured input.");
+  }
   const whispers = selectWhispers(repository, normalized);
   const context = normalized.payload.routing ? null : inspectActorContext(repository, {
     ownerScope: normalized.ownerScope,
@@ -132,10 +145,12 @@ export function generateActorTurnDraft(
   });
   const routing = normalized.payload.routing ? prepareRouting(repository, normalized, []) : undefined;
   const routed = routing ? projectRoutingContext(repository, normalized, whispers,
-    routing.preservedText === null ? routing.source : null) : null;
+    routing.preservedText === null && (!captured || (captured.context && typeof captured.context === "object" && "correctionSource" in captured.context)) ? routing.source : null) : null;
   if (routing && routed) routing.availableRecipientIds = routed.availableRecipientIds;
   const portableContext = routed ? routed.context : canonicalDraftContext(context);
   const prompt = routed ? routed.prompt : context!.promptPreview;
+  if (captured && (digest(prompt) !== captured.promptHash || digest(stableStringify(portableContext)) !== captured.contextHash))
+    throw new DomainValidationError("Retry context differs from captured input.");
   const createdAt = new Date().toISOString();
   const draft = decodeActorTurnDraftRecord({
     ...(routing ? { routing } : {}),

@@ -116,6 +116,9 @@ test("Stage keeps mode routing and editor wording through a lost correction resp
   session.correctionAudienceIds = ["coo"];
   session.correctionText = "Only COO.";
   await session.revise(true);
+  assert.equal(session.needsReconcile, false, "Preserved wording cannot claim to apply a new whisper");
+  session.correctionText = session.savedCompleteWhisper!;
+  await session.revise(true);
   assert.equal(session.needsReconcile, true);
   session.correctionAudienceIds = ["cfo"];
   await session.resume();
@@ -149,4 +152,75 @@ test("discard and replay expose only the routed review transport", async t => {
     for (const field of ["context", "prompt", "routing", "stageWhispers"])
       assert.equal(field in body.draft, false, field);
   }
+});
+
+test("Stage edits the complete whisper, retains deletion when switching, and retries captured replacement after restart", async t => {
+  const f = await fixture(t);
+  const session = new StageSession({ apiBase: "http://localhost", simulationId: "sim", branchId: "main" }, f.fetcher);
+  await session.refresh(); session.actorId = "ceo"; session.direction = "Tell @cfo about the elephant.";
+  await session.generate();
+  const original = session.selectedDraftId!;
+  assert.equal(session.correctionText, "Tell @cfo about the elephant.");
+  assert.equal(session.hasCorrectionChanges, false);
+  session.correctionText = "Tell @cfo about the room.";
+  await session.revise(false);
+  assert.equal(session.error, "");
+  const replacement = session.selectedDraftId!;
+  assert.notEqual(replacement, original);
+  assert.equal(session.correctionText, "Tell @cfo about the room.");
+  assert.equal(session.hasCorrectionChanges, false);
+  session.correctionText = "";
+  assert.equal(session.hasCorrectionChanges, true);
+  session.selectDraft(original); session.selectDraft(replacement);
+  assert.equal(session.correctionText, "");
+  await session.accept(); await session.retry();
+  assert.equal(session.selectedDraftId, replacement);
+  session.clearReviewChanges();
+  f.restart(); await session.retry();
+  assert.equal(session.error, "");
+  assert.equal(session.correctionText, "Tell @cfo about the room.");
+});
+
+test("complete replacement freezes lost and double actions, reopens after restart, and rejects stale or mixed input", async t => {
+  const f = await fixture(t);
+  let lose = true;
+  const posts: string[] = [];
+  const session = new StageSession({ apiBase: "http://localhost", simulationId: "sim", branchId: "main" }, async (url, options) => {
+    const result = await f.fetcher(url, options);
+    if (String(url).endsWith('/revise')) {
+      posts.push(String(options?.body));
+      if (lose) { lose = false; throw new Error('Lost replacement response'); }
+    }
+    return result;
+  });
+  await session.refresh(); session.actorId = 'ceo'; session.direction = 'Tell @cfo about an elephant.';
+  await session.generate(); const source = session.selectedDraftId!;
+  session.correctionText = 'Tell @cfo about a room.';
+  await Promise.all([session.revise(false), session.revise(false)]);
+  assert.equal(posts.length, 1);
+  assert.equal(session.needsReconcile, true);
+  session.correctionText = 'Later unsent complete whisper.';
+  f.restart(); await session.resume();
+  assert.equal(session.error, '');
+  assert.equal(posts.length, 2); assert.equal(posts[0], posts[1]);
+  assert.equal(f.runtime.calls, 2);
+  const replacement = session.selectedDraftId!;
+  assert.equal(session.correctionText, 'Tell @cfo about a room.');
+  session.selectDraft(source); assert.equal(session.correctionText, 'Later unsent complete whisper.');
+  session.selectDraft(replacement);
+  const reopened = new StageSession(session.scope, f.fetcher); await reopened.refresh(); reopened.selectDraft(replacement);
+  assert.equal(reopened.correctionText, 'Tell @cfo about a room.');
+  const mixed = await f.request(`/simulations/sim/drafts/${replacement}/revise`, {
+    commandId: 'mixed', audience: [], completeWhisper: '', correction: 'Old correction',
+  });
+  assert.equal(mixed.status, 400);
+  await reopened.accept();
+  const stale = await f.request(`/simulations/sim/drafts/${source}/revise`, {
+    commandId: 'stale-complete', audience: null, completeWhisper: 'Tell @cfo something else.',
+  });
+  assert.equal(stale.status, 409);
+  session.selectDraft(source); await session.refresh();
+  assert.equal(session.stale, true);
+  await session.revise(false);
+  assert.equal(posts.length, 2);
 });
