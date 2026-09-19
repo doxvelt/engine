@@ -385,12 +385,15 @@ export async function handleLocalApiRequest(
     }
     if (method === "POST" && parts[2] === "drafts" && parts[3] && parts[4] === "revise" && parts.length === 5) {
       const body = await bodyOf(request);
-      if (Object.keys(body).some(key => !["commandId", "audience", "correction", "preservedText"].includes(key)))
+      if (Object.keys(body).some(key => !["commandId", "audience", "correction", "completeWhisper", "preservedText"].includes(key)))
         throw new HttpError(400, "Unexpected revision field.");
       const original = store.getActorTurnDraft(ownerScope, simulationId, parts[3]);
       if (!original?.routing) throw new HttpError(400, "Revision requires a routed source draft.");
-      const audience = requiredStrings(body, "audience");
-      const correction = body.correction;
+      const complete = Object.hasOwn(body, "completeWhisper");
+      if (complete && (typeof body.completeWhisper !== "string" || Object.hasOwn(body, "correction")))
+        throw new HttpError(400, "Supply a completeWhisper without an additive correction.");
+      const audience = complete && body.audience === null ? null : requiredStrings(body, "audience");
+      const correction = complete ? "" : body.correction;
       if (typeof correction !== "string") throw new HttpError(400, "correction must be text.");
       if (body.preservedText !== undefined && typeof body.preservedText !== "string")
         throw new HttpError(400, "preservedText must be text.");
@@ -399,10 +402,10 @@ export async function handleLocalApiRequest(
       const result = await generateActorTurnDraft(store, options.actorTurnRuntime || directorOnlyRuntime, {
         ownerScope, simulationId, branchId: original.branchId, expectedHead: original.basisHeadCommitId,
         commandId: required(body, "commandId"), payload: {
-          actorId: original.actorId, audience, stageWhisperIds: original.stageWhispers.map(item => item.id),
+          actorId: original.actorId, audience: audience ?? original.routing.initialAudience ?? [], stageWhisperIds: original.stageWhispers.map(item => item.id),
           runtimeProfile: original.runtimeProfile, promptPolicy: original.promptPolicy,
           outputSchema: original.outputSchema, skillDigests: original.skillDigests,
-          routing: { version: 1, initialAudience: original.routing.initialAudience,
+          routing: { version: complete ? 2 : 1, ...(complete ? { completeWhisper: body.completeWhisper as string } : {}), initialAudience: original.routing.initialAudience,
             correctedAudience: audience, correction, sourceDraftId: original.id,
             preservedText: typeof body.preservedText === "string" ? body.preservedText : null },
         },
@@ -426,7 +429,7 @@ export async function handleLocalApiRequest(
           runtimeProfile: original.runtimeProfile, promptPolicy: original.promptPolicy,
           outputSchema: original.outputSchema, skillDigests: original.skillDigests,
         },
-      });
+      }, { retryDraftId: original.id });
       return send(response, 200, result.draft.routing ? { ...result, draft: stageDraft(result.draft) } : result);
     }
     if (method === "GET" && parts[2] === "drafts" && parts[3] && !parts[4]) {

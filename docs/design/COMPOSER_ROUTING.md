@@ -26,23 +26,46 @@ tentative, including no selection. The runtime returns structured performance an
 recipient IDs; no tools execute. The server validates the whole result before it
 becomes ready. There is no public/All fallback and no separate proposal mode.
 
-Corrections create distinct durable candidates at the source basis. They retain
-source/original identity, original whispers and explicit correction input. Corrected
-recipients are authoritative; a generated contradiction fails. Exact request replay
-returns the same candidate. A different actor requires a fresh operation.
+Approved product correction **#29** replaces the ordinary additive correction
+interaction: the director edits the previous **complete stage whisper**, then
+generates afresh for the same actor at the unchanged pre-turn branch head. Each
+successive editor opens the latest complete version, including an empty version.
+Only that version and the pre-turn actor context enter the model. Neither old
+whispers nor any prior unaccepted performance enter its prompt or context.
+Deleting “elephant” therefore removes that instruction, rather than asking the
+model to reconcile it with an additive correction.
 
-Generated corrections receive the validated immediate source performance and its
-proposed audience as clearly labeled **UNACCEPTED draft material** in the frozen
-runtime prompt/context. This material supports relative instructions such as
-“make that less accusatory”; it is never an observation, canonical history or an
-input to recipient eligibility. Chained corrections use the immediate source,
-while original identity and source artifact provenance remain retained separately.
-Saved candidates lacking this source-material context retain their original
-prompt/context hashes and acceptance interpretation. Preserved wording still
-requires no model call.
+Replacement input uses routing version 2 with `completeWhisper` (required, empty
+allowed) and an empty legacy `correction` field. Source/original identity, original
+whisper snapshots and source artifact hashes remain immutable provenance; they
+are not runtime input. Original snapshots still identify the pending whispers
+consumed atomically on acceptance; the receipt's versioned routing captures the
+complete replacement that actually generated the candidate. No schema migration
+or rewriting of existing candidate/receipt hashes occurs.
+
+Recipient eligibility is recomputed from actor-visible pre-turn material, observed
+presence, the complete whisper, and current explicit audience direction. Removed
+mentions and source performances grant no identity references. Initial picker
+direction remains tentative. An explicit replacement audience is authoritative
+and supersedes that initial direction for runtime eligibility; its contradiction
+fails validation. `audience: null` explicitly requests a fresh proposal while
+retaining the original tentative picker direction. Editing whisper prose alone
+does not silently change an explicit audience decision.
+
+Compatibility is deliberately bounded: routing version 1 requests, saved
+candidates and receipts retain additive semantics, including their captured
+source-material interpretation. Exact command replay returns the existing record.
+Retry repeats captured input and verifies matching prompt/context hashes, including
+older corrections that never included source performance. Legacy additive
+corrections (and multi-whisper inputs) have no recoverable complete whisper. Stage
+labels that limitation and requires explicitly entered complete direction, or
+confirmation of an empty replacement; it never concatenates old corrections into
+an invented whisper. Accepting/retrying a legacy record does not migrate it.
 
 The director can explicitly preserve the current editor wording in a new candidate.
-This is a director-derived artifact, with source artifact/provenance retained; it
+A changed or unresolved whisper must be generated instead; preserving wording
+only changes explicit delivery with the same complete whisper. This is a
+director-derived artifact, with source artifact/provenance retained; it
 does not claim a model generated that wording under the new context. Context and
 recipient validation run again. This is supported only with the empty capability
 grant. The director reviews exact text and concrete recipients before accepting.
@@ -56,8 +79,9 @@ candidates have no canonical effects. Original candidates remain available.
 
 Receipt v2 routing metadata is self-contained in accepted receipts, including
 source derivation; operational drafts remain outside exports. Old v1 receipt decoding
-and historical context remain unchanged. Review exposes original whisper, initial
-direction, final recipients and derivation, not raw context/prompt. Existing legacy
+and historical context remain unchanged. Review exposes the candidate’s complete
+whisper (or unresolved legacy input), original whisper provenance, initial direction,
+final recipients and derivation, not raw context/prompt. Existing legacy
 transport policy is not expanded; its broader minimization belongs to #17.
 
 Stage whisper and Perform have independent prose and routing. Perform stays
@@ -72,7 +96,7 @@ Bounded automated browser evidence is recorded in the implementation PR.
   accepted history and legacy draft context interpretation remain unchanged.
 - Direction: fixed actor, private original whisper, mentions do not deliver,
   no-selection generation, invalid/unsupported identity and contradictory output fail.
-- Identity: new correction candidate, exact replay, source/original provenance,
+- Identity: new complete-whisper candidate, exact replay, source/original provenance,
   preserved edited wording, authoritative correction on retry, no accept retagging.
 - Effects: empty tools, no pre-accept canonical changes, final recipients plus
   sender, correct first impressions/whisper consumption, stale/race/rollback gates.
@@ -95,20 +119,37 @@ proof of model execution; archives do not export raw actor prompts or contexts.
   digests bind both performance and recipients.
 - Stage posts `draftingPolicy: "audience-proposal-v1"` to `/drafts`; an absent or
   null audience means unspecified direction under this policy only.
-- `/drafts/:id/revise` takes command ID, explicit audience, correction text and
-  optional exact `preservedText`. The server supplies source actor/basis/whispers.
-  `/retry` repeats captured input. Acceptance rejects routing fields.
+- `/drafts/:id/revise` takes command ID, `completeWhisper`, nullable audience and
+  optional exact `preservedText`. Complete input cannot be mixed with `correction`.
+  The legacy `correction` request shape remains supported with version 1 semantics.
+  The server supplies source actor/basis and provenance snapshots. `/retry` repeats
+  captured input, not the current editor buffer. Acceptance rejects routing fields.
 - New-policy generation, detail, retry, revision, discard (including replay) and discovery return the shared
-  Stage review projection. Original whisper, initial direction and authoritative
-  correction are visible independently from proposed performance/recipients.
+  Stage review projection. Complete whisper, original provenance, initial direction
+  and authoritative recipients are visible independently from performance.
   Pending/failed drafts do not display tentative recipients as model proposals.
-- Unsaved corrections block Accept and ordinary Retry until applied through a
-  replacement or explicitly cleared. Editor buffers survive switching candidates;
-  pending-to-ready recovery initializes correction controls from the valid result.
+- Unsaved complete-whisper/audience changes block Accept and ordinary Retry until
+  applied through a replacement or explicitly cleared. Performance-only editing
+  changes accepted text, never the captured generation input or delivery. Editor
+  buffers survive switching candidates;
+  pending-to-ready recovery initializes audience controls from the valid result.
   Terminal candidates with unsent edits remain recoverable by their original ID
   in Saved drafts, including while composing another turn. Terminal review exposes
-  retained correction text/recipients and an explicit clear action; it never binds
+  retained complete-whisper text/recipients and an explicit clear action; it never binds
   those edits to another candidate. These buffers remain session-local.
+
+## #29 verification boundary
+
+Regression coverage captures actual runtime prompt/context and recipient references,
+repeated deletion through an empty whisper, unchanged subjective pre-turn state,
+legacy hash interpretation, failed-candidate retry, explicit audience contradictions,
+receipt export/import replay, lost/double actions, restart recovery, terminal edit
+buffers and stale rejection. Browser and aggregate gate evidence is reported for
+the actual worktree separately; fixture output is not live-model quality evidence.
+Replacement derivation still requires a ready source artifact (or a discarded
+ready source through the API). Failed/pending candidates support captured-input
+retry; editing those directly requires a separate lifecycle extension. Unsaved
+terminal edits remain copyable, never automatically rebound to another basis.
 
 ## Implementation validation boundary
 

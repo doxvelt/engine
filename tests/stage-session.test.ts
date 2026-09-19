@@ -282,8 +282,8 @@ test("a recovered pending proposal adopts its final recipients without creating 
 
 for (const status of ['discarded', 'accepted', 'failed'] as const) {
   for (const compose of [false, true]) {
-    test(`unsent correction survives remote ${status} while ${compose ? 'composing' : 'selected'}`, async () => {
-      const review = { initialAudience: null, correctedAudience: null, originalWhisper: [], correction: '',
+    test(`deleted complete whisper survives remote ${status} while ${compose ? 'composing' : 'selected'}`, async () => {
+      const review = { completeWhisper: 'Mention an elephant.', initialAudience: null, correctedAudience: null, originalWhisper: [], correction: '',
         sourceDraftId: null, sourceAudience: null, originalDraftId: 'draft', preserved: false };
       let remote = { ...draft, routingReview: review };
       const fetcher: typeof fetch = async url => {
@@ -295,7 +295,8 @@ for (const status of ['discarded', 'accepted', 'failed'] as const) {
       };
       const session = new StageSession({ apiBase: 'http://stage.invalid', simulationId: 'sim', branchId: 'main' }, fetcher);
       await session.refresh();
-      session.correctionText = 'Important unsent correction';
+      session.correctionText = '';
+      assert.equal(session.hasCorrectionChanges, true);
       session.correctionAudienceIds = [];
       if (compose) { session.reviewText = 'Unsent wording'; session.compose(); }
       remote = { ...remote, status };
@@ -304,10 +305,11 @@ for (const status of ['discarded', 'accepted', 'failed'] as const) {
       assert.equal(session.unsaved, true);
       if (compose) session.selectDraft('draft');
       assert.equal(session.selectedDraft?.status, status);
-      assert.equal(session.correctionText, 'Important unsent correction');
+      assert.equal(session.correctionText, '');
       assert.deepEqual(session.correctionAudienceIds, []);
       assert.equal(session.reviewText, compose ? 'Unsent wording' : draft.artifact.text);
       session.clearReviewChanges();
+      assert.equal(session.correctionText, 'Mention an elephant.');
       assert.equal(session.unsaved, false);
     });
   }

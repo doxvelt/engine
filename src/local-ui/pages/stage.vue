@@ -31,23 +31,28 @@
               <StageAudience v-if="!session.selectedDraft.routingReview || session.selectedDraft.artifact" :audience="session.selectedDraft.audience" :actors="session.actors" draft />
             </div>
             <section v-if="session.selectedDraft.routingReview" class="mb-3 space-y-2 text-sm" aria-label="Audience review">
-              <p class="dx-label">Original stage whisper</p>
+              <template v-if="session.savedCompleteWhisper !== null">
+                <p class="dx-label">Stage whisper for this candidate</p>
+                <p class="stage-prose">{{ session.savedCompleteWhisper || 'No private direction.' }}</p>
+              </template>
+              <p v-else role="status">Legacy candidate: its original whisper and additive correction remain separate. Enter a complete new whisper to generate afresh.</p>
+              <details><summary>Original whisper provenance</summary>
               <p v-for="(whisper, i) in session.selectedDraft.routingReview.originalWhisper" :key="i" class="stage-prose">{{ whisper }}</p>
-              <p v-if="!session.selectedDraft.routingReview.originalWhisper.length">No original whisper.</p>
+              <p v-if="!session.selectedDraft.routingReview.originalWhisper.length">No original whisper.</p></details>
               <p>Initial direction: {{ session.selectedDraft.routingReview.initialAudience === null ? 'No selected audience' : recipientNames(session.selectedDraft.routingReview.initialAudience) || 'No other recipients' }}</p>
               <p v-if="session.selectedDraft.artifact"><strong>{{ session.selectedDraft.routingReview.preserved ? 'Director-corrected audience' : 'Proposed audience' }}:</strong> {{ recipientNames(session.selectedDraft.audience) }}</p>
               <p v-if="session.selectedDraft.routingReview.correctedAudience !== null">Director-required recipients: {{ recipientNames([session.selectedDraft.actorId, ...session.selectedDraft.routingReview.correctedAudience]) }}</p>
               <p role="status">{{ audienceChanges }}</p>
-              <p v-if="session.selectedDraft.routingReview.correction">Director correction: {{ session.selectedDraft.routingReview.correction }}</p>
+              <p v-if="session.selectedDraft.routingReview.correction">Legacy additive correction: {{ session.selectedDraft.routingReview.correction }}</p>
               <p v-if="session.selectedDraft.routingReview.preserved">Wording preserved by director in a new candidate; no new model generation.</p>
             </section>
             <p v-if="session.stale" class="dx-warning-note mb-3 rounded-sm p-2 text-sm" role="status">The branch has moved. This draft cannot be accepted or retried here.</p>
             <template v-if="session.selectedDraft.artifact">
-              <UFormField v-if="session.editing" label="Edit draft" :hint="session.unsavedReview ? 'Unsaved edits' : 'Saved generated text'">
+              <UFormField v-if="session.editing" label="Edit draft" :hint="session.unsavedReview ? 'Unsaved edits' : 'Saved performance'">
                 <UTextarea v-model="session.reviewText" :rows="6" class="w-full" aria-label="Edit draft" :disabled="locked" />
               </UFormField>
               <p v-else class="stage-prose">{{ session.reviewText }}</p>
-              <p v-if="session.unsavedReview" class="mt-2 text-xs text-muted" role="status">Unsaved edits · saved only when accepted</p>
+              <p v-if="session.unsavedReview" class="mt-2 text-xs text-muted" role="status">Performance edits change text only; actor, recipients and generation input stay fixed. Saved only when accepted.</p>
             </template>
             <p v-else class="stage-prose" role="status">{{ review.message }}</p>
             <UPopover v-if="review.kind === 'ready' || review.kind === 'failed'">
@@ -80,33 +85,37 @@
       <div v-if="session.selectedDraft && (session.unsavedReview || session.hasCorrectionChanges) && session.selectedDraft.status !== 'ready'" class="mb-3 space-y-2" role="status">
         <p>Unsent edits remain attached to this {{ session.selectedDraft.status }} candidate. Copy them before starting a new candidate, or explicitly clear them.</p>
         <p>Replacement recipients: {{ recipientNames([session.selectedDraft.actorId, ...session.correctionAudienceIds]) }}</p>
-        <UTextarea :model-value="session.correctionText" readonly aria-label="Preserved unsent correction" class="w-full" />
+        <UTextarea :model-value="session.correctionText" readonly aria-label="Preserved unsent complete whisper" class="w-full" />
         <UButton color="neutral" variant="subtle" :disabled="locked" @click="session.clearReviewChanges()">Clear unsent edits</UButton>
       </div>
       <div v-if="session.selectedDraft?.routingReview && session.selectedDraft.status === 'ready'" class="mb-3 space-y-2">
         <UPopover>
-          <UButton color="neutral" variant="subtle" :disabled="locked || session.stale">Correct audience</UButton>
+          <UButton color="neutral" variant="subtle" :disabled="locked || session.stale">Audience for next candidate</UButton>
           <template #content>
             <div class="max-h-72 w-72 overflow-y-auto space-y-3 p-4">
               <p class="dx-label">Recipients for replacement candidate</p>
-              <UButton color="neutral" variant="link" :disabled="locked || session.stale" @click="session.correctionAudienceIds = session.availableAudience.filter(actor => actor.id !== session.selectedDraft?.actorId).map(actor => actor.id)">Select all</UButton>
-              <UCheckboxGroup v-model="session.correctionAudienceIds" :items="correctionAudienceItems" :disabled="locked || session.stale" />
+              <UCheckbox :model-value="session.audienceRequired" @update:model-value="session.setAudienceRequired($event === true)" label="Require these recipients" :disabled="locked || session.stale" />
+              <UButton color="neutral" variant="link" :disabled="locked || session.stale" @click="session.audienceRequired = true; session.correctionAudienceIds = session.availableAudience.filter(actor => actor.id !== session.selectedDraft?.actorId).map(actor => actor.id)">Select all</UButton>
+              <UCheckboxGroup v-model="session.correctionAudienceIds" @update:model-value="session.audienceRequired = true" :items="correctionAudienceItems" :disabled="locked || session.stale" />
               <p class="text-xs">The actor also perceives their own turn.</p>
             </div>
           </template>
         </UPopover>
-        <p class="text-sm">Replacement recipients: {{ recipientNames([session.selectedDraft.actorId, ...session.correctionAudienceIds]) }}</p>
-        <UTextarea v-model="session.correctionText" :rows="2" aria-label="Director correction" placeholder="Private correction (optional)…" :disabled="locked || session.stale" />
-        <p v-if="session.hasCorrectionChanges" class="text-sm" role="status">Create and review a replacement candidate to apply this correction.</p>
+        <p class="text-sm">{{ session.audienceRequired || session.audienceChanged ? 'Required recipients: ' + recipientNames([session.selectedDraft.actorId, ...session.correctionAudienceIds]) : 'Generate a fresh audience proposal; initial audience direction remains tentative.' }}</p>
+        <UFormField label="Edit complete stage whisper" hint="Generate afresh at the same pre-turn context. Earlier whispers and performances are excluded.">
+          <UTextarea v-model="session.correctionText" :rows="3" class="w-full" aria-label="Complete stage whisper" placeholder="Complete private direction (may be empty)…" :disabled="locked || session.stale" />
+        </UFormField>
+        <UCheckbox v-if="session.savedCompleteWhisper === null" v-model="session.completeWhisperConfirmed" label="Use this as the complete new whisper, including if empty" :disabled="locked || session.stale" />
+        <p v-if="session.hasCorrectionChanges" class="text-sm" role="status">Create and review a replacement candidate to apply these edits.</p>
         <div class="flex flex-wrap gap-2">
-          <UButton color="neutral" variant="subtle" :disabled="locked || session.stale || !session.reviewText.trim()" @click="session.revise(true)">Keep wording · create candidate</UButton>
-          <UButton color="neutral" variant="subtle" :disabled="locked || session.stale || !runtime?.configured" @click="session.revise(false)">Generate corrected candidate</UButton>
+          <UButton color="neutral" variant="subtle" :disabled="locked || session.stale || session.whisperChanged || session.savedCompleteWhisper === null || !session.reviewText.trim()" @click="session.revise(true)">Keep performance · apply audience</UButton>
+          <UButton color="neutral" variant="subtle" :disabled="locked || session.stale || !runtime?.configured || (session.savedCompleteWhisper === null && !session.completeWhisperConfirmed && !session.correctionText.trim())" @click="session.revise(false)">Generate from complete whisper</UButton>
         </div>
       </div>
       <div v-if="session.selectedDraft" class="flex flex-wrap items-center justify-end gap-2">
         <UButton v-if="recoverable" color="neutral" variant="ghost" :disabled="locked" @click="discard">Discard</UButton>
         <UButton v-if="recoverable" color="neutral" variant="subtle" :disabled="locked || session.stale || session.hasCorrectionChanges || !runtime?.configured" @click="retry">Retry</UButton>
-        <UButton v-if="session.selectedDraft.artifact" color="neutral" variant="subtle" :disabled="locked" @click="toggleEditing">{{ session.editing ? 'Read' : 'Edit' }}</UButton>
+        <UButton v-if="session.selectedDraft.artifact" color="neutral" variant="subtle" :disabled="locked" @click="toggleEditing">{{ session.editing ? 'Read performance' : 'Edit performance' }}</UButton>
         <UButton v-if="review.kind === 'ready'" color="primary" :disabled="locked || session.stale || session.hasCorrectionChanges || !session.reviewText.trim()" @click="session.accept()">Accept</UButton>
         <UButton v-else-if="review.kind === 'pending'" color="primary" :disabled="session.busy" @click="refreshPendingDraft">Check again</UButton>
       </div>

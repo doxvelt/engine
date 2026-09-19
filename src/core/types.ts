@@ -557,7 +557,9 @@ export type ActorTurnDraftArtifact = {
 };
 
 export type DraftRoutingInput = {
-  version: 1;
+  version: 1 | 2;
+  /** Required for v2. Complete replacement, including an intentionally empty whisper. */
+  completeWhisper?: string;
   initialAudience: string[] | null;
   correction: string;
   correctedAudience: string[] | null;
