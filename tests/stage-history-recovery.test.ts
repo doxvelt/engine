@@ -32,7 +32,10 @@ function fixture() {
   let loseResponse = false, failProjection = false, stale = false, missingProjection = false, failOrigin = false;
   let holdOrigin: ReturnType<typeof deferred> | null = null, holdGeneration: ReturnType<typeof deferred> | null = null;
   let generations = 0;
-  const fetcher: typeof fetch = async (url, options) => {
+  // Native Window.fetch rejects a StageSession receiver. Arrow-function fakes
+  // hide that failure, so every recovery scenario uses a receiver-sensitive call.
+  const fetcher: typeof fetch = async function(this: unknown, url, options) {
+    assert.equal(this, undefined, "fetch must be invoked without a StageSession receiver");
     const parsed = new URL(String(url)), path = parsed.pathname;
     const body = options?.body ? JSON.parse(String(options.body)) as Record<string, unknown> : null;
     calls.push({ path, body });
@@ -86,6 +89,8 @@ async function loaded(f: ReturnType<typeof fixture>) { const s = f.session(); aw
 
 test("immutable selected turn and latest complete input; suspended modes and candidate overlays survive reopen/cancel", async () => {
   const f = fixture(), s = await loaded(f);
+  assert.equal(s.recoveryReady, true, s.recoveryWarning);
+  assert.equal(s.recoveryBlocked, false, s.recoveryWarning || s.recovery?.warning);
   s.direction = "Later unrelated whisper"; s.performance = "Perform buffer";
   s.actorId = "actor"; s.audienceMode = "selected"; s.audienceIds = ["other"];
   s.mode = "perform"; s.actorId = "other";

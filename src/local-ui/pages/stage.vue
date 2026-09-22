@@ -23,7 +23,7 @@
               </StageAudience>
             </div>
             <p class="stage-prose">{{ turn.text }}</p>
-            <UButton v-if="!session.history.editor" :data-revise-turn="turn.id" color="neutral" variant="link" size="xs" :disabled="locked" @click="openHistory(turn, $event)">Revise / alternate paths</UButton>
+            <UButton v-if="!session.history.editor" :data-revise-turn="turn.messageVersionId" color="neutral" variant="link" size="xs" :disabled="locked" @click="openHistory(turn, $event)">Revise / alternate paths</UButton>
             <StageHistoricalEditor v-if="session.history.editor?.selection.messageVersionId === turn.messageVersionId" :history="session.history" :actors="session.actors" :runtime-configured="!!runtime?.configured" @cancel="cancelHistory" />
           </article>
           <article v-if="session.selectedDraft && !session.history.editor" :data-history-key="session.selectedDraft.id" class="stage-turn stage-draft" aria-label="Draft performance">

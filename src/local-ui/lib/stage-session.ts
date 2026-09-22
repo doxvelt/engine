@@ -52,7 +52,8 @@ export class StageSession {
   async enableRecovery(storage: BrowserStorage): Promise<void> {
     this.recoveryRequired = true; this.recoveryReady = false;
     try {
-      const response = await this.fetcher(`${this.scope.apiBase.replace(/\/$/, "")}/recovery-identity`);
+      const fetcher = this.fetcher;
+      const response = await fetcher(`${this.scope.apiBase.replace(/\/$/, "")}/recovery-identity`);
       if (!response.ok) throw new Error("Cannot establish installation and owner identity. Local recovery is unavailable.");
       const identity = await response.json() as StageRecoveryIdentity;
       if (typeof identity.installationId !== "string" || !identity.installationId || typeof identity.ownerId !== "string" || !identity.ownerId) throw new Error("Invalid recovery identity.");
@@ -161,7 +162,8 @@ export class StageSession {
       const other = new StageSession(this.scope, this.fetcher);
       await other.refresh();
       await other.restoreBuffer(JSON.parse(JSON.stringify(record.data)) as StageBuffer);
-      const identityResponse = await this.fetcher(`${this.scope.apiBase.replace(/\/$/, "")}/recovery-identity`);
+      const fetcher = this.fetcher;
+      const identityResponse = await fetcher(`${this.scope.apiBase.replace(/\/$/, "")}/recovery-identity`);
       const identity = await identityResponse.json() as StageRecoveryIdentity;
       if (!identityResponse.ok || identity.installationId !== this.recovery!.scope.installationId || identity.ownerId !== this.recovery!.scope.ownerId) throw new Error("Recovery identity changed.");
       if (this.disposed) return;
@@ -277,7 +279,8 @@ export class StageSession {
 
   private async assertRecoveryIdentity(): Promise<void> {
     if (!this.recovery) return;
-    const response = await this.fetcher(`${this.scope.apiBase.replace(/\/$/, "")}/recovery-identity`);
+    const fetcher = this.fetcher;
+    const response = await fetcher(`${this.scope.apiBase.replace(/\/$/, "")}/recovery-identity`);
     const identity = await response.json() as StageRecoveryIdentity;
     if (this.disposed) throw new Error("Stage scope closed.");
     if (!response.ok || identity.installationId !== this.recovery.scope.installationId || identity.ownerId !== this.recovery.scope.ownerId) {
