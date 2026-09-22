@@ -1,5 +1,18 @@
 # System Loop
 
+> Approved correction: [Actor Knowledge](ACTOR_KNOWLEDGE.md) supersedes older
+> presence-derived observation and selective-context targets. All legitimate
+> branch-relative knowledge is supplied upfront; outgoing recipients grant no
+> observation. Legacy saved policies keep their exact interpretation.
+> For future historical regeneration, validated generation and safe commit
+> create/select an alternative immediately, with no separate Accept UI. Alternatives
+> cycle at the branching turn and preserve their continuations. Older historical
+> draft/Accept and sibling-acceptance gates below are superseded; ordinary
+> continuation Accept and manual editing are unchanged. Blanket effectful-turn
+> blocking was a recommendation, not approved policy; unsupported cases stay gated.
+> Sequence: #32 context, then #17 saved alternatives engine/API, then UI recovery
+> and cycling. Cleanup #33 remains separate with semantics undecided.
+
 This document defines Doxvelt's turn lifecycle on top of the branch and subjective-context model.
 
 ## Experience Model

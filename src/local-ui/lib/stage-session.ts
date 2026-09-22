@@ -1,4 +1,4 @@
-import { stageDraft, type ReviseStageDraftBody, type StageDraft, type StageProjection } from "../../local-api/stage-contracts.ts";
+import { ACTOR_KNOWLEDGE_POLICY, type GenerateStageDraftBody, type PerformStageTurnBody, stageDraft, type ReviseStageDraftBody, type StageDraft, type StageProjection } from "../../local-api/stage-contracts.ts";
 import {
   acceptDraftBody, createCommandLease, isStaleDraftBasis, playableActors,
   runLeasedMutation, settleGenerationLease, type CommandAction,
@@ -271,10 +271,10 @@ export class StageSession {
   async perform(): Promise<void> {
     if (!this.performance.trim() || this.busy || this.pending) return;
     const text = this.performance;
-    const input = { ...this.input(), manualText: text, stageWhisperIds: [] };
+    const input = { ...this.input(), manualText: text, stageWhisperIds: [] as string[], knowledgePolicy: ACTOR_KNOWLEDGE_POLICY } as const;
     await this.execute(async () => {
       await runLeasedMutation(this.commands, "perform", input,
-        commandId => this.request("/turns", { ...input, commandId }),
+        commandId => this.request("/turns", { ...input, commandId } satisfies PerformStageTurnBody),
         () => this.refresh());
       if (this.disposed) return;
       if (this.performance === text) this.performance = "";
@@ -283,7 +283,7 @@ export class StageSession {
   }
   async generate(): Promise<void> {
     if (this.busy || this.pending) return;
-    const basis = { ...this.input(), audience: this.audienceMode === "unspecified" ? null : this.resolvedAudience, draftingPolicy: "audience-proposal-v1" };
+    const basis = { ...this.input(), audience: this.audienceMode === "unspecified" ? null : this.resolvedAudience, draftingPolicy: ACTOR_KNOWLEDGE_POLICY } as const;
     const direction = this.direction.trim();
     let whisperId: string | null = null;
     await this.execute(async () => {
@@ -294,11 +294,12 @@ export class StageSession {
         this.commands.succeed("whisper");
       }
       if (this.disposed) return;
-      const input = { ...basis, stageWhisperIds: whisperId ? [whisperId] : [] };
+      const input = { ...basis, completeWhisper: direction, stageWhisperIds: whisperId ? [whisperId] : [] };
       const commandId = this.commands.for("generate", input);
       if (this.generationId !== commandId) this.generationDraft = null;
       this.generationId = commandId;
-      const result = await this.request<{ draft: StageDraft }>("/drafts", { ...input, commandId });
+      const body: GenerateStageDraftBody = { ...input, commandId };
+      const result = await this.request<{ draft: StageDraft }>("/drafts", body);
       await this.receiveGeneratedDraft(result.draft);
       if (!this.disposed && this.direction.trim() === direction) this.direction = "";
     });
@@ -326,13 +327,13 @@ export class StageSession {
     if (!original?.routingReview || original.status !== "ready" || this.stale || this.busy || this.pending) return;
     if (this.savedCompleteWhisper === null && !this.completeWhisperConfirmed && !this.correctionText.trim()) return;
     if (preserveWording && this.whisperChanged) return;
-    const input = { draftId: original.id, audience: this.audienceRequired || this.audienceChanged || preserveWording ? [...this.correctionAudienceIds] : null, completeWhisper: this.correctionText,
+    const input = { draftingPolicy: ACTOR_KNOWLEDGE_POLICY, draftId: original.id, audience: this.audienceRequired || this.audienceChanged || preserveWording ? [...this.correctionAudienceIds] : null, completeWhisper: this.correctionText,
       ...(preserveWording ? { preservedText: this.reviewText } : {}) };
     if (preserveWording && !this.reviewText.trim()) return;
     await this.execute(async () => {
       await runLeasedMutation(this.commands, "revise", input,
         commandId => this.request<{ draft: StageDraft }>(`/drafts/${encodeURIComponent(original.id)}/revise`, {
-          commandId, audience: input.audience, completeWhisper: input.completeWhisper,
+          commandId, draftingPolicy: ACTOR_KNOWLEDGE_POLICY, audience: input.audience, completeWhisper: input.completeWhisper,
           ...(input.preservedText === undefined ? {} : { preservedText: input.preservedText }),
         } satisfies ReviseStageDraftBody), result => this.receiveGeneratedDraft(result.draft));
       if (!this.disposed) this.notice = "Replacement candidate selected. Review its exact wording and recipients before accepting.";

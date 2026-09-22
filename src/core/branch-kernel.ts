@@ -1,3 +1,4 @@
+import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
 import { compileWorkspace } from "./compiler.ts";
 import {
   applyAccessChange,
@@ -233,7 +234,7 @@ function buildManualCommit(
     command.ownerScope,
     command.simulationId,
   );
-  events.push(...deriveFirstImpressionEvents({
+  if (command.payload.knowledgePolicy !== ACTOR_KNOWLEDGE_POLICY) events.push(...deriveFirstImpressionEvents({
     audience,
     surfaces: revision.compiled.surfaces,
     existing: projected.firstImpressions,

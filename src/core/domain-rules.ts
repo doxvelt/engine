@@ -1,3 +1,4 @@
+import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
 import { canOwnTurn } from "./turn-ownership.ts";
 import { createHash } from "node:crypto";
 import type {
@@ -35,6 +36,9 @@ export function recordCommand<TKind extends RecordedCommand["kind"]>(
   const command = structuredClone({ ...input, kind }) as Record<string, unknown>;
   if (["turn", "edit", "regenerate"].includes(kind)) {
     const payload = command.payload as Record<string, unknown>;
+    if (Object.hasOwn(payload, "knowledgePolicy") &&
+        (kind !== "turn" || payload.knowledgePolicy !== ACTOR_KNOWLEDGE_POLICY))
+      throw new DomainValidationError("Unsupported manual knowledge policy.");
     delete payload.logicalMessageId;
     delete payload.operation;
     payload.text = (payload.text as string).trim();

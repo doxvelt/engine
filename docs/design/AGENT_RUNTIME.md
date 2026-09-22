@@ -1,5 +1,10 @@
 # Agent Runtime And Security
 
+> Approved correction: [Actor Knowledge](ACTOR_KNOWLEDGE.md) supersedes older
+> presence-derived observation and selective-context targets. All legitimate
+> branch-relative knowledge is supplied upfront; outgoing recipients grant no
+> observation. Legacy saved policies keep their exact interpretation.
+
 This document defines the boundary between Doxvelt and any model/agent harness.
 
 The Pi runtime spike is **VALIDATED** for a first adapter built from explicit

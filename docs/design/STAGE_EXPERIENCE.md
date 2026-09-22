@@ -1,5 +1,18 @@
 # Stage Experience
 
+> Approved correction: [Actor Knowledge](ACTOR_KNOWLEDGE.md) supersedes older
+> presence-derived observation and selective-context targets. All legitimate
+> branch-relative knowledge is supplied upfront; outgoing recipients grant no
+> observation. Legacy saved policies keep their exact interpretation.
+> For future historical regeneration, validated generation and safe commit
+> create/select an alternative immediately, with no separate Accept UI. Alternatives
+> cycle at the branching turn and preserve their continuations. Older historical
+> draft/Accept and sibling-acceptance gates below are superseded; ordinary
+> continuation Accept and manual editing are unchanged. Blanket effectful-turn
+> blocking was a recommendation, not approved policy; unsupported cases stay gated.
+> Sequence: #32 context, then #17 saved alternatives engine/API, then UI recovery
+> and cycling. Cleanup #33 remains separate with semantics undecided.
+
 **Status:** Living Library + **Continuous script** is the selected interaction
 and visual direction. This contract separates that target from the implemented
 baseline at `7683385bbfb5be514103031b6f1a2a624ae51b6e` (merged PR #30).
@@ -131,7 +144,11 @@ The selected vocabulary is **Stage whisper / Perform**, **Generate draft**,
 instruction and resulting performance are separate objects. Mode switching
 preserves input rather than copying private instruction into spoken prose.
 Manual Perform keeps its immediate, explicit commit until a separate manual
-preview decision is made.
+preview decision is made. Current Stage opts these new submissions into the
+[actor-knowledge policy](ACTOR_KNOWLEDGE.md), so delivery creates receipt, not
+automatic mutual observation. Legacy manual commands retain their saved semantics.
+Current Stage complete-whisper revisions likewise opt into the new policy even
+when their saved source is legacy; exact Retry and Accept keep the source policy.
 
 Optional typed `#actor` / `@audience` notation and pickers share explicit routing
 state in both directions; typing syntax must never be required. Opening guidance,
@@ -232,10 +249,12 @@ perceptions, memories and closures are not inherited by the replacement. A
 preserved continuation candidate stays bound to its original branch/head; returning
 to it must restore that basis, not offer it against the alternative history.
 
-Effectful selected turns and subsequent acceptance of retained sibling candidates
-remain the historical contract's product gates. Delivery follows the adoption plan:
-docs contract review/merge, separate engine/API validation and merge, then a separate
-UI/recovery PR. Implementation PRs require independent review and human merge;
+Historical regeneration creates/selects an alternative immediately after validated
+generation and safe commit, without a separate Accept UI. Cycle alternatives at
+the branching turn, each with its own continuation. This does not alter ordinary
+continuation Accept or manual editing. Keep unsupported effectful cases gated;
+blanket blocking was only a recommendation. Delivery follows #25: #32 context
+correction, then #17 saved alternatives engine/API, then UI cycling/recovery. Implementation PRs require independent review and human merge;
 partial deliveries do not automatically close #17 or change #18, #19 or #28 scope.
 
 ## Actor state and player orientation gates

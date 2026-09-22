@@ -1,3 +1,4 @@
+import { ACTOR_KNOWLEDGE_POLICY } from "../core/types.ts";
 import { ROUTING_POLICY, routingInput } from "../core/candidate-routing.ts";
 import { navigationToken } from "../application/simulation-collection.ts";
 import path from "node:path";
@@ -268,6 +269,9 @@ export async function handleLocalApiRequest(
       );
     if (method === "POST" && parts[2] === "turns") {
       const body = await bodyOf(request);
+      if (Object.hasOwn(body, "knowledgePolicy") && body.knowledgePolicy !== ACTOR_KNOWLEDGE_POLICY)
+        throw new HttpError(400, "Unsupported manual knowledge policy.");
+      const knowledge = body.knowledgePolicy === ACTOR_KNOWLEDGE_POLICY;
       const base = envelope(body, ownerScope, simulationId);
       if (optional(body, "modelId"))
         throw new HttpError(
@@ -300,7 +304,7 @@ export async function handleLocalApiRequest(
         base.expectedHead,
         actorId,
       );
-      const actorContext = inspectActorContext(store, {
+      const actorContext = knowledge ? null : inspectActorContext(store, {
         ...q,
         actorId,
         audience,
@@ -314,6 +318,7 @@ export async function handleLocalApiRequest(
           actorId,
           text,
           audience,
+          ...(knowledge ? { knowledgePolicy: ACTOR_KNOWLEDGE_POLICY } : {}),
           stageWhisper: optional(body, "whisperText") || null,
           stageWhisperIds,
           audienceChanges: audienceChangeArray(body),
@@ -327,7 +332,7 @@ export async function handleLocalApiRequest(
           simulationId,
           branchId: base.branchId,
         }).transcript.find(turn => turn.commitId === committed.commit.id),
-        context: actorContext,
+        ...(actorContext ? { context: actorContext } : {}),
       });
     }
     if (method === "POST" && parts[2] === "turn-draft") {
@@ -339,13 +344,17 @@ export async function handleLocalApiRequest(
     if (method === "POST" && parts[2] === "drafts" && !parts[3]) {
       const body = await bodyOf(request);
       rejectRuntimeSelection(body);
-      if (body.draftingPolicy !== undefined && body.draftingPolicy !== ROUTING_POLICY)
+      if (body.draftingPolicy !== undefined && body.draftingPolicy !== ROUTING_POLICY && body.draftingPolicy !== ACTOR_KNOWLEDGE_POLICY)
         throw new HttpError(400, "Unsupported drafting policy.");
       if (!options.actorTurnRuntime)
         throw new HttpError(503, "No local actor-turn runtime is configured.");
+      const knowledge = body.draftingPolicy === ACTOR_KNOWLEDGE_POLICY;
+      const routed = knowledge || body.draftingPolicy === ROUTING_POLICY;
+      if (knowledge && typeof body.completeWhisper !== "string")
+        throw new HttpError(400, "New actor knowledge policy requires completeWhisper.");
       const base = envelope(body, ownerScope, simulationId);
       const audience =
-        body.draftingPolicy === ROUTING_POLICY
+        routed
           ? (body.audience == null ? [] : strings(body, "audience"))
           : body.audience === undefined
           ? projectBranch(store, {
@@ -364,9 +373,10 @@ export async function handleLocalApiRequest(
           audience,
           stageWhisperIds: strings(body, "stageWhisperIds"),
           runtimeProfile: { id: "local-character", version: "v1" },
-          promptPolicy: { id: body.draftingPolicy === ROUTING_POLICY ? ROUTING_POLICY : "default", version: "v1" },
-          outputSchema: body.draftingPolicy === ROUTING_POLICY ? { id: "audience-proposal", digest: "v1" } : { id: "screenplay", digest: "schema-v1" },
-          ...(body.draftingPolicy === ROUTING_POLICY ? { routing: { version: 1 as const,
+          promptPolicy: { id: knowledge ? ACTOR_KNOWLEDGE_POLICY : routed ? ROUTING_POLICY : "default", version: "v1" },
+          outputSchema: routed ? { id: "audience-proposal", digest: "v1" } : { id: "screenplay", digest: "schema-v1" },
+          ...(routed ? { routing: { version: knowledge ? 3 as const : 1 as const,
+            ...(knowledge ? { completeWhisper: body.completeWhisper as string } : {}),
             initialAudience: body.audience == null ? null : audience, correction: "", correctedAudience: null,
             preservedText: null, sourceDraftId: null } } : {}),
           skillDigests: [],
@@ -385,11 +395,16 @@ export async function handleLocalApiRequest(
     }
     if (method === "POST" && parts[2] === "drafts" && parts[3] && parts[4] === "revise" && parts.length === 5) {
       const body = await bodyOf(request);
-      if (Object.keys(body).some(key => !["commandId", "audience", "correction", "completeWhisper", "preservedText"].includes(key)))
+      if (Object.keys(body).some(key => !["commandId", "audience", "correction", "completeWhisper", "preservedText", "draftingPolicy"].includes(key)))
         throw new HttpError(400, "Unexpected revision field.");
       const original = store.getActorTurnDraft(ownerScope, simulationId, parts[3]);
       if (!original?.routing) throw new HttpError(400, "Revision requires a routed source draft.");
+      if (Object.hasOwn(body, "draftingPolicy") && body.draftingPolicy !== ACTOR_KNOWLEDGE_POLICY)
+        throw new HttpError(400, "Unsupported revision drafting policy.");
+      const knowledge = body.draftingPolicy === ACTOR_KNOWLEDGE_POLICY || original.routing.version === 3;
       const complete = Object.hasOwn(body, "completeWhisper");
+      if (knowledge && !complete)
+        throw new HttpError(400, "Actor knowledge revisions require completeWhisper.");
       if (complete && (typeof body.completeWhisper !== "string" || Object.hasOwn(body, "correction")))
         throw new HttpError(400, "Supply a completeWhisper without an additive correction.");
       const audience = complete && body.audience === null ? null : requiredStrings(body, "audience");
@@ -403,9 +418,9 @@ export async function handleLocalApiRequest(
         ownerScope, simulationId, branchId: original.branchId, expectedHead: original.basisHeadCommitId,
         commandId: required(body, "commandId"), payload: {
           actorId: original.actorId, audience: audience ?? original.routing.initialAudience ?? [], stageWhisperIds: original.stageWhispers.map(item => item.id),
-          runtimeProfile: original.runtimeProfile, promptPolicy: original.promptPolicy,
+          runtimeProfile: original.runtimeProfile, promptPolicy: knowledge ? { id: ACTOR_KNOWLEDGE_POLICY, version: "v1" } : original.promptPolicy,
           outputSchema: original.outputSchema, skillDigests: original.skillDigests,
-          routing: { version: complete ? 2 : 1, ...(complete ? { completeWhisper: body.completeWhisper as string } : {}), initialAudience: original.routing.initialAudience,
+          routing: { version: knowledge ? 3 : complete ? 2 : 1, ...(complete ? { completeWhisper: body.completeWhisper as string } : {}), initialAudience: original.routing.initialAudience,
             correctedAudience: audience, correction, sourceDraftId: original.id,
             preservedText: typeof body.preservedText === "string" ? body.preservedText : null },
         },

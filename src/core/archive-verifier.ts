@@ -1,3 +1,4 @@
+import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
 import { createHash } from "node:crypto";
 import {
   applyValidatedAccessChange,
@@ -813,7 +814,7 @@ function validateTurnInput(
   assertExactInput(commandId, input.payload, [
     "actorId", "text", "audience",
     "audienceChanges?", "accessChanges?", "stageWhisper?",
-    "stageWhisperIds?",
+    "stageWhisperIds?", ...(!sibling ? ["knowledgePolicy?"] : []),
   ]);
   const messageEvents = commit.events.filter(
     (event) => event.type === "message_accepted",
@@ -1004,7 +1005,8 @@ function validateTurnEvents(
   const expected: RuntimeEvent[] = [{ type: "message_accepted", message }];
   expected.push(...normalizedEffectEvents(commandId, payload));
   validateEffectEntities(archive, commandId, expected);
-  expected.push(...expectedFirstImpressionEvents(archive, commit, message.audience));
+  if (payload.knowledgePolicy !== ACTOR_KNOWLEDGE_POLICY)
+    expected.push(...expectedFirstImpressionEvents(archive, commit, message.audience));
   expected.push(...expectedWhisperEvents(archive, commandId, input, commit, actorId));
   if (stableStringify(expected) !== stableStringify(commit.events))
     throw invalidCommandResult(commandId, "complete turn event sequence mismatch");
@@ -2248,7 +2250,7 @@ function validateAcceptedDraftCommandShape(
     throw invalidCommandResult(command.commandId, "accepted draft whisper was already consumed");
   const expectedEvents: RuntimeEvent[] = [
     { type: "message_accepted", message },
-    ...expectedFirstImpressionEvents(archive, commit, receipt.audience),
+    ...(receipt.routing?.version === 3 ? [] : expectedFirstImpressionEvents(archive, commit, receipt.audience)),
     ...buildStageWhisperEvents({
       ownerScope: archive.simulation.ownerScope,
       simulationId: archive.simulation.id,

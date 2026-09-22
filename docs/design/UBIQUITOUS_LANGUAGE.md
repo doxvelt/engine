@@ -1,5 +1,10 @@
 # Ubiquitous Language
 
+> Approved correction: [Actor Knowledge](ACTOR_KNOWLEDGE.md) supersedes older
+> presence-derived observation and selective-context targets. All legitimate
+> branch-relative knowledge is supplied upfront; outgoing recipients grant no
+> observation. Legacy saved policies keep their exact interpretation.
+
 This glossary captures the product language for Doxvelt, a chat-like RPG and role-play simulation engine built around subjective context.
 
 ## Agent

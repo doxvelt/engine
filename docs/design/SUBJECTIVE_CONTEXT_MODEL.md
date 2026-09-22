@@ -1,5 +1,10 @@
 # Subjective Context Model
 
+> Approved correction: [Actor Knowledge](ACTOR_KNOWLEDGE.md) supersedes older
+> presence-derived observation and selective-context targets. All legitimate
+> branch-relative knowledge is supplied upfront; outgoing recipients grant no
+> observation. Legacy saved policies keep their exact interpretation.
+
 This document captures the conceptual runtime model for Doxvelt, a chat-like RPG and role-play simulation engine with multiple agents, affiliations, artifacts, secrets, mistaken beliefs, and emerging social dynamics.
 
 The core design principle:

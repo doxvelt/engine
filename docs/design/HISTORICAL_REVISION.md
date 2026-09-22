@@ -1,5 +1,18 @@
 # Historical revision (#17)
 
+> Approved correction: [Actor Knowledge](ACTOR_KNOWLEDGE.md) supersedes older
+> presence-derived observation and selective-context targets. All legitimate
+> branch-relative knowledge is supplied upfront; outgoing recipients grant no
+> observation. Legacy saved policies keep their exact interpretation.
+> For future historical regeneration, validated generation and safe commit
+> create/select an alternative immediately, with no separate Accept UI. Alternatives
+> cycle at the branching turn and preserve their continuations. Older historical
+> draft/Accept and sibling-acceptance gates below are superseded; ordinary
+> continuation Accept and manual editing are unchanged. Blanket effectful-turn
+> blocking was a recommendation, not approved policy; unsupported cases stay gated.
+> Sequence: #32 context, then #17 saved alternatives engine/API, then UI recovery
+> and cycling. Cleanup #33 remains separate with semantics undecided.
+
 This is a bounded implementation contract for LL-03, refreshed against main at
 `7683385bbfb5be514103031b6f1a2a624ae51b6e` (merged PR #30, implementing #29
 complete-whisper replacement on #27 Composer Routing). It specifies work to
@@ -72,8 +85,8 @@ new command identity; it must not rewrite a saved candidate's basis.
 | Action | Required behavior |
 | --- | --- |
 | Edit performance | Begin with the selected accepted wording and concrete recipients. Retain its actor. Submitting the manual edit creates an alternative, with manual edit attribution and no model call; typing remains browser-local. This does not introduce a general manual-preview or server-saved manual-candidate feature, and ordinary Perform stays immediate. |
-| Regenerate originating whisper | Resolve the selected turn's latest recorded complete whisper, including deliberate empty direction, and generate at the parent basis. Show exact original provenance separately from the complete generation input, proposed performance and final recipients. If no complete whisper is recoverable, require explicit replacement. Generation itself accepts nothing. |
-| Edit originating whisper | Open the latest recoverable complete version, keeping original provenance immutable. Store the director's complete replacement as distinct input with derivation back to the selected turn; unresolved legacy input requires explicit replacement. Generate at the same parent and review before acceptance. |
+| Regenerate originating whisper | Resolve the selected turn's latest recorded complete whisper, including deliberate empty direction, and generate at the parent basis. Show exact original provenance separately from the complete generation input, proposed performance and final recipients. If no complete whisper is recoverable, require explicit replacement. On successful validated generation, safely commit/select the alternative immediately; no separate Accept UI. Failed or partial output creates no history. |
+| Edit originating whisper | Open the latest recoverable complete version, keeping original provenance immutable. Store the director's complete replacement as distinct input with derivation back to the selected turn; unresolved legacy input requires explicit replacement. Generate at the same parent and safely commit/select the validated alternative without a separate Accept UI. |
 | No originating whisper | Say whether none was recorded or provenance is unavailable. Offer manual editing or explicit new direction. New direction is new input, never a claimed recovered whisper or a retry of an unknown prompt. |
 
 An accepted turn may be manual with no whisper, generated without direction, or
@@ -88,7 +101,7 @@ unavailable, not permission to infer from adjacent turns or prose.
 The approved phrase **exact originating whisper** means recorded input, not
 keystrokes before API normalization. Display exact available provenance separately
 from the complete whisper that will generate the replacement. For accepted routing
-version 2, use the receipt's `completeWhisper`, even when empty; original consumed
+version 2 or 3, use the receipt's `completeWhisper`, even when empty; original consumed
 whisper snapshots remain provenance, not an instruction to replay. An uncorrected
 single-input origin can supply its recorded complete text; a recorded no-direction
 origin supplies empty input. Missing evidence is not evidence of empty direction.
@@ -143,7 +156,7 @@ command/candidate linked to the historical operation, not replay of generation.
 | Local editing, not submitted | Autosave editor and suspended continuation. Do not imply server durability or start runtime work. |
 | Submitted generation | Reserve operation/candidate identity before invoking runtime. Recover generating, ready or failed results by identity and scoped discovery, even if the first response never reached the browser. |
 | Submitted manual edit | Bind the exact edit command and resulting alternative atomically. Lost response recovery must find/replay that outcome without committing again. |
-| Ready review | Candidate is immutable in basis/input/artifact. Local wording changes stay distinguishable. Retry and corrections preserve earlier candidates and their derivation. |
+| Validated completion | Candidate basis/input/artifact remain immutable. Historical generation coordinates safe commit immediately; readiness is an internal boundary, not a separate Accept UI. Further generations preserve earlier alternatives and their continuations. |
 | Failed/interrupted generation | Keep a safe failure or honest in-progress state. Explicit retry creates a new candidate; replay does not silently restart runtime execution. Discard can settle stranded work without canonical effects. |
 | Accepting/discarding, outcome unknown | Keep the command and submitted payload leased across browser/API restart. Query/replay the same identity before allowing a conflicting action; never infer failure from transport loss. |
 | Accepted/discarded | Terminal transition cannot be reversed by late runtime output. Acceptance outcome identifies the alternative branch/commit; discard adds no canonical history. Retain lookup/replay even though terminal candidates leave pending discovery. |
@@ -159,8 +172,9 @@ Editor cancellation suspends the UI workflow; explicit candidate discard is a
 separate durable action. Neither removes the original accepted path, the originating
 candidate, sibling candidates or the suspended continuation candidate. Race handling
 must produce one terminal outcome for a given candidate and acceptance identity.
-How one operation exposes subsequent acceptance of another sibling candidate is
-not settled here; do not implement automatic group discard or bulk acceptance.
+Each successful validated historical generation creates/selects its saved alternative.
+Cycle alternatives at the branching turn without discarding sibling continuations;
+operation identity is an internal choice, not a separate product approval gate.
 
 ## Candidate correction routing
 
@@ -171,7 +185,8 @@ replacement. Both current historical kernel operations require the original acto
 historical turn with another actor in #17.
 
 For new-policy generated candidates, delivery remains distinct from observation.
-Presence, access, perceptions and memories come from the parent projection.
+Legitimate knowledge, access, perceptions and memories come from the parent
+projection; stored presence does not grant current observation.
 Tentative/unspecified initial recipients are not model proposals. Review exact
 performance and validated concrete recipients; retain sender-own perception,
 supported pinned IDs and failure without an All/public fallback.
@@ -180,7 +195,7 @@ Complete-whisper or audience changes produce distinct durable candidates at the
 same historical basis. Capture latest complete input and current audience direction;
 retain original identity and immediate-source artifact only as derivation provenance.
 Recompute implicit recipient references from actor-visible pre-turn material,
-observed presence and current complete input. Deleted mentions and source artifacts
+legitimate historical knowledge and current complete input. Deleted mentions and source artifacts
 grant no references. Preserve explicit audience decisions when prose changes.
 An explicit replacement audience is authoritative and supersedes initial tentative
 direction; contradictory output fails. An explicit request for a fresh proposal
@@ -197,8 +212,9 @@ fields; verify its matching prompt/context hashes. Exact replay returns the save
 record without a runtime call. Legacy retry preserves additive/source-material
 interpretation exactly, including older corrections that never included source
 performance. Neither accepting nor retrying a legacy candidate upgrades it.
-Unapplied whisper/audience changes block Accept and ordinary Retry until applied
-or explicitly cleared. Buffers remain associated with their own candidate,
+For ordinary continuation, unapplied whisper/audience changes block Accept and
+ordinary Retry until applied or explicitly cleared. Historical generation uses
+the submitted complete input and safely commits the validated result immediately. Buffers remain associated with their own candidate,
 including terminals. Text-only acceptor edits remain distinct from routing changes
 and retain attribution. Acceptance never changes actor, recipients, parent or
 source selection.
@@ -252,8 +268,8 @@ selected turn's old effects as well as descendants' perceptions, first impressio
 audience/access events, beliefs, memory operations and closures. Ancestor state
 still applies. Late memory results remain attached to their original closure.
 
-Recompute replacement perceptions and first impressions against the parent and
-reviewed delivery. Never copy old turn events, random results, capability effects
+Recompute replacement perceptions against the parent and validated delivery.
+Under the new actor-knowledge policy, recipients alone never create first impressions. Never copy old turn events, random results, capability effects
 or memory outcomes onto new wording. Current runtime/correction contracts have an
 empty capability grant. #17 does not enable tools or a new effects engine; see the
 unresolved policy for editing existing effectful manual turns below.
@@ -341,10 +357,11 @@ settle server-side; late runtime completion cannot revive a terminal record.
   block unsupported cases explicitly rather than copying or silently dropping
   non-message effects. Tools and effectful preserve-wording corrections stay out
   of scope.
-- **Multiple accepted alternatives per operation:** define whether choosing another
-  retained candidate after one acceptance needs a new linked operation or another
-  explicit acceptance within the same workflow. Preserve all candidates meanwhile;
-  no automatic disposal or acceptance follows from the first selection.
+- **Saved alternatives:** successful validated generation safely commits/selects each
+  historical alternative immediately; cycling preserves each continuation. The old
+  separate-Accept and subsequent-sibling-acceptance gate is superseded by
+  [Actor Knowledge](ACTOR_KNOWLEDGE.md). Internal operation identity remains an
+  implementation choice. Manual editing semantics are unchanged.
 
 These are the remaining product gates for their dependent cases. They do not reopen
 the approved complete-whisper generation, owner/director disclosure or browser-local
@@ -356,8 +373,8 @@ of unsaved work or new portable operational-draft semantics is authorized.
 
 ## Delivery sequence
 
-Follow #25's sequencing: review and merge this docs-only contract first. Deliver
-engine/API in a separate PR covering transactional historical operations, scoped
+Follow #25's sequencing: deliver #32 character-context correction first, then
+#17 saved alternatives engine/API in a separate PR covering transactional historical operations, scoped
 provenance, minimized transport and portable accepted-history/replay proofs.
 Validate and merge that engine base before a separate UI/recovery PR implements
 inline revision and browser-local close/reopen recovery. Each implementation PR
@@ -375,7 +392,7 @@ actual serialized API and browser boundaries separately.
 | --- | --- |
 | Older turn selected after unrelated later whispers | Latest complete input for the selected turn only; generation uses its immediate parent, pinned content and original actor. Unrelated later context/direction never enters the candidate. |
 | First turn, non-message/root, off-path or forged selection | First turn uses root as parent; invalid selection fails without draft, branch or leaked provenance. |
-| Manual edit and generated replacement | Manual path makes no model call; model path stays unaccepted until review. Both preserve original actor/logical identity and create a new version; no misattributed model wording. |
+| Manual edit and generated replacement | Manual path makes no model call; model output remains noncanonical until validated, then safely commits/selects its alternative immediately without a separate Accept UI. Both preserve original actor/logical identity and create a new version; no misattributed model wording. |
 | Manual/no-direction/imported/missing or conflicting provenance | Explicit none/unavailable state; accepted provenance works without draft rows where available; new direction is labeled new and no whisper is inferred. |
 | Corrected/legacy/multiple-input origin | Use recorded complete input where available; otherwise require explicit complete replacement, including deliberate empty. Display exact available provenance separately; saved legacy retry/acceptance retain frozen hashes and interpretation. |
 | Delete instruction/mention across repeated historical generations, then empty whisper | Capture the actual `runActorTurn` request (prompt and context), not just editor state or fixture output. A unique deleted instruction such as “elephant”, removed implicit recipient references, earlier whispers, additive feedback and accepted/source/prior-attempt performance must be absent; legitimate pre-turn context and explicit audience decisions remain. Repeat through deliberate empty input and retry. |

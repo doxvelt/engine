@@ -1,3 +1,4 @@
+import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
 import { createHash } from "node:crypto";
 import { domainId } from "./domain-rules.ts";
 import { DomainValidationError } from "./ports.ts";
@@ -469,9 +470,9 @@ function invalid(message: string): DomainValidationError {
 
 export function validateRoutingInput(value: unknown): asserts value is DraftRoutingInput {
   const input = object(value, "Routing input");
-  exact(input, ["version", "initialAudience", "correction", "correctedAudience", "preservedText", "sourceDraftId", ...(input.version === 2 ? ["completeWhisper"] : [])], "Routing input");
-  if (input.version !== 1 && input.version !== 2) throw invalid("Unsupported routing version.");
-  if (input.version === 2 && (typeof input.completeWhisper !== "string" || input.completeWhisper.length > MAX_RUNTIME_TEXT_CHARS || input.correction !== ""))
+  exact(input, ["version", "initialAudience", "correction", "correctedAudience", "preservedText", "sourceDraftId", ...((input.version === 2 || input.version === 3) ? ["completeWhisper"] : [])], "Routing input");
+  if (input.version !== 1 && input.version !== 2 && input.version !== 3) throw invalid("Unsupported routing version.");
+  if ((input.version === 2 || input.version === 3) && (typeof input.completeWhisper !== "string" || input.completeWhisper.length > MAX_RUNTIME_TEXT_CHARS || input.correction !== ""))
     throw invalid("Complete whisper required without additive correction.");
   for (const key of ["initialAudience", "correctedAudience"])
     if (input[key] !== null) identityArray(input[key], key);
@@ -487,7 +488,7 @@ export function validateRoutingInput(value: unknown): asserts value is DraftRout
 
 export function validateRoutingBinding(draft: ActorTurnDraftRecord, receipt = false): void {
   if (!draft.routing) {
-    if (draft.promptPolicy.id === "audience-proposal-v1" || draft.outputSchema.id === "audience-proposal")
+    if (draft.promptPolicy.id === "audience-proposal-v1" || draft.promptPolicy.id === ACTOR_KNOWLEDGE_POLICY || draft.outputSchema.id === "audience-proposal")
       throw invalid("Routing policy requires routing ancestry.");
     if (draft.artifact?.proposedAudience !== undefined)
       throw invalid("Audience proposal requires routing policy.");
@@ -495,10 +496,10 @@ export function validateRoutingBinding(draft: ActorTurnDraftRecord, receipt = fa
   }
   const routing = object(draft.routing, "Routing");
   exact(routing, ["version", "initialAudience", "correction", "correctedAudience", "preservedText", "sourceDraftId",
-    "availableRecipientIds", "originalDraftId", "originalGenerationCommandId", "source", ...(routing.version === 2 ? ["completeWhisper"] : [])], "Routing");
+    "availableRecipientIds", "originalDraftId", "originalGenerationCommandId", "source", ...((routing.version === 2 || routing.version === 3) ? ["completeWhisper"] : [])], "Routing");
   const { version, initialAudience, correction, correctedAudience, preservedText, sourceDraftId } = routing;
   validateRoutingInput({ version, initialAudience, correction, correctedAudience, preservedText, sourceDraftId,
-    ...(version === 2 ? { completeWhisper: routing.completeWhisper } : {}) });
+    ...((version === 2 || version === 3) ? { completeWhisper: routing.completeWhisper } : {}) });
   identityArray(routing.availableRecipientIds, "Available recipients");
   requiredSafeIdentifier(routing.originalDraftId, "Original draft ID");
   requiredSafeIdentifier(routing.originalGenerationCommandId, "Original generation ID");
@@ -509,9 +510,9 @@ export function validateRoutingBinding(draft: ActorTurnDraftRecord, receipt = fa
       ...(typed.correctedAudience ?? typed.initialAudience ?? [])])]))
     throw invalid("Draft direction audience mismatch.");
   if (!typed.availableRecipientIds.includes(draft.actorId)) throw invalid("Actor missing from available identities.");
-  for (const id of typed.version === 2 ? (typed.correctedAudience ?? typed.initialAudience ?? []) : [...(typed.initialAudience || []), ...(typed.correctedAudience || [])])
+  for (const id of (typed.version === 2 || typed.version === 3) ? (typed.correctedAudience ?? typed.initialAudience ?? []) : [...(typed.initialAudience || []), ...(typed.correctedAudience || [])])
     if (!typed.availableRecipientIds.includes(id)) throw invalid("Directed identity is unavailable.");
-  if (draft.promptPolicy.id !== "audience-proposal-v1" || draft.promptPolicy.version !== "v1" ||
+  if (draft.promptPolicy.id !== (typed.version === 3 ? ACTOR_KNOWLEDGE_POLICY : "audience-proposal-v1") || draft.promptPolicy.version !== "v1" ||
       draft.outputSchema.id !== "audience-proposal" || draft.outputSchema.digest !== "v1")
     throw invalid("Routing policy/schema mismatch.");
   if (typed.sourceDraftId === null) {

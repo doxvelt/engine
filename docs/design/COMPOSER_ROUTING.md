@@ -1,20 +1,30 @@
 # Picker-driven candidate routing (#16)
 
+> Approved correction: [Actor Knowledge](ACTOR_KNOWLEDGE.md) supersedes older
+> presence-derived observation and selective-context targets. All legitimate
+> branch-relative knowledge is supplied upfront; outgoing recipients grant no
+> observation. Legacy saved policies keep their exact interpretation.
+
 This bounded contract follows the approved separation of observation/access from
 tentative delivery. It does not implement notation grammar or historical revision.
 
 ## Version and observation boundary
 
 Legacy text-only requests, saved drafts and receipts retain their original context
-interpretation. New Stage requests explicitly select `audience-proposal-v1`.
-For this policy, observations come from the branch's explicit active presence
-roster, only when the acting identity is itself active. Empty/inactive presence
-supplies no other surfaces. Existing access links, beliefs, memories and perceived
-transcript remain branch-relative. Delivery selections never grant surfaces or
+interpretation. Stage now explicitly selects `actor-knowledge-v1` with routing v3
+and a required complete whisper. It supplies all legitimate branch-relative
+knowledge, including active episode memories and superseded belief provenance,
+without deriving observation from stored presence or outgoing recipients.
+
+The legacy `audience-proposal-v1` policy (routing v1/v2) retains explicit active
+presence observation, only when the acting identity is active. That interpretation
+is frozen for compatibility, not the approved target for new Stage generation. Existing access links, beliefs,
+memories and perceived transcript remain branch-relative. Delivery selections never grant surfaces or
 dossiers, and do not change presence.
 
 Proposal identities are supported pinned IDs referenced in actor-visible material,
-observed identities, and draft-local explicit director references. A director may
+legitimately recorded identities, and draft-local explicit director references.
+Legacy policies also include their captured observed identities. A director may
 select identities or name an unambiguous public name/ID in private direction;
 this supplies only a safe identity reference, never persistent knowledge. Unknown
 explicit IDs fail closed. A mentioned person is not automatically a recipient.
@@ -35,16 +45,16 @@ whispers nor any prior unaccepted performance enter its prompt or context.
 Deleting “elephant” therefore removes that instruction, rather than asking the
 model to reconcile it with an additive correction.
 
-Replacement input uses routing version 2 with `completeWhisper` (required, empty
-allowed) and an empty legacy `correction` field. Source/original identity, original
+Legacy complete-whisper replacement uses routing version 2; new-policy replacement
+uses version 3. Both use `completeWhisper` (required, empty allowed) and an empty legacy `correction` field. Source/original identity, original
 whisper snapshots and source artifact hashes remain immutable provenance; they
 are not runtime input. Original snapshots still identify the pending whispers
 consumed atomically on acceptance; the receipt's versioned routing captures the
 complete replacement that actually generated the candidate. No schema migration
 or rewriting of existing candidate/receipt hashes occurs.
 
-Recipient eligibility is recomputed from actor-visible pre-turn material, observed
-presence, the complete whisper, and current explicit audience direction. Removed
+Recipient eligibility is recomputed from actor-visible pre-turn material, the
+complete whisper, and current explicit audience direction. Removed
 mentions and source performances grant no identity references. Initial picker
 direction remains tentative. An explicit replacement audience is authoritative
 and supersedes that initial direction for runtime eligibility; its contradiction
@@ -72,7 +82,9 @@ grant. The director reviews exact text and concrete recipients before accepting.
 No semantic suitability guarantee is inferred from hashes or an LLM.
 
 Acceptance never changes routing. It atomically records final delivery, derived
-perceptions, first impressions and selected-whisper consumption. Unaccepted
+perceptions and selected-whisper consumption. V3 derives no mutual first impressions
+from recipients; existing branch-valid impressions remain historical knowledge.
+Legacy acceptance retains its original first-impression derivation. Unaccepted
 candidates have no canonical effects. Original candidates remain available.
 
 ## Compatibility and review
@@ -85,7 +97,10 @@ final recipients and derivation, not raw context/prompt. Existing legacy
 transport policy is not expanded; its broader minimization belongs to #17.
 
 Stage whisper and Perform have independent prose and routing. Perform stays
-immediate. All explicitly selects pinned IDs and permits individual deselection.
+immediate. New Stage manual submissions explicitly carry
+`knowledgePolicy: "actor-knowledge-v1"`, preventing recipient-derived first
+impressions. Old manual API commands without it retain their exact effects and
+fingerprints; historical manual editing is unchanged. All explicitly selects pinned IDs and permits individual deselection.
 Notation/escaping/display and device/accessibility acceptance remain open #16 gates.
 Bounded automated browser evidence is recorded in the implementation PR.
 
@@ -117,13 +132,32 @@ proof of model execution; archives do not export raw actor prompts or contexts.
   tool-free; the proposal policy requires exact JSON `{ text, audience }` and
   core validates that structure before completing an artifact. New artifact
   digests bind both performance and recipients.
-- Stage posts `draftingPolicy: "audience-proposal-v1"` to `/drafts`; an absent or
-  null audience means unspecified direction under this policy only.
+- Stage posts `draftingPolicy: "actor-knowledge-v1"` and `completeWhisper` to
+  `/drafts`; absent/null audience means unspecified direction. Legacy
+  `audience-proposal-v1` and unversioned requests keep their prior behavior.
+  Routing v3 requires prompt policy `actor-knowledge-v1` version `v1`; routing
+  v1/v2 requires `audience-proposal-v1` version `v1`. Mismatches fail closed.
+  Receipt v2 carries all three routing versions; no archive schema migration occurs.
 - `/drafts/:id/revise` takes command ID, `completeWhisper`, nullable audience and
   optional exact `preservedText`. Complete input cannot be mixed with `correction`.
-  The legacy `correction` request shape remains supported with version 1 semantics.
+  The legacy `correction` request shape remains supported for legacy sources with
+  version 1 semantics. V3 sources require complete-whisper revision and retain v3;
+  retry repeats the saved version. Current Stage explicitly supplies
+  `draftingPolicy: "actor-knowledge-v1"` when revising any saved source, so new
+  complete-whisper replacements of v1/v2 sources use v3. Requests without opt-in
+  retain prior API behavior. Reading, retrying or accepting the source never
+  upgrades it. New hashes belong only to the replacement; original/source identity
+  and artifact hashes remain provenance. Unknown policy or mixed additive input
+  is rejected. Preserve-wording opt-in retains exact director-derived attribution,
+  unchanged complete-input validation and empty tools, with no model call.
   The server supplies source actor/basis and provenance snapshots. `/retry` repeats
   captured input, not the current editor buffer. Acceptance rejects routing fields.
+- Stage posts manual `knowledgePolicy: "actor-knowledge-v1"` to `/turns`.
+  The immutable manual command binds that policy to its fingerprint and archive
+  event validation. Unknown values fail closed; omission preserves legacy behavior.
+  New-policy manual responses return the commit/turn outcome without raw context;
+  old responses remain unchanged. The policy is not accepted for historical manual
+  edit/regenerate commands in this slice.
 - New-policy generation, detail, retry, revision, discard (including replay) and discovery return the shared
   Stage review projection. Complete whisper, original provenance, initial direction
   and authoritative recipients are visible independently from performance.

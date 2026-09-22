@@ -1,3 +1,4 @@
+import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
 import { DomainValidationError } from "./ports.ts";
 import { decodeAcceptDraftReceipt } from "./draft-contracts.ts";
 import type { ContentRevisionRecord } from "./types.ts";
@@ -203,15 +204,17 @@ function decodeTurnCommand(command: RecordValue, sibling: boolean): void {
   ]);
   if (sibling) strings(command, ["sourceBranchId", "sourceCommitId"]);
   if (command.branchName !== undefined) string(command.branchName, "branchName");
-  decodeManualPayload(command.payload);
+  decodeManualPayload(command.payload, sibling);
 }
 
-function decodeManualPayload(value: unknown): void {
+function decodeManualPayload(value: unknown, sibling: boolean): void {
   const payload = record(value, "manual turn payload");
   exact(payload, ["actorId", "text", "audience"], [
     "logicalMessageId", "operation", "audienceChanges", "accessChanges",
-    "stageWhisper", "stageWhisperIds",
+    "stageWhisper", "stageWhisperIds", ...(!sibling ? ["knowledgePolicy"] : []),
   ]);
+  if (Object.hasOwn(payload, "knowledgePolicy"))
+    enumString(payload.knowledgePolicy, "manual knowledge policy", [ACTOR_KNOWLEDGE_POLICY]);
   strings(payload, ["actorId", "text"]);
   stringArray(payload.audience, "audience");
   if (payload.logicalMessageId !== undefined)
