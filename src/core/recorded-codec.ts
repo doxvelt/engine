@@ -1,3 +1,4 @@
+import { decodeAlternativeCommand } from "./saved-alternatives.ts";
 import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
 import { DomainValidationError } from "./ports.ts";
 import { decodeAcceptDraftReceipt } from "./draft-contracts.ts";
@@ -13,9 +14,10 @@ export function decodeRecordedCommand(value: unknown): RecordedCommand {
   const command = record(value, "recorded command");
   const kind = enumString(command.kind, "recorded command kind", [
     "start", "turn", "effects", "closure", "edit", "regenerate", "fork",
-    "whisper", "accept_draft", "revise_memory", "retract_memory",
+    "whisper", "accept_draft", "saved_alternative", "revise_memory", "retract_memory",
   ] as const);
-  if (kind === "start") decodeStartCommand(command);
+  if (kind === "saved_alternative") decodeAlternativeCommand(command);
+  else if (kind === "start") decodeStartCommand(command);
   else if (kind === "turn") decodeTurnCommand(command, false);
   else if (kind === "edit" || kind === "regenerate")
     decodeTurnCommand(command, true);
@@ -102,7 +104,7 @@ export function assertRecordedOutcomeIdentity(
     return;
   }
   if (outcome.kind === "commit") {
-    if (!["turn", "effects", "closure", "edit", "regenerate", "accept_draft", "revise_memory", "retract_memory"].includes(
+    if (!["turn", "effects", "closure", "edit", "regenerate", "accept_draft", "saved_alternative", "revise_memory", "retract_memory"].includes(
       command.kind,
     )) fail();
     const commitCommand = command as Extract<
@@ -552,7 +554,7 @@ function decodeMessage(value: unknown): void {
     exact(provenance, [
       "mode", "operation", "sourceArtifactDigest", "finalTextSource",
     ]);
-    enumString(provenance.operation, "generated message operation", ["turn"] as const);
+    enumString(provenance.operation, "generated message operation", ["turn", "regenerate"] as const);
     string(provenance.sourceArtifactDigest, "generated source artifact digest");
     enumString(provenance.finalTextSource, "generated final text source", [
       "generated_verbatim", "director_preserved", "acceptor_edited",

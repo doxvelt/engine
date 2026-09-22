@@ -144,6 +144,7 @@ type BranchMutation = MutationIdentity & {
 };
 
 export type RecordedCommand =
+  | import("./saved-alternatives.ts").AlternativeCommand
   | ({ kind: "start" } & (CreateSimulationInput | StartSimulationInput))
   | ({ kind: "turn"; payload: ManualTurnPayload } & BranchMutation)
   | ({ kind: "effects"; payload: RuntimeEffectsPayload } & BranchMutation)
@@ -186,7 +187,7 @@ export type RecordedOutcome =
   | { kind: "whisper"; whisper: StageWhisperRecord };
 
 export type SimulationArchive = {
-  schemaVersion: 4 | 5 | 6;
+  schemaVersion: 4 | 5 | 6 | 7;
   contentRevision: ContentRevisionRecord;
   simulation: SimulationRecord;
   branches: BranchRecord[];

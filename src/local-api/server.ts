@@ -1,9 +1,10 @@
+import { createSavedAlternative, discoverSavedAlternatives, originatingInput, type HistoricalSelection } from "../core/saved-alternatives.ts";
 import { ACTOR_KNOWLEDGE_POLICY } from "../core/types.ts";
 import { ROUTING_POLICY, routingInput } from "../core/candidate-routing.ts";
 import { navigationToken } from "../application/simulation-collection.ts";
 import path from "node:path";
 import { playLastCrossing } from "./example.ts";
-import { stageDraft, type StageProjection } from "./stage-contracts.ts";
+import { stageAlternative, stageAlternativeDetail, stageDraft, type StageProjection } from "./stage-contracts.ts";
 import { canOwnTurn } from "../core/turn-ownership.ts";
 import {
   createServer,
@@ -335,6 +336,48 @@ export async function handleLocalApiRequest(
         ...(actorContext ? { context: actorContext } : {}),
       });
     }
+    if (parts[2] === "alternatives") {
+      const selection = (body: Record<string, unknown>): HistoricalSelection & { ownerScope: string; simulationId: string } => ({
+        ownerScope, simulationId, sourceBranchId: required(body, "sourceBranchId"), expectedHead: required(body, "expectedHead"),
+        sourceCommitId: required(body, "sourceCommitId"), messageVersionId: required(body, "messageVersionId"),
+        logicalMessageId: required(body, "logicalMessageId"), actorId: required(body, "actorId"),
+      });
+      if (method === "POST" && parts[3] === "origin" && parts.length === 4) {
+        const body = await bodyOf(request);
+        if (Object.keys(body).some(key => !["sourceBranchId", "expectedHead", "sourceCommitId", "messageVersionId", "logicalMessageId", "actorId"].includes(key)))
+          throw new HttpError(400, "Unknown originating-input query field.");
+        return send(response, 200, originatingInput(store, selection(body)));
+      }
+      if (method === "GET" && parts.length === 3) {
+        if (!url.searchParams.has("sourceCommitId"))
+          return send(response, 200, { operations: store.listAlternatives(ownerScope, simulationId).map(stageAlternative) });
+        const discovery = discoverSavedAlternatives(store, selection(Object.fromEntries(url.searchParams)));
+        return send(response, 200, { ...discovery, operations: discovery.operations.map(stageAlternative) });
+      }
+      if (method === "POST" && parts.length === 3) {
+        const body = await bodyOf(request);
+        const result = await createSavedAlternative(store, options.actorTurnRuntime, { ...body, ownerScope, simulationId } as Parameters<typeof createSavedAlternative>[2]);
+        return send(response, 200, { operation: stageAlternativeDetail(result.operation, store), replayed: result.replayed });
+      }
+      if (parts[3]) {
+        const operation = store.getAlternative(ownerScope, simulationId, parts[3]);
+        if (!operation) throw new HttpError(404, "Historical operation not found.");
+        if (method === "GET" && parts.length === 4) return send(response, 200, stageAlternativeDetail(operation, store));
+        if (method === "POST" && parts[4] === "discard" && parts.length === 5) {
+          const body = await bodyOf(request);
+          if (Object.keys(body).length) throw new HttpError(400, "Discard is idempotent by operation identity and accepts an empty body.");
+          return send(response, 200, stageAlternativeDetail(store.settleAlternative(ownerScope, simulationId, operation.id, "discarded"), store));
+        }
+        if (method === "POST" && parts[4] === "retry" && parts.length === 5) {
+          const body = await bodyOf(request);
+          if (Object.keys(body).some(k => k !== "commandId")) throw new HttpError(400, "Historical retry accepts only commandId.");
+          const result = await createSavedAlternative(store, options.actorTurnRuntime, { ...operation.request,
+            commandId: required(body, "commandId"), retryOf: operation.id });
+          return send(response, 200, { operation: stageAlternativeDetail(result.operation, store), replayed: result.replayed });
+        }
+      }
+      throw new HttpError(404, "Historical endpoint not found.");
+    }
     if (method === "POST" && parts[2] === "turn-draft") {
       throw new HttpError(
         410,
@@ -382,7 +425,7 @@ export async function handleLocalApiRequest(
           skillDigests: [],
         },
       });
-      return send(response, 200, result.draft.routing ? { ...result, draft: stageDraft(result.draft) } : result);
+      return send(response, 200, { ...result, draft: stageDraft(result.draft) });
     }
     if (method === "GET" && parts[2] === "drafts" && parts.length === 3) {
       const branchId = url.searchParams.get("branchId");
@@ -445,12 +488,12 @@ export async function handleLocalApiRequest(
           outputSchema: original.outputSchema, skillDigests: original.skillDigests,
         },
       }, { retryDraftId: original.id });
-      return send(response, 200, result.draft.routing ? { ...result, draft: stageDraft(result.draft) } : result);
+      return send(response, 200, { ...result, draft: stageDraft(result.draft) });
     }
     if (method === "GET" && parts[2] === "drafts" && parts[3] && !parts[4]) {
       const draft = store.getActorTurnDraft(ownerScope, simulationId, parts[3]);
       if (!draft) throw new HttpError(404, `Draft not found: ${parts[3]}`);
-      return send(response, 200, draft.routing ? stageDraft(draft) : draft);
+      return send(response, 200, stageDraft(draft));
     }
     if (
       method === "POST" &&
@@ -462,13 +505,15 @@ export async function handleLocalApiRequest(
       const body = await bodyOf(request);
       if (Object.keys(body).some(key => !["commandId", "finalText"].includes(key)))
         throw new HttpError(400, "Acceptance cannot change candidate routing.");
-      return send(response, 200, acceptActorTurnDraft(store, {
+      const outcome = acceptActorTurnDraft(store, {
         ownerScope,
         simulationId,
         draftId: parts[3],
         commandId: required(body, "commandId"),
         ...(body.finalText === undefined ? {} : { finalText: any(body, "finalText") }),
-      }));
+      });
+      return send(response, 200, { branch: { id: outcome.branch.id, headCommitId: outcome.branch.headCommitId },
+        commit: { id: outcome.commit.id }, replayed: outcome.replayed });
     }
     if (
       method === "POST" &&
@@ -484,7 +529,7 @@ export async function handleLocalApiRequest(
         draftId: parts[3],
         commandId: required(body, "commandId"),
       });
-      return send(response, 200, result.draft.routing ? { ...result, draft: stageDraft(result.draft) } : result);
+      return send(response, 200, { ...result, draft: stageDraft(result.draft) });
     }
     if (method === "POST" && parts[2] === "audience") {
       const body = await bodyOf(request);

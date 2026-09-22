@@ -1,3 +1,4 @@
+import { alternativeId, validateAlternativeRequest, alternativeFromReceipt, buildAlternativeCommit, decodeAlternativeCommand, resolveHistoricalSelection, type AlternativeRecord, type SavedAlternativeRepository } from "../core/saved-alternatives.ts";
 import { navigationToken, savedIdentity, type SimulationCollectionRepository, type SimulationCollectionItem, type RecordSimulationOpened, type NavigationReceipt } from "../application/simulation-collection.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
@@ -74,7 +75,7 @@ export function openBranchStore(
 }
 
 export class SqliteSimulationRepository
-  implements SimulationRepository, ActorTurnDraftRepository, SimulationCollectionRepository {
+  implements SimulationRepository, ActorTurnDraftRepository, SimulationCollectionRepository, SavedAlternativeRepository {
   private db: DatabaseSync | null = null;
   readonly dbPath: string;
   constructor(dbPath: string) {
@@ -105,6 +106,10 @@ export class SqliteSimulationRepository
         }
       }
       const schema = `
+      CREATE TABLE IF NOT EXISTS saved_alternative_operations (
+        owner_scope TEXT NOT NULL, simulation_id TEXT NOT NULL, id TEXT NOT NULL, record_json TEXT NOT NULL,
+        PRIMARY KEY (owner_scope, simulation_id, id)
+      );
       CREATE TABLE IF NOT EXISTS application_navigation_version (
         owner_scope TEXT PRIMARY KEY, version TEXT NOT NULL, previous_version TEXT,
         simulation_id TEXT NOT NULL, branch_id TEXT NOT NULL, opened_at TEXT NOT NULL
@@ -839,85 +844,193 @@ export class SqliteSimulationRepository
     commandFingerprint: string;
     commit: CommitRecord;
   }): { branch: BranchRecord; commit: CommitRecord; replayed: boolean } {
+    if (input.commandInput.kind === "saved_alternative") throw new DomainValidationError("Saved alternatives require their atomic operation boundary.");
+    return this.transaction(() => this.appendHistoricalBranch(input));
+  }
+
+  private appendHistoricalBranch(input: Parameters<SimulationRepository["appendCommitToNewBranch"]>[0]) {
     const { commit } = input;
     const fingerprint = input.commandFingerprint;
-    return this.transaction(() => {
-      const prior = this.readCommand(
-        commit.ownerScope,
-        commit.simulationId,
-        commit.commandId,
-        fingerprint,
-      );
-      if (prior)
-        return {
-          ...(unwrapRecordedOutcome(prior) as {
-            branch: BranchRecord;
-            commit: CommitRecord;
-          }),
-          replayed: true,
-        };
-      const source = this.getBranch(
-        commit.ownerScope,
-        commit.simulationId,
-        input.sourceBranchId,
-      );
-      if (!source)
-        throw new DomainNotFoundError(
-          `Source branch not found: ${input.sourceBranchId}`,
-        );
-      if (source.headCommitId !== input.expectedHead)
-        throw new BranchConflictError(input.expectedHead, source.headCommitId);
-      if (
-        !this.listAncestors(
-          commit.ownerScope,
-          commit.simulationId,
-          source.headCommitId,
-        ).some((item) => item.id === input.atCommitId)
-      )
-        throw new DomainValidationError(
-          `Sibling parent ${input.atCommitId} is not on source branch ${input.sourceBranchId}.`,
-        );
-      if (commit.parentCommitId !== input.atCommitId)
-        throw new Error(
-          "Sibling commit parent does not match its branch point.",
-        );
-      this.insertCommit(commit);
-      const branch: BranchRecord = {
-        id: input.branchId,
-        ownerScope: commit.ownerScope,
-        simulationId: commit.simulationId,
-        name: input.name || null,
-        headCommitId: commit.id,
-        origin: buildBranchOrigin({
-          kind: input.originKind,
-          commandId: commit.commandId,
-          sourceBranchId: input.sourceBranchId,
-          sourceHeadCommitId: input.expectedHead,
-          baseCommitId: input.atCommitId,
+    const prior = this.readCommand(
+      commit.ownerScope,
+      commit.simulationId,
+      commit.commandId,
+      fingerprint,
+      input.commandInput.kind === "saved_alternative",
+    );
+    if (prior)
+      return {
+        ...(unwrapRecordedOutcome(prior) as {
+          branch: BranchRecord;
+          commit: CommitRecord;
         }),
-        createdAt: commit.createdAt,
+        replayed: true,
       };
-      this.sql()
-        .prepare("INSERT INTO branches VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run(
-          branch.id,
-          branch.ownerScope,
-          branch.simulationId,
-          branch.name,
-          branch.headCommitId,
-          JSON.stringify(branch.origin),
-          branch.createdAt,
-        );
-      const result = { branch, commit };
-      this.writeCommand(
+    const source = this.getBranch(
+      commit.ownerScope,
+      commit.simulationId,
+      input.sourceBranchId,
+    );
+    if (!source)
+      throw new DomainNotFoundError(
+        `Source branch not found: ${input.sourceBranchId}`,
+      );
+    if (source.headCommitId !== input.expectedHead)
+      throw new BranchConflictError(input.expectedHead, source.headCommitId);
+    if (
+      !this.listAncestors(
         commit.ownerScope,
         commit.simulationId,
-        commit.commandId,
-        input.commandInput,
-        fingerprint,
-        recordCommitOutcome(result),
+        source.headCommitId,
+      ).some((item) => item.id === input.atCommitId)
+    )
+      throw new DomainValidationError(
+        `Sibling parent ${input.atCommitId} is not on source branch ${input.sourceBranchId}.`,
       );
-      return { ...result, replayed: false };
+    if (commit.parentCommitId !== input.atCommitId)
+      throw new Error(
+        "Sibling commit parent does not match its branch point.",
+      );
+    this.insertCommit(commit);
+    const branch: BranchRecord = {
+      id: input.branchId,
+      ownerScope: commit.ownerScope,
+      simulationId: commit.simulationId,
+      name: input.name || null,
+      headCommitId: commit.id,
+      origin: buildBranchOrigin({
+        kind: input.originKind,
+        commandId: commit.commandId,
+        sourceBranchId: input.sourceBranchId,
+        sourceHeadCommitId: input.expectedHead,
+        baseCommitId: input.atCommitId,
+      }),
+      createdAt: commit.createdAt,
+    };
+    this.sql()
+      .prepare("INSERT INTO branches VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(
+        branch.id,
+        branch.ownerScope,
+        branch.simulationId,
+        branch.name,
+        branch.headCommitId,
+        JSON.stringify(branch.origin),
+        branch.createdAt,
+      );
+    const result = { branch, commit };
+    this.writeCommand(
+      commit.ownerScope,
+      commit.simulationId,
+      commit.commandId,
+      input.commandInput,
+      fingerprint,
+      recordCommitOutcome(result),
+    );
+    return { ...result, replayed: false };
+  }
+
+  getAlternative(owner: string, simulation: string, id: string): AlternativeRecord | null {
+    if (!this.getSimulation(owner, simulation)) throw new DomainNotFoundError("Simulation not found.");
+    const row = this.sql().prepare("SELECT record_json FROM saved_alternative_operations WHERE owner_scope = ? AND simulation_id = ? AND id = ?")
+      .get(owner, simulation, id) as { record_json: string } | undefined;
+    if (row) return JSON.parse(row.record_json) as AlternativeRecord;
+    const command = this.exportSimulation(owner, simulation).commandResults.find(c => c.canonicalInput.kind === "saved_alternative" &&
+      alternativeFromReceipt(c.canonicalInput, (c.result as { branch: BranchRecord }).branch, (c.result as { commit: CommitRecord }).commit).id === id);
+    if (!command || command.canonicalInput.kind !== "saved_alternative" || command.result.kind !== "commit") return null;
+    decodeAlternativeCommand(command.canonicalInput);
+    return alternativeFromReceipt(command.canonicalInput, command.result.branch, command.result.commit);
+  }
+
+  listAlternatives(owner: string, simulation: string): AlternativeRecord[] {
+    const archive = this.exportSimulation(owner, simulation);
+    const all = new Map<string, AlternativeRecord>();
+    for (const item of archive.commandResults) if (item.canonicalInput.kind === "saved_alternative" && item.result.kind === "commit") {
+      const op = alternativeFromReceipt(item.canonicalInput, item.result.branch, item.result.commit); all.set(op.id, op);
+    }
+    const rows = this.sql().prepare("SELECT record_json FROM saved_alternative_operations WHERE owner_scope = ? AND simulation_id = ?")
+      .all(owner, simulation) as { record_json: string }[];
+    for (const row of rows) { const op = JSON.parse(row.record_json) as AlternativeRecord; all.set(op.id, op); }
+    return [...all.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  }
+
+  private writeAlternative(record: AlternativeRecord) {
+    this.sql().prepare("INSERT INTO saved_alternative_operations VALUES (?, ?, ?, ?) ON CONFLICT(owner_scope, simulation_id, id) DO UPDATE SET record_json = excluded.record_json")
+      .run(record.request.ownerScope, record.request.simulationId, record.id, JSON.stringify(record));
+  }
+
+  reserveAlternative(record: AlternativeRecord) {
+    return this.transaction(() => {
+      const r = validateAlternativeRequest(record.request);
+      if (record.id !== alternativeId(r) || record.fingerprint !== hash(stableStringify(r)))
+        throw new DomainValidationError("Historical reservation identity mismatch.");
+      const previous = this.getAlternative(r.ownerScope, r.simulationId, record.id);
+      if (previous) {
+        if (previous.fingerprint !== record.fingerprint) throw new CommandIdentityError(r.commandId);
+        return { operation: previous, replayed: true };
+      }
+      const identities = [r.commandId];
+      if (r.action === "generate") identities.push(domainId("alternative_generation", record.id));
+      for (const commandId of identities) {
+        this.assertNoHistoricalCommand(r.ownerScope, r.simulationId, commandId);
+        if (this.isAcceptedGenerationCommandId(r.ownerScope, r.simulationId, commandId)) throw new CommandIdentityError(commandId);
+        const collision = this.sql().prepare("SELECT 1 FROM command_results WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?")
+          .get(r.ownerScope, r.simulationId, commandId);
+        const draftCollision = this.sql().prepare("SELECT 1 FROM actor_turn_draft_commands WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?")
+          .get(r.ownerScope, r.simulationId, commandId);
+        if (collision || draftCollision) throw new CommandIdentityError(commandId);
+      }
+      resolveHistoricalSelection(this, r);
+      this.writeAlternative(record);
+      return { operation: record, replayed: false };
+    });
+  }
+
+  updateAlternativeDraft(record: AlternativeRecord, draft: ActorTurnDraftRecord): AlternativeRecord {
+    return this.transaction(() => {
+      const r = record.request;
+      const current = this.getAlternative(r.ownerScope, r.simulationId, record.id)!;
+      if (current.status !== "pending" || current.draft && current.draft.status !== "generating") return current;
+      if (!current.draft) {
+        resolveHistoricalSelection(this, r);
+        if (r.retryOf) {
+          const source = this.getAlternative(r.ownerScope, r.simulationId, r.retryOf);
+          if (source?.draft && (source.draft.promptHash !== draft.promptHash || source.draft.contextHash !== draft.contextHash))
+            throw new DomainValidationError("Historical retry context differs from frozen input.");
+        }
+      }
+      const decoded = decodeActorTurnDraftRecord(draft);
+      const updated = { ...current, draft: decoded, updatedAt: now() };
+      this.writeAlternative(updated); return updated;
+    });
+  }
+
+  settleAlternative(owner: string, simulation: string, id: string, status: "failed" | "discarded", failure: AlternativeRecord["failure"] = null): AlternativeRecord {
+    return this.transaction(() => {
+      const current = this.getAlternative(owner, simulation, id);
+      if (!current) throw new DomainNotFoundError("Historical operation not found.");
+      if (current.status !== "pending" && !(status === "discarded" && current.status === "failed")) return current;
+      const updated: AlternativeRecord = { ...current, status, failure, updatedAt: now(),
+        draft: current.draft && status === "discarded" ? { ...current.draft, status: "discarded" } : current.draft };
+      this.writeAlternative(updated); return updated;
+    });
+  }
+
+  saveAlternative(record: AlternativeRecord): AlternativeRecord {
+    return this.transaction(() => {
+      const r = record.request;
+      const current = this.getAlternative(r.ownerScope, r.simulationId, record.id)!;
+      if (current.status !== "pending") return current;
+      const { command, commit } = buildAlternativeCommit(this, current);
+      this.appendHistoricalBranch({ sourceBranchId: r.sourceBranchId, expectedHead: r.expectedHead,
+        branchId: command.branchId, name: r.action === "manual" ? "edit" : "regenerate", atCommitId: current.parentCommitId,
+        originKind: r.action === "manual" ? "edit" : "regenerate", commandInput: command,
+        commandFingerprint: fingerprintCommand(command), commit });
+      const saved: AlternativeRecord = { ...current, status: "saved", failure: null, updatedAt: now(),
+        draft: current.draft ? { ...current.draft, status: "accepted", updatedAt: now() } : null,
+        outcome: { branchId: command.branchId, commitId: commit.id } };
+      this.writeAlternative(saved);
+      return saved;
     });
   }
 
@@ -966,7 +1079,7 @@ export class SqliteSimulationRepository
     const memoryJobTransitions = this.listMemoryJobTransitions(ownerScope, simulationId);
     const detachedMemoryOperations = this.listDetachedMemoryOperations(ownerScope, simulationId);
     return {
-      schemaVersion: 6,
+      schemaVersion: commandResults.some(item => item.canonicalInput.kind === "saved_alternative") ? 7 : 6,
       contentRevision,
       simulation,
       branches,
@@ -1141,6 +1254,7 @@ export class SqliteSimulationRepository
     draft: ActorTurnDraftRecord;
     commandFingerprint: string;
   }): { draft: ActorTurnDraftRecord; replayed: boolean } {
+    if (input.draft.routing?.version === 4) throw new DomainValidationError("Historical routing requires a saved alternative operation.");
     return this.transaction(() => {
       const prior = this.readDraftCommand(
         input.draft.ownerScope,
@@ -1267,6 +1381,7 @@ export class SqliteSimulationRepository
   replayAcceptedActorTurnDraft(
     input: AcceptActorTurnDraftCommand,
   ): { branch: BranchRecord; commit: CommitRecord } | null {
+    this.assertNoHistoricalCommand(input.ownerScope, input.simulationId, input.commandId);
     const draftCommand = this.sql()
       .prepare(
         "SELECT 1 FROM actor_turn_draft_commands WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?",
@@ -1467,7 +1582,9 @@ export class SqliteSimulationRepository
     simulationId: string,
     commandId: string,
     fingerprint: string,
+    historical = false,
   ): RecordedOutcome | null {
+    if (!historical) this.assertNoHistoricalCommand(ownerScope, simulationId, commandId);
     return this.readCommand(ownerScope, simulationId, commandId, fingerprint);
   }
 
@@ -1507,12 +1624,28 @@ export class SqliteSimulationRepository
       draft.status, JSON.stringify(draft), draft.createdAt, draft.updatedAt);
   }
 
+  private assertNoHistoricalCommand(owner: string, simulation: string, commandId: string) {
+    // Reservation precedes draft capture, including when generation fails before runtime.
+    const reserved = this.sql().prepare(`SELECT id,
+      json_extract(record_json, '$.request.commandId') AS command_id,
+      json_extract(record_json, '$.request.action') AS action
+      FROM saved_alternative_operations WHERE owner_scope = ? AND simulation_id = ?`)
+      .all(owner, simulation) as { id: string; command_id: string; action: string }[];
+    const collision = reserved.some(row => row.command_id === commandId ||
+      row.action === "generate" && domainId("alternative_generation", row.id) === commandId);
+    const accepted = this.sql().prepare(`SELECT 1 FROM command_results WHERE owner_scope = ? AND simulation_id = ?
+      AND json_extract(canonical_input_json, '$.kind') = 'saved_alternative'
+      AND json_extract(canonical_input_json, '$.payload.generated.generationCommandId') = ?`).get(owner, simulation, commandId);
+    if (collision || accepted) throw new CommandIdentityError(commandId);
+  }
+
   private readDraftCommand(
     ownerScope: string,
     simulationId: string,
     commandId: string,
     fingerprint: string,
   ): ActorTurnDraftRecord | null {
+    this.assertNoHistoricalCommand(ownerScope, simulationId, commandId);
     const canonical = this.sql().prepare(
       "SELECT 1 FROM command_results WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?",
     ).get(ownerScope, simulationId, commandId);
@@ -1698,7 +1831,9 @@ export class SqliteSimulationRepository
     simulationId: string,
     commandId: string,
     fingerprint: string,
+    historical = false,
   ): RecordedOutcome | null {
+    if (!historical) this.assertNoHistoricalCommand(ownerScope, simulationId, commandId);
     const draftCommand = this.sql().prepare(
       "SELECT 1 FROM actor_turn_draft_commands WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?",
     ).get(ownerScope, simulationId, commandId);

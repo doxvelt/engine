@@ -15,8 +15,8 @@
 
 This is a bounded implementation contract for LL-03, refreshed against main at
 `7683385bbfb5be514103031b6f1a2a624ae51b6e` (merged PR #30, implementing #29
-complete-whisper replacement on #27 Composer Routing). It specifies work to
-implement, not shipped historical controls, autosave, endpoints or test coverage. [Stage Experience](STAGE_EXPERIENCE.md#historical-revision)
+complete-whisper replacement on #27 Composer Routing). The bounded engine/API implementation is specified below; historical UI controls
+and browser autosave remain targets. [Stage Experience](STAGE_EXPERIENCE.md#historical-revision)
 remains binding; the [Living Library adoption plan](LIVING_LIBRARY_ADOPTION.md#ll-03--historical-revision-provenance-and-durable-operations)
 owns delivery gates. [Composer Routing](COMPOSER_ROUTING.md) governs candidate
 replacement and legacy compatibility. This document adds no separate status board.
@@ -27,7 +27,91 @@ raw prompt, actor context or unrelated whispers. Unsaved inline edits and suspen
 state must survive browser close/reopen through browser-local autosave. Saved
 candidates remain server durable. Browser buffers have no cross-device sync.
 
-## Shipped seams and the gap
+## Bounded engine/API implementation
+
+The saved-alternatives engine/API slice builds on merged #34
+(`d873a1952e79f364846cb90dd60d0222a6d09720`). The earlier baseline table below
+remains a description of the pre-slice seams. UI cycling, inline editing and
+browser-local recovery remain separate delivery targets, not implemented controls.
+
+`createSavedAlternative` in [saved-alternatives.ts](../../src/core/saved-alternatives.ts)
+accepts owner/simulation/command identity, `sourceBranchId`, `expectedHead`,
+`sourceCommitId`, `messageVersionId`, `logicalMessageId`, `actorId`, an `action`
+(`generate` or `manual`) and `audience`. A concrete audience is authoritative;
+`null` explicitly requests a new proposal. The sender is always included. Manual
+editing requires concrete recipients and `manualText`; it makes no provider call.
+Generation optionally supplies `completeWhisper`; omission resolves the selected
+turn's recorded complete input. Unresolved legacy/multiple input or a manual turn
+without recorded direction requires explicit replacement, including `""`.
+
+The source head guards concurrency; the selected turn's immediate parent supplies
+context. The first turn is valid. Selection verifies all immutable identities and
+source ancestry. New generation uses actor-knowledge-v1 through historical routing
+version 4: the same complete-whisper/context projector and stream validator, with
+fresh authoritative recipient direction and no continuation-candidate source.
+Versions 1–3 retain their frozen interpretation. New manual historical edits also
+use actor-knowledge-v1. Existing manual kernel edit/regenerate APIs remain available
+with their original behavior. Ordinary continuation still requires Accept.
+
+Requests reserve a durable operation before invoking the provider. Exact identity
+replay precedes stale checks and never resumes a provider call; changed requests
+conflict. Pending includes interrupted work and does not assert a live worker.
+Explicit retry takes a new command ID, references failed/discarded work and repeats
+its captured request and available prompt/context hashes. Discard can settle
+stranded pending work; late output cannot revive it. Failed work creates no branch.
+A successfully validated candidate is committed immediately in one write transaction:
+source-head revalidation, sibling branch, replacement message/effects, operation-local
+input consumption, candidate/operation terminal state and portable receipt.
+There is no historical Accept endpoint. Old paths and their continuation candidates
+remain unchanged; each sibling head advances independently.
+
+Derived message perceptions and legacy first-impression source events are supported
+sources. Replacement delivery derives no first impressions under actor-knowledge-v1.
+Old selected effects are never copied to new prose. Explicit access/audience-world
+changes and other unsupported event kinds fail before generation pending their
+product policy. This is not a blanket ban on effectful source turns.
+
+All routes below are under `/simulations/:simulationId`; the local API derives
+owner scope and rejects caller-supplied ownership. No hosted authentication is added.
+
+| Route | Contract |
+| --- | --- |
+| `POST /alternatives` | Submit the request above, without owner/simulation fields. Return `{ operation, replayed }`; successful output already names its saved branch/commit. |
+| `GET /alternatives/:id` | Durable detail, including terminal outcome and candidate-specific complete input, performance, audience, manual/generated attribution and bounded adapter/provider/model identity. |
+| `POST /alternatives/:id/retry` | `{ commandId }` only; frozen source input and explicit retry linkage. Return the same bounded detail envelope. |
+| `POST /alternatives/:id/discard` | Empty JSON object; idempotent by scoped operation ID. Return bounded terminal detail. A saved outcome remains saved. |
+| `GET /alternatives` | Deterministically ordered operation summaries, including pending, failed and terminal work. No whispers or nested receipts. |
+| `GET /alternatives?<selection>` | Selection fields listed above, excluding action/input/command ID. Return parent, matching operation summaries and current branch paths containing a version of that logical message at that parent. Includes later forks continuing either version and nested earlier/later branching. |
+| `POST /alternatives/origin` | Selection fields only. Return exact recorded whisper snapshots, complete input or explicit none/legacy/unavailable state, manual/generated origin and legacy correction where established. Uses accepted receipts/consumption without draft rows. |
+
+Detail/generation/retry/discard return explicit allowlisted fields. Discovery carries
+no bulk originating whispers. Prompts, raw contexts and nested receipt/derivation
+artifacts never enter these responses. Legacy continuation generation/retry/detail/
+discard now also use `stageDraft`; continuation acceptance returns only branch
+`id`/`headCommitId`, commit `id` and `replayed`. Existing context inspection and
+package export remain separate interfaces with their existing disclosure scope.
+
+SQLite stores operational historical candidates separately from ordinary drafts.
+They are excluded from logical packages. Archives containing accepted alternatives
+use schema 7 and version-1 `saved_alternative` receipts; archives without these
+records continue to export schema 6. Import validates source selection, input/origin,
+retry bindings, generated receipt policy, replacement events and branch provenance.
+Accepted discovery/detail and exact request replay work from receipts after import
+without operational rows. As with existing receipts, runtime identity and hashes
+are recorded provenance, not signed proof of a provider execution. Failed/discarded
+operational work is installation-local and is not exported.
+
+The focused regression suite is
+[saved-alternatives.test.ts](../../tests/saved-alternatives.test.ts).
+The runnable integration probe is
+[probe-saved-alternatives.ts](../../scripts/probe-saved-alternatives.ts), invoked
+with Node24 as `node scripts/probe-saved-alternatives.ts`. It exercises actual
+loopback HTTP, API process/SQLite restart, transport allowlists and logical
+export/import replay. `--in-process` separately exercises serialized handlers
+without claiming socket or process-restart evidence. Package gates remain required;
+a sandbox-blocked probe is not a passing real HTTP gate.
+
+## Pre-slice seams and the gap
 
 | Seam | Main baseline and implication |
 | --- | --- |
@@ -384,8 +468,9 @@ maintained dependency or parallel system and changes none of #18, #19 or #28 sco
 
 ## Acceptance matrix
 
-These are required future implementation checks, not tests added or executed by
-this document. Exercise the relevant kernel/application, transactional store,
+This matrix remains the complete delivery scope, including future UI work.
+The bounded engine/API tests and probe above cover their respective seams;
+exercise the relevant kernel/application, transactional store,
 actual serialized API and browser boundaries separately.
 
 | Scenario | Required observation |
@@ -412,6 +497,6 @@ actual serialized API and browser boundaries separately.
 | Inline interaction | Single editor, hidden preserved composer, discoverable keyboard/touch actions and focus return; verify Stage's four target viewports and distinguish scripted checks from real device/assistive-technology validation. |
 
 Future implementation validation must report actual coverage and remaining gates
-under the adoption plan. This docs-only change requires relative-link validation,
-`git diff --check` and changed-file scope review; it does not claim runtime, browser,
-accessibility, build or production tests passed.
+under the adoption plan. Review relative links, `git diff --check` and changed-file
+scope alongside implementation gates. Browser, accessibility and live-model
+quality evidence remain separate from deterministic engine/API tests.

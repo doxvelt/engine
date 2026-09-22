@@ -234,7 +234,7 @@ export type MessageVersionRecord = {
     | { mode: "manual"; operation: "turn" | "edit" | "regenerate" }
     | {
         mode: "generated";
-        operation: "turn";
+        operation: "turn" | "regenerate";
         sourceArtifactDigest: string;
         finalTextSource: "generated_verbatim" | "director_preserved" | "acceptor_edited";
       };
@@ -559,7 +559,8 @@ export type ActorTurnDraftArtifact = {
 export const ACTOR_KNOWLEDGE_POLICY = "actor-knowledge-v1";
 
 export type DraftRoutingInput = {
-  version: 1 | 2 | 3;
+  /** V4 uses actor-knowledge-v1 for historical input with authoritative recipients and no draft ancestor. */
+  version: 1 | 2 | 3 | 4;
   /** Required for v2/v3. Complete replacement, including an intentionally empty whisper. */
   completeWhisper?: string;
   initialAudience: string[] | null;
