@@ -21,6 +21,7 @@ async function pageFixture(t: test.TestContext, initialHydration = false) {
   let mount = async () => {};
   const scope = effectScope();
   const modules: Record<string, unknown> = { "../lib/stage-session": sessionModule, "../lib/stage-play": playModule, "../lib/stage-api": apiModule };
+  const storage = new Map<string, string>();
   const bindings = {
     require: (id: string) => { assert.ok(id in modules); return modules[id]; },
     exports: {}, ref, computed, watch, nextTick,
@@ -31,7 +32,7 @@ async function pageFixture(t: test.TestContext, initialHydration = false) {
     onMounted: (callback: () => Promise<void>) => { mount = callback; },
     onBeforeUnmount: (callback: () => void) => { unmount = callback; },
     onBeforeRouteLeave: () => {}, onBeforeRouteUpdate: () => {},
-    window: { removeEventListener: () => {}, addEventListener: () => {}, performance: { getEntriesByType: () => [{ type: "reload" }] } },
+    window: { localStorage: { get length() { return storage.size; }, key: (i: number) => [...storage.keys()][i] ?? null, getItem: (k: string) => storage.get(k) ?? null, setItem: (k: string, v: string) => { storage.set(k, v); } }, removeEventListener: () => {}, addEventListener: () => {}, performance: { getEntriesByType: () => [{ type: "reload" }] } },
   };
   const page = scope.run(() => new Function(...Object.keys(bindings), `${code}\nreturn { startSimulation, openRun, session, setupBusy, setupError, apiBase, simulationId, scenarioId, navigationWarning, refreshPendingDraft };`)(...Object.values(bindings))) as {
     startSimulation(): Promise<void>; openRun(updateRoute?: boolean): Promise<void>;
@@ -59,10 +60,12 @@ async function pageFixture(t: test.TestContext, initialHydration = false) {
     const body = options?.body ? JSON.parse(String(options.body)) as Record<string, unknown> : null;
     calls.push({ url, body });
     if (target.pathname === "/simulations/start") return delay ? delayedStart : Response.json({});
+    if (target.pathname === "/recovery-identity") return Response.json({ installationId: "fixture-installation", ownerId: "local" });
+    if (target.pathname.endsWith("/alternatives")) return Response.json({ operations: [] });
     if (target.pathname === "/runtime") return Response.json({ configured: true });
     if (target.pathname.endsWith("/stage")) {
       if (missingProjection) return Response.json({ error: "Saved branch missing" }, { status: 404 });
-      if (delayProjection && target.pathname.includes("/starting/")) return delayedProjection;
+      if (delayProjection && target.pathname.includes("/starting/")) return delayedProjection.then(response => response.clone());
       if (projectionFailures-- > 0) throw new Error("Projection unavailable");
       return Response.json({ scenarioName: target.pathname.split("/")[2], branch: { id: target.searchParams.get("branchId"), headCommitId: "head" }, actors: [], transcript: [], audience: [] });
     }

@@ -130,6 +130,8 @@ export async function handleLocalApiRequest(
     options.dbPath || ".doxvelt/runtime.sqlite",
   ).open();
   try {
+    if (method === "GET" && url.pathname === "/recovery-identity")
+      return send(response, 200, store.getRecoveryIdentity(LOCAL_OWNER_SCOPE));
     if (method === "POST" && url.pathname === "/examples/last-crossing/play") {
       const body = await bodyOf(request);
       if (Object.keys(body).length) throw new HttpError(400, "Example setup accepts an empty object; the app chooses the workspace and run.");

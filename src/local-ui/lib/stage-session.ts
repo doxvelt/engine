@@ -1,6 +1,10 @@
+import { StageHistory } from "./stage-history.ts";
+import { StageRecovery, type BrowserStorage } from "./stage-recovery.ts";
+import { validStageBuffer, type StageBuffer, type FrozenRequest } from "./stage-buffer.ts";
+import type { StageRecoveryIdentity } from "../../local-api/stage-contracts.ts";
 import { ACTOR_KNOWLEDGE_POLICY, type GenerateStageDraftBody, type PerformStageTurnBody, stageDraft, type ReviseStageDraftBody, type StageDraft, type StageProjection } from "../../local-api/stage-contracts.ts";
 import {
-  acceptDraftBody, createCommandLease, isStaleDraftBasis, playableActors,
+  CommandConvergenceError, acceptDraftBody, createCommandLease, isStaleDraftBasis, playableActors,
   runLeasedMutation, settleGenerationLease, type CommandAction,
 } from "./stage-play.ts";
 
@@ -13,6 +17,172 @@ export type StageScope = { apiBase: string; simulationId: string; branchId: stri
 /** Each instance owns one immutable API/run/branch scope, including its command leases. */
 export class StageSession {
   readonly scope: StageScope;
+  history: StageHistory;
+  recovery: StageRecovery<StageBuffer> | null = null;
+  recoveryWarning = "";
+  recoveryReady = true;
+  continuationBasis = "";
+  private recoveryRequired = false;
+  private requests: FrozenRequest[] = [];
+  private mutationEditor = "";
+  private editorIdentity() { return JSON.stringify({ selected: this.selectedDraftId, review: this.reviewText, correction: this.correctionText,
+    audience: this.correctionAudienceIds, required: this.audienceRequired, confirmed: this.completeWhisperConfirmed, direction: this.direction, performance: this.performance, mode: this.mode, routing: this.modeRouting }); }
+  private restoring = false;
+  private awaitingRecovery: StageBuffer | null = null;
+  get recoveryBlocked() { return this.recoveryRequired && (!this.recoveryReady || !!this.recoveryWarning || !!this.recovery?.warning || !!this.recovery?.conflicts.length); }
+  get continuationStale() { return !!this.continuationBasis && this.continuationBasis !== this.projection?.branch.headCommitId; }
+  snapshot(): StageBuffer {
+    const reviews = this.reviewDrafts.filter(d => this.hasBufferedReview(d.id) || d.id === this.selectedDraftId).map(d => ({
+      id: d.id, basis: d.basisHeadCommitId,
+      text: d.id === this.selectedDraftId ? this.reviewText : this.editorBuffers.get(d.id) ?? d.artifact?.text ?? "",
+      correction: d.id === this.selectedDraftId ? { audience: [...this.correctionAudienceIds], text: this.correctionText, required: this.audienceRequired, confirmed: this.completeWhisperConfirmed }
+        : this.correctionBuffers.get(d.id) ?? { audience: d.audience.filter(id => id !== d.actorId), text: d.routingReview?.completeWhisper ?? "", required: d.routingReview?.correctedAudience != null, confirmed: false },
+    }));
+    return JSON.parse(JSON.stringify({ basis: this.continuationBasis, mode: this.mode, routing: this.modeRouting, direction: this.direction,
+      performance: this.performance, selected: this.selectedDraftId, editing: this.editing, reviews, history: this.history.snapshot(), requests: this.requests }));
+  }
+  copyOut() { return { scope: this.recovery?.scope ?? this.scope, current: this.snapshot(), awaitingAuthoritativeRecovery: this.awaitingRecovery }; }
+  autosave(): boolean {
+    if (this.disposed) return false;
+    if (!this.recoveryRequired) return true;
+    if (this.restoring || !this.recoveryReady || !this.recovery) return false;
+    return this.recovery.save(this.snapshot());
+  }
+  blockRecovery(message: string) { this.recoveryRequired = true; this.recoveryReady = false; this.recoveryWarning = message; }
+  async enableRecovery(storage: BrowserStorage): Promise<void> {
+    this.recoveryRequired = true; this.recoveryReady = false;
+    try {
+      const response = await this.fetcher(`${this.scope.apiBase.replace(/\/$/, "")}/recovery-identity`);
+      if (!response.ok) throw new Error("Cannot establish installation and owner identity. Local recovery is unavailable.");
+      const identity = await response.json() as StageRecoveryIdentity;
+      if (typeof identity.installationId !== "string" || !identity.installationId || typeof identity.ownerId !== "string" || !identity.ownerId) throw new Error("Invalid recovery identity.");
+      if (this.disposed) return;
+      this.recovery = new StageRecovery({ ...identity, ...this.scope }, storage, validStageBuffer);
+      const buffer = this.recovery.load();
+      this.awaitingRecovery = buffer;
+      await this.refresh();
+      if (this.disposed) return;
+      if (buffer) await this.restoreBuffer(buffer);
+      else await this.history.refresh(true);
+      if (this.disposed) return;
+      this.awaitingRecovery = null;
+      this.recoveryReady = true;
+      if (!this.recovery.warning) this.autosave();
+    } catch (error) { if (!this.disposed) this.recoveryWarning = String(error); }
+  }
+  private async restoreBuffer(buffer: StageBuffer): Promise<void> {
+    if (!validStageBuffer(buffer) || !this.projection) throw new Error("Invalid recovery buffer or missing authoritative projection.");
+    const editorBefore = this.editorIdentity();
+    const historyBefore = JSON.stringify(this.history.snapshot());
+    this.restoring = true;
+    try {
+      const details = await Promise.all(buffer.reviews.map(r => this.request<StageDraft>(`/drafts/${encodeURIComponent(r.id)}`)));
+      if (this.disposed) return;
+      if (editorBefore !== this.editorIdentity()) throw new Error("Newer typing arrived during recovery. It remains in memory; resolve before restoring another version.");
+      for (const [i, d] of details.entries()) {
+        if (d.id !== buffer.reviews[i]!.id || d.branchId !== this.scope.branchId || d.basisHeadCommitId !== buffer.reviews[i]!.basis) throw new Error("Candidate recovery scope mismatch.");
+      }
+      const selection = buffer.history.editor?.selection;
+      if (selection && (selection.sourceBranchId !== this.scope.branchId || !this.projection.transcript.some(t => t.commitId === selection.sourceCommitId && t.messageVersionId === selection.messageVersionId && t.logicalMessageId === selection.logicalMessageId && t.actorId === selection.actorId))) throw new Error("Historical recovery selection is not on this branch.");
+      for (const request of [...buffer.requests, ...(buffer.history.command ? [buffer.history.command] : [])]) {
+        if (request.body.branchId !== undefined && request.body.branchId !== this.scope.branchId || request.body.sourceBranchId !== undefined && request.body.sourceBranchId !== this.scope.branchId) throw new Error("Recovered command scope mismatch.");
+      }
+      const recoveredHistory = new StageHistory(this);
+      recoveredHistory.restore(buffer.history);
+      await recoveredHistory.refresh(true);
+      if (this.disposed) return;
+      if (editorBefore !== this.editorIdentity() || historyBefore !== JSON.stringify(this.history.snapshot())) throw new Error("Newer typing arrived during recovery. It remains in memory; resolve before restoring another version.");
+      this.continuationBasis = buffer.basis; this.activeMode = buffer.mode; this.modeRouting = buffer.routing;
+      this.direction = buffer.direction; this.performance = buffer.performance;
+      this.editorBuffers.clear(); this.correctionBuffers.clear(); this.retainedReviews.clear();
+      for (const [i, d] of details.entries()) {
+        const r = buffer.reviews[i]!;
+        this.retainedReviews.set(d.id, stageDraft(d)); this.editorBuffers.set(d.id, r.text); this.correctionBuffers.set(d.id, r.correction);
+      }
+      this.selectedDraftId = null; this.selectDraft(buffer.selected); this.editing = buffer.editing;
+      this.history.dispose();
+      this.history = recoveredHistory;
+      this.pending = null; this.commands.reset(); this.generationId = null; this.generationDraft = null;
+      this.requests = buffer.requests;
+      if (this.requests.length) this.pending = async () => {
+        // Reopen reconciles saved identities first; replay uses the exact captured
+        // payload, never the newer editor overlay or an inferred new command.
+        let generated: StageDraft | undefined;
+        let committedHead: string | undefined;
+        for (const r of [...this.requests]) {
+          const result = await this.request<{ draft?: StageDraft; branch?: { headCommitId: string } }>(r.suffix, r.body);
+          if (r.suffix === "/turns" || r.suffix.endsWith("/accept")) committedHead = result.branch?.headCommitId;
+          if (result.draft) generated = result.draft;
+        }
+        await this.refresh();
+        if (committedHead && committedHead === this.projection?.branch.headCommitId) this.continuationBasis = committedHead;
+        if (generated && !this.disposed) this.notice = "Saved request reconciled. Its candidate is available in Saved drafts; local edits remain attached to their original candidate.";
+      };
+    } finally { this.restoring = false; }
+  }
+  async retryRecovery(): Promise<void> {
+    if (!this.recovery || this.busy || this.history.busy) return;
+    try {
+      await this.refresh();
+      if (this.awaitingRecovery) await this.restoreBuffer(this.awaitingRecovery);
+      else await this.history.refresh(true);
+      if (this.disposed) return;
+      this.awaitingRecovery = null; this.recoveryReady = true; this.recoveryWarning = "";
+      this.autosave();
+    } catch (error) { if (!this.disposed) this.recoveryWarning = String(error); }
+  }
+  async resolveRecovery(index: number | null): Promise<void> {
+    if (!this.recovery || this.busy || this.history.busy) return;
+    const buffer = index === null ? this.snapshot() : this.recovery.conflicts[index]?.data;
+    if (!buffer) return;
+    const frozen = (value: StageBuffer) => JSON.stringify({ requests: value.requests, command: value.history.command });
+    const chosen = frozen(buffer);
+    if ([this.snapshot(), ...this.recovery.conflicts.map(r => r.data)].some(data => (data.requests.length || data.history.command) && frozen(data) !== chosen)) {
+      this.recoveryWarning = "A different version has unresolved requests. Reconcile that version's exact requests before choosing editor text.";
+      return;
+    }
+    this.recoveryReady = false;
+    try {
+      await this.refresh();
+      await this.restoreBuffer(buffer);
+      if (this.disposed) return;
+      this.recoveryReady = true;
+      this.recoveryWarning = "";
+      this.recovery.resolve(this.snapshot());
+    } catch (error) { this.recoveryWarning = String(error); }
+  }
+  async reconcileConflict(index: number): Promise<void> {
+    const record = this.recovery?.conflicts[index];
+    if (!record || this.busy || this.history.busy) return;
+    this.busy = true;
+    try {
+      // Read authoritative projection/status using an isolated controller. The
+      // user explicitly chose replay of this already-persisted version, not a merge.
+      const other = new StageSession(this.scope, this.fetcher);
+      await other.refresh();
+      await other.restoreBuffer(JSON.parse(JSON.stringify(record.data)) as StageBuffer);
+      const identityResponse = await this.fetcher(`${this.scope.apiBase.replace(/\/$/, "")}/recovery-identity`);
+      const identity = await identityResponse.json() as StageRecoveryIdentity;
+      if (!identityResponse.ok || identity.installationId !== this.recovery!.scope.installationId || identity.ownerId !== this.recovery!.scope.ownerId) throw new Error("Recovery identity changed.");
+      if (this.disposed) return;
+      if (other.needsReconcile) await other.resume();
+      if (other.history.command) await other.history.resume();
+      if (other.needsReconcile || other.history.command) throw new Error(other.error || other.history.error || "Request remains unresolved.");
+      if (this.disposed) return;
+      this.recovery!.reviseConflict(record, other.snapshot());
+      if (JSON.stringify(this.requests) === JSON.stringify(record.data.requests)) { this.requests = []; this.pending = null; }
+      const commandIdentity = (c: typeof this.history.command) => c ? JSON.stringify({ suffix: c.suffix, body: c.body }) : "";
+      if (commandIdentity(this.history.command) === commandIdentity(record.data.history.command)) this.history.command = null;
+      this.autosave();
+      this.recoveryWarning = "Requests reconciled. Choose a buffer version explicitly; both texts remain available.";
+    } catch (error) { if (!this.disposed) this.recoveryWarning = String(error); }
+    finally { if (!this.disposed) this.busy = false; }
+  }
+  allowFreshContinuation(): void {
+    if (this.selectedDraft || this.needsReconcile) return;
+    this.continuationBasis = this.projection?.branch.headCommitId ?? "";
+    this.autosave();
+  }
   private fetcher: typeof fetch;
   private disposed = false;
   private refreshVersion = 0;
@@ -62,6 +232,7 @@ export class StageSession {
   constructor(scope: StageScope, fetcher: typeof fetch = fetch) {
     this.scope = Object.freeze({ ...scope });
     this.fetcher = fetcher;
+    this.history = new StageHistory(this);
   }
   get reviewDrafts(): StageDraft[] {
     return [...this.drafts, ...[...this.retainedReviews.values()].filter(draft => !this.drafts.some(item => item.id === draft.id))];
@@ -100,17 +271,38 @@ export class StageSession {
   hasBufferedReview(id: string): boolean {
     return this.editorBuffers.has(id) || this.correctionBuffers.has(id);
   }
-  get unsaved(): boolean { return this.editorBuffers.size > 0 || this.correctionBuffers.size > 0 || this.unsavedReview || this.hasCorrectionChanges || !!this.direction.trim() || !!this.performance.trim(); }
+  get unsaved(): boolean { return !!this.history.editor || !!this.history.command || this.requests.length > 0 || this.editorBuffers.size > 0 || this.correctionBuffers.size > 0 || this.unsavedReview || this.hasCorrectionChanges || !!this.direction.trim() || !!this.performance.trim(); }
   get needsReconcile(): boolean { return this.pending !== null; }
-  dispose(): void { this.disposed = true; this.refreshVersion++; }
+  dispose(): void { this.autosave(); this.disposed = true; this.refreshVersion++; this.history.dispose(); }
+
+  private async assertRecoveryIdentity(): Promise<void> {
+    if (!this.recovery) return;
+    const response = await this.fetcher(`${this.scope.apiBase.replace(/\/$/, "")}/recovery-identity`);
+    const identity = await response.json() as StageRecoveryIdentity;
+    if (this.disposed) throw new Error("Stage scope closed.");
+    if (!response.ok || identity.installationId !== this.recovery.scope.installationId || identity.ownerId !== this.recovery.scope.ownerId) {
+      this.recoveryWarning = "API installation or owner changed. Reopen Stage to establish scope; current text remains available for copy-out.";
+      throw new Error(this.recoveryWarning);
+    }
+  }
 
   async request<T>(suffix: string, body?: Record<string, unknown>): Promise<T> {
     const fetcher = this.fetcher;
+    if (body && suffix !== "/alternatives/origin" && this.recoveryRequired) {
+      if (!this.recoveryReady || !this.recovery) throw new Error("Recovery identity is not ready; mutation not submitted.");
+      await this.assertRecoveryIdentity();
+      if (this.pending && !suffix.startsWith("/alternatives")) {
+        const request = { suffix, body: JSON.parse(JSON.stringify(body)) as Record<string, unknown> };
+        if (!this.requests.some(r => JSON.stringify(r) === JSON.stringify(request))) this.requests.push(request);
+      }
+      if (!this.autosave()) throw new Error("Mutation identity could not be saved locally. Resolve recovery before submitting.");
+    }
     const response = await fetcher(`${this.scope.apiBase.replace(/\/$/, "")}/simulations/${encodeURIComponent(this.scope.simulationId)}${suffix}`, {
       method: body ? "POST" : "GET",
       ...(body ? { headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {}),
     });
     const result = await response.json();
+    if (this.recovery) await this.assertRecoveryIdentity();
     if (!response.ok) throw new StageApiError(response.status, result.error || `Request failed (${response.status}).`);
     return result as T;
   }
@@ -159,6 +351,7 @@ export class StageSession {
         if (this.hasBufferedReview(id)) this.retainedReviews.set(id, terminal);
       }
       this.projection = projection;
+      if (!this.continuationBasis) this.continuationBasis = projection.branch.headCommitId;
       this.drafts = recovery.drafts;
       if (generated?.generationCommandId === this.generationId) this.generationDraft = stageDraft(generated);
       if (!this.actorId) this.actorId = this.actors[0]?.id || "";
@@ -238,31 +431,38 @@ export class StageSession {
   compose(): void { if (!this.busy && !this.pending) this.selectDraft(null); }
 
   private async execute(operation: () => Promise<void>): Promise<void> {
-    if (this.busy || this.pending || this.disposed) return;
+    if (this.busy || this.pending || this.disposed || this.recoveryBlocked || this.history.editor || this.history.command) return;
     this.notice = "";
+    this.mutationEditor = this.editorIdentity();
     this.pending = operation;
     await this.resume();
   }
   async resume(): Promise<void> {
     if (this.busy || !this.pending || this.disposed) return;
+    this.mutationEditor = this.editorIdentity();
     this.busy = true;
     this.error = "";
     try {
       await this.pending();
       if (!this.disposed) {
         this.pending = null;
+        this.requests = [];
         this.settleGenerationIfConverged();
+        this.autosave();
       }
     } catch (error) {
       if (this.disposed) return;
       this.error = error instanceof Error ? error.message : "The request did not converge.";
       if (error instanceof StageApiError && error.status >= 400 && error.status < 500) {
         this.pending = null;
+        this.requests = [];
+        this.autosave();
         try { await this.refresh(); } catch { /* retain the refresh error */ }
       }
     } finally { if (!this.disposed) this.busy = false; }
   }
   private input() {
+    if (this.continuationStale) throw new Error("The continuation basis has advanced. Explicitly start at the current head or return to the original candidate.");
     if (!this.projection || !this.actors.some(actor => actor.id === this.actorId)) throw new Error("Choose a valid actor.");
     if (this.audienceMode === "selected" && this.audienceIds.some(id => !this.availableAudience.some(actor => actor.id === id) && id !== this.actorId))
       throw new Error("Audience changed. Choose available actors before submitting.");
@@ -277,6 +477,7 @@ export class StageSession {
         commandId => this.request("/turns", { ...input, commandId } satisfies PerformStageTurnBody),
         () => this.refresh());
       if (this.disposed) return;
+      this.continuationBasis = this.projection?.branch.headCommitId ?? this.continuationBasis;
       if (this.performance === text) this.performance = "";
       this.notice = "Performed.";
     });
@@ -306,10 +507,11 @@ export class StageSession {
   }
   private async receiveGeneratedDraft(draft: StageDraft): Promise<void> {
     if (draft.generationCommandId === this.generationId) this.generationDraft = stageDraft(draft);
-    await this.refresh();
+    try { await this.refresh(); } catch (error) { throw new CommandConvergenceError(error); }
     if (this.disposed) return;
     if (!this.drafts.some(item => item.id === draft.id) && ["ready", "failed", "generating"].includes(draft.status)) this.drafts.push(stageDraft(draft));
-    this.selectDraft(draft.id);
+    if (this.editorIdentity() === this.mutationEditor) this.selectDraft(draft.id);
+    else this.notice = "Candidate saved. Newer selection and wording remain unchanged.";
   }
   async retry(): Promise<void> {
     const original = this.selectedDraft;
@@ -357,8 +559,9 @@ export class StageSession {
         commandId => this.request(`/drafts/${encodeURIComponent(draft.id)}/${action}`, body(commandId)),
         () => this.refresh());
       if (this.disposed) return;
+      if (action === "accept") this.continuationBasis = this.projection?.branch.headCommitId ?? this.continuationBasis;
       this.drafts = this.drafts.filter(item => item.id !== draft.id);
-      this.selectDraft(null);
+      if (this.editorIdentity() === this.mutationEditor) this.selectDraft(null);
       this.notice = action === "accept" ? "Accepted." : "Discarded.";
     });
   }

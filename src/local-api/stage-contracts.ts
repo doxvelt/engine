@@ -90,3 +90,6 @@ export type HistoricalOriginBody = import("../core/saved-alternatives.ts").Histo
 export type StageAlternative = ReturnType<typeof stageAlternative>;
 export type StageAlternativeDetail = ReturnType<typeof stageAlternativeDetail>;
 export type StageAcceptedOutcome = { branch: { id: string; headCommitId: string }; commit: { id: string }; replayed: boolean };
+export type StageRecoveryIdentity = { installationId: string; ownerId: string };
+export type StageOrigin = import("../core/saved-alternatives.ts").OriginInput;
+export type StageAlternatives = Omit<ReturnType<typeof import("../core/saved-alternatives.ts").discoverSavedAlternatives>, "operations"> & { operations: StageAlternative[] };

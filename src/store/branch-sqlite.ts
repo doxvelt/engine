@@ -106,6 +106,9 @@ export class SqliteSimulationRepository
         }
       }
       const schema = `
+      CREATE TABLE IF NOT EXISTS application_installation (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1), id TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS saved_alternative_operations (
         owner_scope TEXT NOT NULL, simulation_id TEXT NOT NULL, id TEXT NOT NULL, record_json TEXT NOT NULL,
         PRIMARY KEY (owner_scope, simulation_id, id)
@@ -479,6 +482,13 @@ export class SqliteSimulationRepository
       WHERE s.owner_scope = ?
       ORDER BY (n.opened_at IS NOT NULL) DESC, n.opened_at DESC, s.created_at DESC, s.id COLLATE BINARY ASC
     `).all(ownerScope) as SimulationCollectionItem[];
+  }
+
+  /** Installation-local identity, intentionally excluded from logical archives. */
+  getRecoveryIdentity(ownerScope: string): { installationId: string; ownerId: string } {
+    this.sql().prepare("INSERT OR IGNORE INTO application_installation VALUES (1, ?)").run(randomUUID());
+    const row = this.sql().prepare("SELECT id FROM application_installation WHERE singleton = 1").get()!;
+    return { installationId: String(row.id), ownerId: ownerScope };
   }
 
   getNavigationVersion(ownerScope: string): string | null {
