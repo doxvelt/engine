@@ -2,7 +2,8 @@
 
 **Status:** Living Library + **Continuous script** is the selected interaction
 and visual direction. This contract separates that target from the implemented
-baseline at `c400e2a`. It supersedes earlier Stage study hypotheses; selection of
+baseline at `7683385bbfb5be514103031b6f1a2a624ae51b6e` (merged PR #30).
+It supersedes earlier Stage study hypotheses; selection of
 a direction does not approve every prototype behavior. See the
 [adoption plan](LIVING_LIBRARY_ADOPTION.md) for dependency gates and acceptance checks,
 and the [design system](../../design-system/README.md) for visual treatment.
@@ -15,17 +16,18 @@ The existing Nuxt/Nuxt UI Stage uses shared
 
 - One conversation surface serves opening, history and generated draft review,
   with a compact header, scrolling history and reachable composer/review actions.
-- **Direct / Perform** have independent prose buffers. Direct generates a durable
-  Pi draft for the selected actor and audience. **Perform immediately commits**
-  manual prose through the supported turn API; there is no manual preview lifecycle.
+- **Stage whisper / Perform** have independent prose and routing buffers.
+  Stage whisper generates a durable Pi candidate for a fixed actor, with tentative
+  or unspecified initial recipients and a validated audience proposal.
+  **Perform immediately commits** manual prose through the supported turn API; there is no manual preview lifecycle.
 - Actor and Audience pickers send explicit supported IDs from the pinned cast.
-  The current `all` picker expands that cast; it does not change the persistent
+  The current **All** picker expands that cast; it does not change the persistent
   presence roster or supply an unrestricted API alias. The sender perceives its
   own turn. Invalid IDs fail without widening delivery. No input routing parser ships.
 - Generated performances are read-first drafts with Edit, Retry, Accept and
   Discard. Actor and audience are captured at generation and cannot be rebound
-  at acceptance. Retry creates a distinct durable candidate with the original
-  basis, actor, audience and private direction; the earlier draft stays reachable.
+  at acceptance. Retry creates a distinct durable candidate with the captured
+  basis, actor, routing policy and private input; the earlier draft stays reachable.
 - Saved drafts are discovered through owner/simulation/branch-scoped repository
   reads, including after lost responses, browser reload and API restart. Stale
   bases and failed/in-progress records remain visible; terminal records leave
@@ -35,16 +37,17 @@ The existing Nuxt/Nuxt UI Stage uses shared
   edits, with navigation warnings. This is not browser-reload autosave of all input.
 - Opening orientation is **pinned scenario identity only** plus a neutral invitation.
   Identity inspection exposes safe public identity (currently name, kind and ID),
-  not subjective context. The discovery list filters draft records server-side
-  through `stageDraft`. Generation/retry responses and draft-detail GET return full
-  records, including `stageWhispers` text, `context` and `prompt`; the Stage client
-  filters these after receipt. Its `StageDraft` view/type is not an HTTP redaction
-  boundary. Transport minimization and authorized provenance retrieval remain
-  explicit follow-on work, not existing guarantees.
-- [Home](../../src/local-ui/pages/index.vue) offers the supported example, workspace
-  creation/Studio access and browser-local recent workspaces. [The last crossing](LAST_CROSSING.md)
-  starts or resumes one database-backed example without recompiling on resume.
-  This historical baseline predates the collection slice documented below.
+  not subjective context. Discovery uses `stageDraft` server-side for all candidates.
+  Routed generation/retry/detail/revision/discard also use that projection, including
+  complete-whisper and candidate-specific provenance review. Legacy unrouted
+  generation/retry/detail/discard still return full records with whispers, context
+  and prompt; client filtering is not HTTP redaction. Acceptance returns branch/commit
+  data. Historical transport minimization and authorized accepted-input retrieval
+  remain follow-on work.
+- [Home](../../src/local-ui/pages/index.vue) lists saved simulations with Continue,
+  the example and Create your own/Studio routes, plus separate browser workspace
+  recents. [The last crossing](LAST_CROSSING.md) starts or resumes one database-backed
+  example without recompiling on resume. Collection/resume semantics are below.
 
 These are implementation boundaries, not a new live-inference or release claim.
 Older broad architecture status lists are not the Stage implementation inventory.
@@ -118,6 +121,11 @@ Its versioned proposal policy separates observation from delivery; legacy drafts
 retain fixed routing and their historical context interpretation. The notation
 requirements below remain a target, not shipped grammar.
 
+Merged #30 implements #29 complete-whisper replacement on #27's candidate
+lifecycle. Routed responses are projected on the server; legacy full-record
+responses remain as described above. The historical contract owns the remaining
+minimization boundary.
+
 The selected vocabulary is **Stage whisper / Perform**, **Generate draft**,
 **Original stage whisper**, and **draft performance**. The original private
 instruction and resulting performance are separate objects. Mode switching
@@ -144,8 +152,9 @@ supported explicit-ID API and sender-own perception invariant.
 
 The endorsed direction allows a natural-language stage whisper to request a
 **draft plus proposed audience**, without mandatory audience selection up front.
-This is a target requiring engine/API work: the study used fixed replies and
-fixed audience proposals, so it proves neither inference nor validation.
+The bounded picker flow now follows #27's engine/API contract. The study used
+fixed replies and fixed audience proposals, so the study itself proves neither
+inference nor validation.
 
 The selected actor receives the private whisper; the reviewed audience perceives
 the accepted performance. A request to tell one person about another must not
@@ -156,12 +165,11 @@ performance must not be carried into this new flow without that scope decision.
 Natural-language intent is a candidate interpretation,
 not a lossless counterpart of picker metadata.
 
-Before enabling this flow, define a validated revised-candidate contract for
-proposed/corrected actor or audience, context and staged-effect revalidation, and
-explicit review of the final performance and concrete recipients. Generated
-routing is untrusted staged data and delivers nothing. Acceptance must never
-rebind a fixed candidate under new metadata. Until that contract exists, retain
-current fixed actor/audience generation and acceptance.
+The shipped revised-candidate contract validates audience corrections at a fixed
+actor/basis, with explicit review of final performance and concrete recipients.
+Generated routing is untrusted staged data and delivers nothing. Acceptance must
+never rebind a fixed candidate under new metadata. Actor changes require a fresh
+operation; notation and broader effects remain outside that bounded contract.
 
 ## Complete-whisper replacement (#29)
 
@@ -185,23 +193,50 @@ Historical editing, browser-close autosave and notation remain separate work.
 
 ## Historical revision
 
+The bounded [Historical Revision contract](HISTORICAL_REVISION.md) specifies #17's
+operation identity, parent basis, provenance, transport, acceptance and recovery
+requirements against merged #30. It preserves this selected interaction design and marks
+unresolved policies explicitly; it does not claim implementation.
+
 Revision belongs **inline at the selected historical turn**, with only one active
 editor. Hide and preserve the normal continuation composer, its mode buffers and
 any candidate while revising; cancel restores them. A waiting continuation must
 be resolved or explicitly cancelled before conflicting historical work begins.
 
-Offer editing the performance, regenerating from that turn's own original stage
-whisper, or editing that whisper to generate again. Use its **pre-turn context**,
-never the latest head or another turn's whisper. If no originating whisper exists
-(or provenance is unavailable), say so and allow explicit new direction; do not
-invent a recovered instruction. Authorized provenance retrieval and durable
-historical operations are dependencies, not capabilities of today's Stage client.
+Offer editing the performance, regenerating from the selected turn's latest
+recorded complete whisper, or editing that complete whisper to generate again.
+Use only the latest complete version (including deliberate empty) and the original
+actor's **pre-turn context**. Earlier whispers, additive correction feedback,
+accepted/source performance and prior attempts never enter new historical generation.
+Source/derivation remains provenance outside model input. Recompute implicit
+recipient references from current input; prose changes preserve explicit audience
+decisions. These generation semantics are settled by #29/#30.
+
+Display exact available original provenance separately from generation input.
+Legacy additive or multiple-input origins cannot be invented into a complete
+whisper: require explicitly entered complete replacement, including deliberate
+empty confirmation. Preserve legacy frozen records and exact retry interpretation.
+If direction was absent or provenance is unavailable, label that state honestly
+and allow explicit new direction. The approved owner/director retrieval policy
+uses a dedicated scoped response without raw prompt/context or unrelated whispers;
+that endpoint and historical operations still require implementation.
+
+Unsaved inline edits and the suspended continuation must survive browser close/reopen
+through browser-local autosave. Saved candidates remain server durable; local
+buffers have no cross-device sync. Storage failure, scope conflicts and late-response
+recovery follow the historical contract, not merely navigation warnings.
 
 An accepted replacement creates an alternate path from the selected turn's parent.
 The original path and original candidate remain available. Old descendants,
 perceptions, memories and closures are not inherited by the replacement. A
 preserved continuation candidate stays bound to its original branch/head; returning
 to it must restore that basis, not offer it against the alternative history.
+
+Effectful selected turns and subsequent acceptance of retained sibling candidates
+remain the historical contract's product gates. Delivery follows the adoption plan:
+docs contract review/merge, separate engine/API validation and merge, then a separate
+UI/recovery PR. Implementation PRs require independent review and human merge;
+partial deliveries do not automatically close #17 or change #18, #19 or #28 scope.
 
 ## Actor state and player orientation gates
 
