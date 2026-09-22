@@ -101,6 +101,9 @@ try {
     await page.getByRole('button', { name: `Select path ${originalIndex}: main`, exact: true }).click();
     await page.waitForURL(url => url.searchParams.get('branch') === 'main');
     await page.getByText('Later independent continuation', { exact: true }).waitFor();
+    // Navigation exposes the authoritative transcript before the asynchronous
+    // browser overlay restore completes. Wait for that independent recovery gate.
+    await page.waitForFunction(() => document.querySelector('textarea[aria-label="Stage whisper"]')?.value === 'SUSPENDED-DIRECTION');
     assert.equal(await page.getByRole('textbox', { name: 'Stage whisper', exact: true }).inputValue(), 'SUSPENDED-DIRECTION');
     await page.getByRole('button', { name: 'Revise / alternate paths' }).first().click();
     await page.getByRole('button', { name: 'Cancel · return to continuation', exact: true }).scrollIntoViewIfNeeded();
