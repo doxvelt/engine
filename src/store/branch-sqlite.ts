@@ -969,13 +969,17 @@ export class SqliteSimulationRepository
         if (previous.fingerprint !== record.fingerprint) throw new CommandIdentityError(r.commandId);
         return { operation: previous, replayed: true };
       }
-      this.assertNoHistoricalCommand(r.ownerScope, r.simulationId, r.commandId);
-      if (this.isAcceptedGenerationCommandId(r.ownerScope, r.simulationId, r.commandId)) throw new CommandIdentityError(r.commandId);
-      const collision = this.sql().prepare("SELECT 1 FROM command_results WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?")
-        .get(r.ownerScope, r.simulationId, r.commandId);
-      const draftCollision = this.sql().prepare("SELECT 1 FROM actor_turn_draft_commands WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?")
-        .get(r.ownerScope, r.simulationId, r.commandId);
-      if (collision || draftCollision) throw new CommandIdentityError(r.commandId);
+      const identities = [r.commandId];
+      if (r.action === "generate") identities.push(domainId("alternative_generation", record.id));
+      for (const commandId of identities) {
+        this.assertNoHistoricalCommand(r.ownerScope, r.simulationId, commandId);
+        if (this.isAcceptedGenerationCommandId(r.ownerScope, r.simulationId, commandId)) throw new CommandIdentityError(commandId);
+        const collision = this.sql().prepare("SELECT 1 FROM command_results WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?")
+          .get(r.ownerScope, r.simulationId, commandId);
+        const draftCollision = this.sql().prepare("SELECT 1 FROM actor_turn_draft_commands WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?")
+          .get(r.ownerScope, r.simulationId, commandId);
+        if (collision || draftCollision) throw new CommandIdentityError(commandId);
+      }
       resolveHistoricalSelection(this, r);
       this.writeAlternative(record);
       return { operation: record, replayed: false };
@@ -1377,6 +1381,7 @@ export class SqliteSimulationRepository
   replayAcceptedActorTurnDraft(
     input: AcceptActorTurnDraftCommand,
   ): { branch: BranchRecord; commit: CommitRecord } | null {
+    this.assertNoHistoricalCommand(input.ownerScope, input.simulationId, input.commandId);
     const draftCommand = this.sql()
       .prepare(
         "SELECT 1 FROM actor_turn_draft_commands WHERE owner_scope = ? AND simulation_id = ? AND command_id = ?",
@@ -1620,14 +1625,18 @@ export class SqliteSimulationRepository
   }
 
   private assertNoHistoricalCommand(owner: string, simulation: string, commandId: string) {
-    const reserved = this.sql().prepare(`SELECT 1 FROM saved_alternative_operations
-      WHERE owner_scope = ? AND simulation_id = ? AND
-      (json_extract(record_json, '$.request.commandId') = ? OR json_extract(record_json, '$.draft.generationCommandId') = ?)`)
-      .get(owner, simulation, commandId, commandId);
+    // Reservation precedes draft capture, including when generation fails before runtime.
+    const reserved = this.sql().prepare(`SELECT id,
+      json_extract(record_json, '$.request.commandId') AS command_id,
+      json_extract(record_json, '$.request.action') AS action
+      FROM saved_alternative_operations WHERE owner_scope = ? AND simulation_id = ?`)
+      .all(owner, simulation) as { id: string; command_id: string; action: string }[];
+    const collision = reserved.some(row => row.command_id === commandId ||
+      row.action === "generate" && domainId("alternative_generation", row.id) === commandId);
     const accepted = this.sql().prepare(`SELECT 1 FROM command_results WHERE owner_scope = ? AND simulation_id = ?
       AND json_extract(canonical_input_json, '$.kind') = 'saved_alternative'
       AND json_extract(canonical_input_json, '$.payload.generated.generationCommandId') = ?`).get(owner, simulation, commandId);
-    if (reserved || accepted) throw new CommandIdentityError(commandId);
+    if (collision || accepted) throw new CommandIdentityError(commandId);
   }
 
   private readDraftCommand(
