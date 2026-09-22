@@ -1,6 +1,7 @@
 # Living Library adoption plan
 
-Docs-only handoff based on `c400e2a`. The selected contract is
+Historical contract refreshed against main
+`7683385bbfb5be514103031b6f1a2a624ae51b6e` (merged PR #30). The selected contract is
 [Stage Experience](STAGE_EXPERIENCE.md), with
 [visual guidance](../../design-system/README.md). The private study is an existing
 reference, not a maintained frontend or required preview. The original handoff was
@@ -104,30 +105,45 @@ manual Perform until its own decision. Fixed study replies prove no live inferen
 
 **Issue URL:** https://github.com/doxvelt/engine/issues/17.
 
+**Implementation contract:** [Historical Revision](HISTORICAL_REVISION.md) binds
+the selected Stage interaction to #30's shipped complete-whisper candidate
+lifecycle, with an acceptance matrix and explicit unresolved decisions. This slice remains the
+delivery gate; the contract is docs-only, not an implementation claim.
+
 **Baseline:** The engine supports immutable alternate history and pure head-relative
 context; Stage supports continuation drafts and durable retry, not historical
-revision controls. Discovery is filtered server-side through `stageDraft`, but
-generation/retry and draft-detail HTTP responses carry full records with whisper
-text, context and prompt. The Stage client filters those responses after receipt;
-its view/type does not redact transport payloads. Saved candidates
-survive API restart; local unsaved edits survive refresh with navigation warnings.
+revision controls. At this baseline, routed generation/retry/detail/revision/discard
+responses and discovery are projected server-side through `stageDraft`; legacy
+generation/retry/detail/discard still expose full records with context and prompt.
+Client filtering does not redact transport. Saved candidates survive API restart;
+unsaved editor/correction buffers survive in-session refresh, not browser close/reopen.
 
 **Target:** One inline historical editor; hide/preserve the continuation composer
-and its candidate. Edit performance, regenerate the selected turn's own whisper,
-or edit that whisper against pre-turn context. Preserve original path/candidate;
-accept an alternative containing the prefix and replacement, excluding descendants.
+and its candidate. Edit performance, regenerate the selected turn's latest complete
+whisper, or edit it against pre-turn actor context. New generation never includes
+earlier whispers, additive feedback, accepted/source performance or prior attempts.
+Derivation remains provenance outside model input. Recompute implicit recipient
+references from current input while preserving explicit audience decisions.
+Preserve original path/candidate; accept an alternative containing the prefix and replacement, excluding descendants.
 
 **Dependencies:** Map existing branch operations into durable historical commands
-and shared UI contracts. Specify and verify transport minimization separately
-from client-view filtering; provide authorized originating-whisper/provenance
-retrieval without widening discovery or assuming existing detail/retry payloads
-are redacted. Use LL-02 for revised candidate routing;
-fixed-route revision can be bounded separately. Specify recovery of inline edits
-and suspended continuation state without claiming current all-input autosave.
+and shared UI contracts under the historical contract. Implement and verify actual
+transport minimization, including legacy responses. Approved owner/director retrieval
+uses a dedicated response for the exact originating whisper without raw prompt/context
+or unrelated whispers. Reuse #30 complete-whisper replacement; legacy additive or
+multiple-input origins require explicit complete replacement (including deliberate
+empty), with exact available provenance displayed separately. Preserve frozen legacy
+records and exact retry interpretation. The remaining product gates concern effectful
+selected turns and subsequent acceptance of retained sibling candidates; resolve
+those before enabling dependent cases. Generation semantics are not an open gate.
+Implement browser-local close/reopen autosave for inline edits and suspended continuation; saved candidates
+stay server durable, with no cross-device sync of local buffers.
 
 **Acceptance checks:** Select an older turn after unrelated later whispers; regenerate
-only its own input at its parent head. Manual/missing-provenance cases offer explicit
-new direction. Cancel restores the continuation without changing history. Alternative
+only its latest complete input at its parent head. Capture actual runtime prompt/context
+and recipient references across repeated instruction deletion and deliberate empty
+input; editor state or fixture output alone cannot prove removal.
+Manual/missing-provenance cases offer explicit new direction. Cancel restores the continuation without changing history. Alternative
 acceptance leaves original descendants intact and excludes their perceptions, memory
 operations and closures from the new path. A preserved candidate returns only to its
 original basis. Exercise ready/failed/in-progress recovery after reload/API restart,
@@ -136,6 +152,16 @@ refresh and late responses after scope changes. Unsaved wording survives refresh
 and terminal changes; no duplicate commits or effects escape rejected candidates.
 Verify actual generation, retry, detail and discovery HTTP payloads against the
 decided disclosure policy, not only the client view or TypeScript types.
+
+**Sequence (#25):** Review and merge the docs-only contract first. Deliver a separate
+engine/API PR with transactional historical operations, owner-scoped provenance,
+minimized transport and portable accepted-history/replay proofs. Validate and merge
+that base before a separate UI/recovery PR for inline revision and browser-local
+close/reopen recovery. Both implementation PRs require independent review and human
+merge. No UI implementation in the engine/API PR; no automatic issue closing from
+partial deliveries. This does not change #18, #19 or #28 scope or create a new
+maintained dependency. Recovery/storage/API mechanics are implementer choices under
+the contract, not additional product approval gates.
 
 **Exclusions:** Full branch-tree UI, rewriting accepted history, retaining incompatible
 descendants, invented whisper provenance, a new memory engine and model auto-turns.
