@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { compileWorkspace } from "../src/core/compiler.ts";
-import { commitRuntimeEffects, inspectActorContext, projectBranch, startBranchSimulationFromCompiled } from "../src/core/branch-kernel.ts";
+import { commitManualTurn, forkBranch, commitRuntimeEffects, inspectActorContext, projectBranch, startBranchSimulationFromCompiled } from "../src/core/branch-kernel.ts";
 import { acceptActorTurnDraft, discardActorTurnDraft, generateActorTurnDraft } from "../src/core/draft-lifecycle.ts";
 import { validateSimulationArchive } from "../src/core/archive-verifier.ts";
 import { decodeActorTurnDraftRecord, sha256 } from "../src/core/draft-contracts.ts";
@@ -12,12 +12,13 @@ import { finalDraftAudience, projectRoutingContext, ROUTING_POLICY } from "../sr
 import { fingerprintCommand, stableStringify } from "../src/core/domain-rules.ts";
 import { validateReadyDraft } from "../src/core/draft-acceptance.ts";
 import type { GenerateActorTurnDraftCommand } from "../src/core/ports.ts";
-import type { ActorTurnDraftRecord } from "../src/core/types.ts";
+import { closeBranchEpisode } from "../src/core/branch-episode.ts";
+import type { CompiledWorkspace, ActorTurnDraftRecord } from "../src/core/types.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
 import { DeterministicFakeRuntime } from "./helpers/deterministic-fake-runtime.ts";
 import type { RunActorTurnRequest } from "../src/agent-runtime/contracts.ts";
 
-async function fixture(t: test.TestContext) {
+async function fixture(t: test.TestContext, customize?: (compiled: CompiledWorkspace) => void) {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-routing-"));
   const db = path.join(root, "store.sqlite");
   const store = await openBranchStore(db).open();
@@ -31,6 +32,7 @@ async function fixture(t: test.TestContext) {
     { ...surface, entity: "coo", text: "HIDDEN-COO-SURFACE-SENTINEL" },
   ];
   for (const actor of compiled.entities) if (actor.id === "coo") actor.visibility = "hidden";
+  customize?.(compiled);
   const started = startBranchSimulationFromCompiled(store, { ownerScope: "owner", simulationId: "sim", branchId: "main",
     commandId: "start", scenarioId: "executive-interviews", compiled });
   t.after(async () => { store.close(); await rm(root, { recursive: true, force: true }); });
@@ -497,4 +499,209 @@ test("complete whisper dollar tokens reach runtime literally across repeated rev
       assert.equal(requests.length, 2);
     });
   }
+});
+
+function knowledgeCommand(f: Awaited<ReturnType<typeof fixture>>, id: string, audience: string[] | null = null) {
+  const command = f.command(id, audience);
+  command.payload.promptPolicy.id = "actor-knowledge-v1";
+  Object.assign(command.payload.routing!, { version: 3, completeWhisper: "" });
+  return command;
+}
+
+test("actor knowledge ignores stale presence and acceptance never converts absent recipients into observations", async t => {
+  const f = await fixture(t);
+  const presence = commitRuntimeEffects(f.store, { ...f.query, expectedHead: f.head, commandId: "stale-roster",
+    payload: { audienceChanges: [{ actorId: "ceo", action: "add" }, { actorId: "cfo", action: "add" }] } });
+  const requests: RunActorTurnRequest[] = [];
+  const capture = new DeterministicFakeRuntime([{ type: "completed", text: JSON.stringify({ text: "A remote message to CFO.", audience: ["ceo", "cfo"] }) }], request => requests.push(request));
+  const command = knowledgeCommand(f, "remote", ["cfo"]); command.expectedHead = presence.commit.id;
+  const before = f.store.exportSimulation("owner", "sim");
+  const draft = (await generateActorTurnDraft(f.store, capture, command)).draft;
+  assert.equal(draft.status, "ready");
+  assert.doesNotMatch(requests[0]!.prompt, /Observed presence|CFO-SURFACE-SENTINEL|HIDDEN-COO-SURFACE-SENTINEL/);
+  assert.deepEqual((requests[0]!.context as { subjective: { surfaces: unknown[] } }).subjective.surfaces, []);
+  assert.deepEqual(f.store.exportSimulation("owner", "sim"), before);
+  const accept = { ...f.query, draftId: draft.id, commandId: "accept-remote" };
+  const accepted = acceptActorTurnDraft(f.store, accept);
+  assert.deepEqual(projectBranch(f.store, f.query).firstImpressions, []);
+  assert.deepEqual(projectBranch(f.store, f.query).perceptions.map(p => p.actorId), ["ceo", "cfo"]);
+  const next = knowledgeCommand(f, "next", ["cfo"]); next.expectedHead = accepted.commit.id;
+  const again = (await generateActorTurnDraft(f.store, capture, next)).draft;
+  assert.equal(again.status, "ready");
+  assert.match(again.prompt, /A remote message to CFO/);
+  assert.doesNotMatch(again.prompt, /Observed presence|CFO-SURFACE-SENTINEL|HIDDEN-COO-SURFACE-SENTINEL/);
+  const archive = f.store.exportSimulation("owner", "sim");
+  validateSimulationArchive(archive);
+  const imported = await openBranchStore(path.join(f.root, "knowledge-import.sqlite")).open();
+  try { imported.importSimulation(archive); assert.equal(acceptActorTurnDraft(imported, accept).replayed, true); }
+  finally { imported.close(); }
+});
+
+test("all legitimate absent-actor knowledge survives prose departure, but excluded speech and sibling effects do not", async t => {
+  // CEO plays Bob, CFO Alice, COO Charlie; no extra access grants.
+  const f = await fixture(t, compiled => {
+    const sourceSpan = compiled.surfaces[0]!.sourceSpan;
+    compiled.beliefs = [
+      { holder: "ceo", strength: 1, propositionText: "Bob trusts @coo with the keys.", mentions: ["coo"], sourceSpan },
+      { holder: "ceo", strength: 3, propositionText: "Bob trusts @coo with the keys.", mentions: ["coo"], sourceSpan },
+      { holder: "cfo", strength: -3, propositionText: "Alice doubts @coo can keep a secret.", mentions: ["coo"], sourceSpan },
+      { holder: "coo", strength: 3, propositionText: "CHARLIE-PRIVATE-PLAN", mentions: [], sourceSpan },
+    ];
+    compiled.surfaces.push({ ...compiled.surfaces[0]!, entity: "ceo", text: "BOB-OWN-SURFACE" });
+  });
+  const presence = commitRuntimeEffects(f.store, { ...f.query, expectedHead: f.head, commandId: "presence",
+    payload: { audienceChanges: [{ actorId: "ceo", action: "add" }, { actorId: "cfo", action: "add" }, { actorId: "coo", action: "add" }] } });
+  // A legacy accepted encounter is legitimate recorded history under its policy.
+  const encounter = commitManualTurn(f.store, { ...f.query, expectedHead: presence.commit.id, commandId: "encounter",
+    payload: { actorId: "cfo", audience: ["ceo"], text: "ALICE-CLAIM: Charlie owns the moon. Alice leaves the room." } });
+  const closed = await closeBranchEpisode(f.store, { ...f.query, expectedHead: encounter.commit.id, commandId: "memory", payload: {} }, {
+    writeMemory: ({ actor }) => `${actor.id} recalls the conversation.`,
+    writeLongTermMemory: ({ actor }) => `${actor.id} remembers @coo from prior reports.`,
+    extractBeliefs: () => [],
+  });
+  const ancestor = closed.commit.id;
+  const later = commitManualTurn(f.store, { ...f.query, expectedHead: ancestor, commandId: "excluded",
+    payload: { actorId: "ceo", audience: [], text: "BOB-LATER-PRIVATE" } });
+  const descendant = await closeBranchEpisode(f.store, { ...f.query, expectedHead: later.commit.id, commandId: "later-memory", payload: {} }, {
+    writeMemory: () => "NONANCESTOR-EPISODE-MEMORY",
+    writeLongTermMemory: () => "NONANCESTOR-LONG-TERM-MEMORY",
+    extractBeliefs: () => [],
+  });
+  forkBranch(f.store, { ownerScope: "owner", simulationId: "sim", sourceBranchId: "main", expectedHead: descendant.commit.id,
+    atCommitId: ancestor, branchId: "alternate", commandId: "fork" });
+  const before = f.store.exportSimulation("owner", "sim");
+  for (const actorId of ["ceo", "cfo"]) {
+    const command = knowledgeCommand(f, `knowledge-${actorId}`);
+    command.payload.actorId = actorId; command.expectedHead = descendant.commit.id;
+    command.payload.routing!.completeWhisper = "Consider @coo, without assuming his claim is true.";
+    const candidate = (await generateActorTurnDraft(f.store, runtime([actorId]), command)).draft;
+    assert.equal(candidate.status, "ready");
+    assert.match(candidate.prompt, /ALICE-CLAIM: Charlie owns the moon/);
+    assert.match(candidate.prompt, new RegExp(`${actorId} remembers @coo`));
+    assert.match(candidate.prompt, new RegExp(`${actorId} recalls the conversation`));
+    assert.match(candidate.prompt, actorId === "ceo" ? /Bob trusts @coo/ : /Alice doubts @coo/);
+    assert.doesNotMatch(candidate.prompt, actorId === "ceo" ? /Alice doubts @coo/ : /Bob trusts @coo|BOB-LATER-PRIVATE/);
+    assert.doesNotMatch(candidate.prompt, /Observed presence|HIDDEN-COO-SURFACE-SENTINEL|CHARLIE-PRIVATE-PLAN/);
+    const subjective = (candidate.context as { subjective: { surfaces: { entity: string }[]; beliefs: { propositionText: string }[] } }).subjective;
+    assert.ok(subjective.surfaces.every(item => item.entity === actorId));
+    assert.ok(!subjective.beliefs.some(item => item.propositionText.includes("owns the moon")));
+    if (actorId === "ceo") {
+      assert.match(candidate.prompt, /# Superseded Subjective Belief History\n- \[\+1\] Bob trusts/);
+      assert.match(candidate.prompt, /first impression of @cfo/);
+      assert.match(candidate.prompt, /CFO-SURFACE-SENTINEL/); // retained historic impression, not a fresh surface
+      assert.match(candidate.prompt, /BOB-OWN-SURFACE/);
+      assert.match(candidate.prompt, /BOB-LATER-PRIVATE/);
+      assert.match(candidate.prompt, /NONANCESTOR-EPISODE-MEMORY/);
+    }
+  }
+  const alternate = knowledgeCommand(f, "alternate-knowledge");
+  alternate.branchId = "alternate"; alternate.expectedHead = ancestor;
+  const sibling = (await generateActorTurnDraft(f.store, runtime(["ceo"]), alternate)).draft;
+  assert.match(sibling.prompt, /ALICE-CLAIM|ceo remembers @coo/);
+  assert.doesNotMatch(sibling.prompt, /BOB-LATER-PRIVATE|NONANCESTOR|Observed presence/);
+  // Query the historical parent without moving any branch or creating effects.
+  const historical = { ...alternate, branchId: "main" };
+  assert.equal(projectRoutingContext(f.store, historical, []).prompt, sibling.prompt);
+  assert.deepEqual(f.store.exportSimulation("owner", "sim"), before);
+  const badScope = { ...alternate, commandId: "foreign", ownerScope: "another-owner" };
+  assert.throws(() => generateActorTurnDraft(f.store, runtime(["ceo"]), badScope));
+});
+
+test("new policy restart/retry binds complete input and hashes; policy forgeries and archive event injection fail closed", async t => {
+  const f = await fixture(t);
+  const command = knowledgeCommand(f, "durable", ["cfo"]);
+  command.payload.routing!.completeWhisper = "Tell @cfo about an elephant and @coo.";
+  const failed = (await generateActorTurnDraft(f.store, runtime(["student-team"]), command)).draft;
+  assert.equal(failed.status, "failed");
+  const reopened = await openBranchStore(f.db).open();
+  try {
+    assert.deepEqual(reopened.getActorTurnDraft("owner", "sim", failed.id), failed);
+    const retry = structuredClone(command); retry.commandId = "durable-retry";
+    const candidate = (await generateActorTurnDraft(reopened, runtime(["ceo", "cfo"]), retry, { retryDraftId: failed.id })).draft;
+    assert.equal(candidate.status, "ready");
+    assert.equal(candidate.promptHash, failed.promptHash);
+    assert.equal(candidate.contextHash, failed.contextHash);
+    assert.equal(candidate.promptHash, sha256(candidate.prompt));
+    assert.equal(candidate.contextHash, sha256(stableStringify(candidate.context)));
+    const noCall = runtime(["ceo"]);
+    assert.equal((await generateActorTurnDraft(reopened, noCall, retry)).replayed, true);
+    assert.equal(noCall.calls, 0);
+    for (const mutate of [
+      (draft: ActorTurnDraftRecord) => { draft.routing!.version = 2; },
+      (draft: ActorTurnDraftRecord) => { draft.promptPolicy.id = ROUTING_POLICY; },
+      (draft: ActorTurnDraftRecord) => { draft.promptPolicy.version = "v2"; },
+      (draft: ActorTurnDraftRecord) => { draft.routing!.completeWhisper = "forged"; },
+    ]) {
+      const forged = structuredClone(candidate); mutate(forged);
+      assert.throws(() => validateReadyDraft(reopened, { ...f.query, draftId: forged.id, commandId: "validate" }, forged));
+    }
+    const replace = correction(candidate, "remove-input", [], null);
+    Object.assign(replace.payload.routing!, { version: 3, correction: "", completeWhisper: "", correctedAudience: [] });
+    const fresh = (await generateActorTurnDraft(reopened, runtime(["ceo"]), replace)).draft;
+    assert.equal(fresh.status, "ready");
+    assert.doesNotMatch(fresh.prompt, /elephant|coo|cfo|A performance/);
+    assert.deepEqual(fresh.routing!.availableRecipientIds, ["ceo"]);
+    const accept = { ...f.query, draftId: fresh.id, commandId: "accept-durable" };
+    acceptActorTurnDraft(reopened, accept);
+    const archive = reopened.exportSimulation("owner", "sim");
+    validateSimulationArchive(archive);
+    const forgedArchive = structuredClone(archive);
+    const record = forgedArchive.commandResults.find(item => item.canonicalInput.kind === "accept_draft")!;
+    if (record.canonicalInput.kind !== "accept_draft") throw new Error("Missing receipt");
+    record.canonicalInput.payload.routing!.version = 2;
+    record.fingerprint = fingerprintCommand(record.canonicalInput);
+    assert.throws(() => validateSimulationArchive(forgedArchive));
+    const imported = await openBranchStore(path.join(f.root, "durable-import.sqlite")).open();
+    try { imported.importSimulation(archive); assert.equal(acceptActorTurnDraft(imported, accept).replayed, true); }
+    finally { imported.close(); }
+  } finally { reopened.close(); }
+});
+
+test("legacy v1/v2 runtime hashes exactly match the pre-knowledge policy baseline", async t => {
+  const f = await fixture(t);
+  // Captured from projectRoutingContext at 05171e243b8033c6dac29ee31c9a5a5b5f1098aa.
+  const hashes = [
+    ["439b5d7b50708ca56fb87fe7f0a3346fc738d4185e01415e4ed84fd6cb063b9c", "292a65a8ade43f2a7b572fd3abd58143717e1662cb07c6e481bb173c42aaa984"],
+    ["54adef57de33bfa5d562e3cfb9175f49746a005d6ae23b100ec6050439b71092", "4ca71c1d6b7f226af17cc7941c9c80b6d523cfa5c130874ef16dbafb124a4781"],
+  ];
+  for (const version of [1, 2] as const) {
+    const command = f.command(`legacy-v${version}`, ["cfo"]);
+    if (version === 2) Object.assign(command.payload.routing!, { version, completeWhisper: "Remember @coo." });
+    const generated = (await generateActorTurnDraft(f.store, runtime(["ceo", "cfo"]), command)).draft;
+    assert.deepEqual([generated.contextHash, generated.promptHash], hashes[version - 1]);
+  }
+});
+
+test("new policy acceptance rolls back every write and source candidates stay branch bound", async t => {
+  const f = await fixture(t);
+  const command = knowledgeCommand(f, "atomic", ["cfo"]);
+  const draft = (await generateActorTurnDraft(f.store, runtime(["ceo", "cfo"]), command)).draft;
+  const before = f.store.exportSimulation("owner", "sim");
+  const { DatabaseSync } = await import("node:sqlite");
+  const database = new DatabaseSync(f.db);
+  try {
+    for (const [index, target] of ["BEFORE INSERT ON commits", "BEFORE UPDATE OF head_commit_id ON branches",
+      "BEFORE UPDATE OF status ON actor_turn_drafts", "BEFORE INSERT ON accepted_actor_turn_draft_identities",
+      "BEFORE INSERT ON command_results"].entries()) {
+      database.exec(`CREATE TRIGGER knowledge_fault ${target} BEGIN SELECT RAISE(ABORT, 'forced fault'); END`);
+      assert.throws(() => acceptActorTurnDraft(f.store, { ...f.query, draftId: draft.id, commandId: `atomic-${index}` }));
+      database.exec("DROP TRIGGER knowledge_fault");
+      assert.deepEqual(f.store.exportSimulation("owner", "sim"), before);
+      assert.equal(f.store.getActorTurnDraft("owner", "sim", draft.id)!.status, "ready");
+    }
+  } finally { database.close(); }
+  forkBranch(f.store, { ownerScope: "owner", simulationId: "sim", sourceBranchId: "main", expectedHead: f.head,
+    atCommitId: f.head, branchId: "other", commandId: "fork-source" });
+  const crossBranch = correction(draft, "cross-branch", ["cfo"], null);
+  Object.assign(crossBranch.payload.routing!, { version: 3, completeWhisper: "", correction: "" });
+  crossBranch.branchId = "other";
+  assert.throws(() => generateActorTurnDraft(f.store, runtime(["ceo", "cfo"]), crossBranch), /source actor, basis/);
+  const accepted = acceptActorTurnDraft(f.store, { ...f.query, draftId: draft.id, commandId: "atomic-success" });
+  const archive = f.store.exportSimulation("owner", "sim");
+  const forged = structuredClone(archive);
+  const commit = forged.commits.find(item => item.id === accepted.commit.id)!;
+  const { deriveFirstImpressionEvents } = await import("../src/core/domain-rules.ts");
+  commit.events.push(...deriveFirstImpressionEvents({ audience: ["ceo", "cfo"], surfaces: forged.contentRevision.compiled.surfaces, existing: [] }));
+  assert.throws(() => validateSimulationArchive(forged));
+  validateSimulationArchive(archive);
 });

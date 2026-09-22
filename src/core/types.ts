@@ -556,9 +556,11 @@ export type ActorTurnDraftArtifact = {
   proposedAudience?: string[];
 };
 
+export const ACTOR_KNOWLEDGE_POLICY = "actor-knowledge-v1";
+
 export type DraftRoutingInput = {
-  version: 1 | 2;
-  /** Required for v2. Complete replacement, including an intentionally empty whisper. */
+  version: 1 | 2 | 3;
+  /** Required for v2/v3. Complete replacement, including an intentionally empty whisper. */
   completeWhisper?: string;
   initialAudience: string[] | null;
   correction: string;

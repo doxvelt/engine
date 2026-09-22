@@ -1,5 +1,18 @@
 # Living Library adoption plan
 
+> Approved correction: [Actor Knowledge](ACTOR_KNOWLEDGE.md) supersedes older
+> presence-derived observation and selective-context targets. All legitimate
+> branch-relative knowledge is supplied upfront; outgoing recipients grant no
+> observation. Legacy saved policies keep their exact interpretation.
+> For future historical regeneration, validated generation and safe commit
+> create/select an alternative immediately, with no separate Accept UI. Alternatives
+> cycle at the branching turn and preserve their continuations. Older historical
+> draft/Accept and sibling-acceptance gates below are superseded; ordinary
+> continuation Accept and manual editing are unchanged. Blanket effectful-turn
+> blocking was a recommendation, not approved policy; unsupported cases stay gated.
+> Sequence: #32 context, then #17 saved alternatives engine/API, then UI recovery
+> and cycling. Cleanup #33 remains separate with semantics undecided.
+
 Historical contract refreshed against main
 `7683385bbfb5be514103031b6f1a2a624ae51b6e` (merged PR #30). The selected contract is
 [Stage Experience](STAGE_EXPERIENCE.md), with
@@ -64,8 +77,9 @@ tentative or unspecified initial recipients, validated proposals and explicit
 audience decisions through new candidates. Approved correction #29 replaces
 additive whisper corrections with complete-whisper editing and fresh generation
 at the fixed pre-turn basis; legacy saved inputs retain their old interpretation.
-Observation comes from branch-bound
-presence, independently of delivery. Director-preserved wording is an explicit
+New Stage generation follows [Actor Knowledge](ACTOR_KNOWLEDGE.md): stored
+presence and delivery do not confer observation. Legacy policies retain their
+original presence interpretation. Director-preserved wording is an explicit
 derived artifact. Legacy text-only drafts retain their original interpretation.
 Notation grammar/roundtrip and device/accessibility acceptance remain open; this
 implementation does not close LL-02. Bounded automated browser evidence and
@@ -124,7 +138,9 @@ whisper, or edit it against pre-turn actor context. New generation never include
 earlier whispers, additive feedback, accepted/source performance or prior attempts.
 Derivation remains provenance outside model input. Recompute implicit recipient
 references from current input while preserving explicit audience decisions.
-Preserve original path/candidate; accept an alternative containing the prefix and replacement, excluding descendants.
+Successful validated historical generation safely commits/selects an alternative
+containing the prefix and replacement immediately, with no separate Accept UI.
+Preserve old paths and their continuations; cycle alternatives at the branching turn.
 
 **Dependencies:** Map existing branch operations into durable historical commands
 and shared UI contracts under the historical contract. Implement and verify actual
@@ -133,9 +149,9 @@ uses a dedicated response for the exact originating whisper without raw prompt/c
 or unrelated whispers. Reuse #30 complete-whisper replacement; legacy additive or
 multiple-input origins require explicit complete replacement (including deliberate
 empty), with exact available provenance displayed separately. Preserve frozen legacy
-records and exact retry interpretation. The remaining product gates concern effectful
-selected turns and subsequent acceptance of retained sibling candidates; resolve
-those before enabling dependent cases. Generation semantics are not an open gate.
+records and exact retry interpretation. Unsupported effectful cases remain honestly gated; blanket blocking is not an
+approved policy. Multiple saved alternatives and their continuations are approved
+under Actor Knowledge. Manual editing semantics are unchanged.
 Implement browser-local close/reopen autosave for inline edits and suspended continuation; saved candidates
 stay server durable, with no cross-device sync of local buffers.
 
@@ -153,8 +169,8 @@ and terminal changes; no duplicate commits or effects escape rejected candidates
 Verify actual generation, retry, detail and discovery HTTP payloads against the
 decided disclosure policy, not only the client view or TypeScript types.
 
-**Sequence (#25):** Review and merge the docs-only contract first. Deliver a separate
-engine/API PR with transactional historical operations, owner-scoped provenance,
+**Sequence (#25):** Deliver #32 character-context correction first, then a separate
+#17 saved alternatives engine/API PR with transactional historical operations, owner-scoped provenance,
 minimized transport and portable accepted-history/replay proofs. Validate and merge
 that base before a separate UI/recovery PR for inline revision and browser-local
 close/reopen recovery. Both implementation PRs require independent review and human

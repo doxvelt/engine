@@ -313,7 +313,7 @@ export function buildAcceptedCommit(
     draft.contentRevisionId,
   )!;
   const events: RuntimeEvent[] = [{ type: "message_accepted", message }];
-  events.push(
+  if (draft.routing?.version !== 3) events.push(
     ...deriveFirstImpressionEvents({
       audience: finalDraftAudience(draft),
       surfaces: revision.compiled.surfaces,

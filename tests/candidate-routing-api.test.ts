@@ -6,14 +6,17 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createLocalApiServer } from "../src/local-api/server.ts";
-import type { StageDraft } from "../src/local-api/stage-contracts.ts";
+import type { RunActorTurnRequest } from "../src/agent-runtime/contracts.ts";
+import { openBranchStore } from "../src/store/branch-sqlite.ts";
+import { ACTOR_KNOWLEDGE_POLICY, type StageDraft } from "../src/local-api/stage-contracts.ts";
 import { StageSession } from "../src/local-ui/lib/stage-session.ts";
 import { DeterministicFakeRuntime } from "./helpers/deterministic-fake-runtime.ts";
 
 /** Exercise the actual server request listener without binding a network socket. */
 async function fixture(t: test.TestContext) {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-routing-api-"));
-  const runtime = new DeterministicFakeRuntime([{ type: "completed", text: JSON.stringify({ text: "For the CFO.", audience: ["ceo", "cfo"] }) }]);
+  const captured: RunActorTurnRequest[] = [];
+  const runtime = new DeterministicFakeRuntime([{ type: "completed", text: JSON.stringify({ text: "For the CFO.", audience: ["ceo", "cfo"] }) }], request => captured.push(request));
   const dbPath = path.join(root, "runtime.sqlite");
   let server = createLocalApiServer({ dbPath, actorTurnRuntime: runtime });
   t.after(async () => { server.close(); await rm(root, { recursive: true, force: true }); });
@@ -38,7 +41,7 @@ async function fixture(t: test.TestContext) {
     scenarioId: "executive-interviews", branchId: "main", commandId: "start" });
   assert.equal(started.status, 200);
   const head = (await started.json()).root.id as string;
-  return { runtime, request, fetcher, head, restart: () => { server.close(); server = createLocalApiServer({ dbPath, actorTurnRuntime: runtime }); } };
+  return { runtime, captured, dbPath, request, fetcher, head, restart: () => { server.close(); server = createLocalApiServer({ dbPath, actorTurnRuntime: runtime }); } };
 }
 
 test("API accepts no initial audience, exposes minimal review, preserves corrections across restart and replay", async t => {
@@ -223,4 +226,52 @@ test("complete replacement freezes lost and double actions, reopens after restar
   assert.equal(session.stale, true);
   await session.revise(false);
   assert.equal(posts.length, 2);
+});
+
+test("Stage actual client/API opts into actor knowledge and preserves policy/input through restart, revision and retry", async t => {
+  const f = await fixture(t);
+  const session = new StageSession({ apiBase: "http://localhost", simulationId: "sim", branchId: "main" }, f.fetcher);
+  await session.refresh();
+  session.actorId = "ceo";
+  session.direction = "Tell @cfo about @coo, an elephant, and $&.";
+  await session.generate();
+  const original = session.selectedDraft!;
+  assert.equal(original.status, "ready");
+  assert.equal(f.captured[0]!.promptPolicy.id, ACTOR_KNOWLEDGE_POLICY);
+  assert.doesNotMatch(f.captured[0]!.prompt, /Observed presence/);
+  assert.match(f.captured[0]!.prompt, /elephant, and \$&/);
+  assert.deepEqual(f.captured[0]!.capabilityGrant, []);
+  f.restart();
+  const retried = await (await f.request(`/simulations/sim/drafts/${original.id}/retry`, { commandId: "knowledge-retry" })).json();
+  assert.equal(retried.draft.status, "ready");
+  assert.equal(f.captured[1]!.promptHash, f.captured[0]!.promptHash);
+  assert.equal(f.captured[1]!.contextHash, f.captured[0]!.contextHash);
+  const revised = await (await f.request(`/simulations/sim/drafts/${original.id}/revise`, {
+    commandId: "knowledge-revise", completeWhisper: "", audience: ["cfo"],
+  })).json();
+  assert.equal(revised.draft.status, "ready");
+  assert.doesNotMatch(f.captured[2]!.prompt, /elephant|\$&|Observed presence/);
+  assert.equal(f.captured[2]!.promptPolicy.id, ACTOR_KNOWLEDGE_POLICY);
+  assert.equal((await f.request(`/simulations/sim/drafts/${original.id}/revise`, {
+    commandId: "reject-additive", correction: "More", audience: ["cfo"],
+  })).status, 400);
+  assert.equal((await f.request("/simulations/sim/drafts", {
+    draftingPolicy: ACTOR_KNOWLEDGE_POLICY, branchId: "main", expectedHead: f.head,
+    actorId: "ceo", commandId: "missing-complete", stageWhisperIds: [],
+  })).status, 400);
+  assert.equal((await f.request("/simulations/sim/drafts", {
+    draftingPolicy: "actor-knowledge-v99", branchId: "main", expectedHead: f.head,
+    actorId: "ceo", commandId: "forged-policy", completeWhisper: "", stageWhisperIds: [],
+  })).status, 400);
+  const accepted = await f.request(`/simulations/sim/drafts/${revised.draft.id}/accept`, { commandId: "knowledge-accept" });
+  assert.equal(accepted.status, 200);
+  const store = await openBranchStore(f.dbPath).open();
+  try {
+    const record = store.getActorTurnDraft("local", "sim", revised.draft.id)!;
+    assert.equal(record.routing!.version, 3);
+    const archive = store.exportSimulation("local", "sim");
+    const turn = archive.commits.find(commit => commit.events.some(event => event.type === "message_accepted"))!;
+    assert.equal(turn.events.some(event => event.type === "first_impression_formed"), false);
+  } finally { store.close(); }
+  assert.equal((await f.request(`/simulations/sim/drafts/${revised.draft.id}/accept`, { commandId: "knowledge-accept" })).status, 200);
 });

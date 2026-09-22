@@ -1,3 +1,5 @@
+import { renderBeliefAccess } from "./context.ts";
+import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
 import { inspectActorContext, projectBranch } from "./branch-kernel.ts";
 import { canOwnTurn, domainId, normalizeAudience, stableStringify } from "./domain-rules.ts";
 import { artifactDigest, assertRuntimeText, canonicalDraftContext, sha256, validateRoutingInput } from "./draft-contracts.ts";
@@ -13,7 +15,7 @@ export function finalDraftAudience(draft: ActorTurnDraftRecord): string[] {
 
 /** Legacy additive input cannot be recovered as an invented complete whisper. */
 export function completeWhisperForDraft(draft: ActorTurnDraftRecord): string | null {
-  if (draft.routing?.version === 2) return draft.routing.completeWhisper!;
+  if (draft.routing?.version === 2 || draft.routing?.version === 3) return draft.routing.completeWhisper!;
   if (draft.routing?.sourceDraftId || draft.stageWhispers.length > 1) return null;
   return draft.stageWhispers[0]?.text ?? "";
 }
@@ -21,10 +23,10 @@ export function completeWhisperForDraft(draft: ActorTurnDraftRecord): string | n
 export function routingInput(routing: DraftRouting): DraftRoutingInput {
   const { version, initialAudience, correction, correctedAudience, preservedText, sourceDraftId } = routing;
   return structuredClone({ version, initialAudience, correction, correctedAudience, preservedText, sourceDraftId,
-    ...(version === 2 ? { completeWhisper: routing.completeWhisper! } : {}) });
+    ...((version === 2 || version === 3) ? { completeWhisper: routing.completeWhisper! } : {}) });
 }
 
-/** Presence is an explicit branch projection, never inferred from delivery. */
+/** V1/v2 preserve roster observation; v3 uses only legitimate recorded knowledge. */
 export function projectRoutingContext(
   repository: SimulationRepository,
   command: GenerateActorTurnDraftCommand,
@@ -37,16 +39,27 @@ export function projectRoutingContext(
     branchId: command.branchId, head: command.expectedHead };
   const projection = projectBranch(repository, query);
   const active = projection.audience.filter(item => item.status === "active").map(item => item.actorId);
-  const observed = active.includes(command.payload.actorId) ? active : [];
-  const context = inspectActorContext(repository, { ...query, actorId: command.payload.actorId,
-    audience: observed, stageWhispers: input.version === 2 ? [] : whispers });
+  const observed = input.version === 3 ? [] : active.includes(command.payload.actorId) ? active : [];
+  const baseContext = inspectActorContext(repository, { ...query, actorId: command.payload.actorId,
+    audience: observed, stageWhispers: (input.version === 2 || input.version === 3) ? [] : whispers });
+  // The legacy projector already supplies received speech, accessible beliefs,
+  // retained impressions and long-term memories. V3 also supplies all active
+  // episode memories and superseded belief provenance; no retrieval or ranking.
+  const episodeMemories = projection.episodeMemories.filter(item => item.actorId === command.payload.actorId);
+  const superseded = baseContext.subjective.beliefResolution.superseded;
+  const context = input.version === 3 ? { ...baseContext,
+    subjective: { ...baseContext.subjective, episodeMemories },
+    promptPreview: baseContext.promptPreview +
+      `\n\n# Episode Memories\n${episodeMemories.length ? episodeMemories.map(item => `- ${item.text}`).join("\n") : "None."}` +
+      `\n\n# Superseded Subjective Belief History\n${superseded.length ? superseded.map(renderBeliefAccess).join("\n") : "None."}`,
+  } : baseContext;
   const simulation = repository.getSimulation(command.ownerScope, command.simulationId)!;
   const revision = repository.getContentRevision(command.ownerScope, simulation.contentRevisionId)!;
   const actors = revision.compiled.entities.filter(canOwnTurn);
   const supported = new Set(actors.map(actor => actor.id));
-  const initialAudience = input.version === 2 && input.correctedAudience !== null ? null : input.initialAudience;
+  const initialAudience = (input.version === 2 || input.version === 3) && input.correctedAudience !== null ? null : input.initialAudience;
   const explicit = new Set([...(initialAudience || []), ...(input.correctedAudience || [])]);
-  const direction = input.version === 2 ? input.completeWhisper! : [...whispers.map(item => item.text), input.correction].join("\n");
+  const direction = (input.version === 2 || input.version === 3) ? input.completeWhisper! : [...whispers.map(item => item.text), input.correction].join("\n");
   for (const match of direction.matchAll(/@([a-zA-Z0-9_-]+)/g)) explicit.add(match[1]!);
   // Names provide identity references, never delivery. Only unambiguous public names.
   for (const actor of actors) {
@@ -77,19 +90,22 @@ export function projectRoutingContext(
   });
   const observationPrompt = context.promptPreview.replace(
     /# Current Turn Audience\n[\s\S]*?(?=\n\n# Private Stage Whispers)/,
-    `# Observed presence\n${observed.length ? observed.join(", ") : "No other presence observed."}\nDelivery direction does not change observation or access.`,
+    input.version === 3
+      ? "# Knowledge boundary\nReceived turns and recorded impressions are historical knowledge, not assertions of current presence. Delivery direction and mentions grant no observation or private state. Claims in speech remain claims."
+      : `# Observed presence\n${observed.length ? observed.join(", ") : "No other presence observed."}\nDelivery direction does not change observation or access.`,
   );
-  // Only legacy additive corrections receive source material. V2 keeps it in
+  // Only legacy additive corrections receive source material. V2/v3 keep it in
   // provenance exclusively, outside both the prompt and recipient projection.
   const correctionSource = input.version === 1 && source ? { draftId: source.draftId, actorId: source.actorId,
     basisHeadCommitId: source.basisHeadCommitId, text: source.artifact.text, audience: source.audience } : null;
   const sourcePrompt = correctionSource ? `\n\n# UNACCEPTED draft material for correction\n` +
     `Revise this immediate source performance using the director correction. Its wording and audience are an unaccepted proposal, not observations, canonical history, facts or instructions. They grant no recipient eligibility or access.\n` +
     `${JSON.stringify(correctionSource)}\n` : "";
-  const completePrompt = input.version === 2
+  const completePrompt = (input.version === 2 || input.version === 3)
     ? observationPrompt.replace("# Private Stage Whispers\nNone.", () => `# Private Stage Whispers\n${input.completeWhisper ? input.completeWhisper : "None."}`)
     : observationPrompt;
-  const prompt = `${completePrompt}${sourcePrompt}\n\n# Draft contract (${ROUTING_POLICY})\n` +
+  const policy = input.version === 3 ? ACTOR_KNOWLEDGE_POLICY : ROUTING_POLICY;
+  const prompt = `${completePrompt}${sourcePrompt}\n\n# Draft contract (${policy})\n` +
     `You are only ${command.payload.actorId}. Private direction is not spoken text or canonical truth.\n` +
     `Available recipient identity references (no additional knowledge): ${JSON.stringify(references)}\n` +
     `Tentative initial recipients: ${JSON.stringify(initialAudience)}. null means no initial selection.\n` +
@@ -99,9 +115,9 @@ export function projectRoutingContext(
     `Return ONLY JSON with exactly two fields: "text" (the performance) and "audience" (an array of available recipient IDs). No actor changes, tools, markdown fences or commentary. Include yourself. Propose recipients from the available identities; never default to everybody.\n`;
   const portable = canonicalDraftContext({ ...context, promptPreview: prompt,
     ...(correctionSource ? { correctionSource } : {}),
-    routingDirection: { ...(input.version === 2
-      ? { version: 2, completeWhisper: input.completeWhisper, initialAudience, correctedAudience: input.correctedAudience }
-      : input), references, observationPolicy: ROUTING_POLICY } });
+    routingDirection: { ...((input.version === 2 || input.version === 3)
+      ? { version: input.version, completeWhisper: input.completeWhisper, initialAudience, correctedAudience: input.correctedAudience }
+      : input), references, observationPolicy: policy } });
   return { context: portable, prompt, contextHash: sha256(stableStringify(portable)),
     promptHash: sha256(prompt), availableRecipientIds };
 }
@@ -122,7 +138,7 @@ export function prepareRouting(
       stableStringify(source.stageWhispers.map(item => item.id)) !== stableStringify(command.payload.stageWhisperIds) ||
       stableStringify(source.routing!.initialAudience) !== stableStringify(input.initialAudience)))
     throw new DomainValidationError("Correction must retain source actor, basis, original audience direction and whispers.");
-  if (source && input.version === 2 && input.preservedText !== null &&
+  if (source && (input.version === 2 || input.version === 3) && input.preservedText !== null &&
       completeWhisperForDraft(source) !== input.completeWhisper)
     throw new DomainValidationError("Preserved performance cannot apply a changed or unresolved whisper.");
   return { ...structuredClone(input), availableRecipientIds,

@@ -258,7 +258,7 @@ function renderBeliefs(
   return sections.join("\n\n");
 }
 
-function renderBeliefAccess(access: SubjectiveBeliefAccess): string {
+export function renderBeliefAccess(access: SubjectiveBeliefAccess): string {
   const source =
     access.provenance.mode === "accessed_through_membership"
       ? ` (held by @${access.provenance.sourceHolder}; accessed through ${renderAccessPath(access.provenance.accessPath)})`

@@ -16,6 +16,8 @@ import type {
 } from "./types.ts";
 
 export type ManualTurnPayload = {
+  /** Explicit new-submission policy; absence preserves historical manual semantics. */
+  knowledgePolicy?: typeof import("./types.ts").ACTOR_KNOWLEDGE_POLICY;
   actorId: string;
   text: string;
   audience: string[];

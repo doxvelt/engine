@@ -4,6 +4,11 @@ Doxvelt is a turn-based chat RPG and role-play simulation engine with subjective
 
 The current code is an early local prototype and executable specification. The target architecture introduces branch-aware event history, memory provenance, a replaceable Pi runtime adapter, capability mediation, and local/hosted deployment parity. Do not assume the current SQLite schema, Vercel AI integration, API routes, or folder boundaries are permanent.
 
+For the narrow approved context and future historical-regeneration supersession,
+read [Actor Knowledge](docs/design/ACTOR_KNOWLEDGE.md). Its constraints override
+older presence-derived observation and separate historical Accept UI targets;
+ordinary continuation acceptance and atomic validation remain.
+
 Read these first:
 
 1. `docs/design/ARCHITECTURE.md`
