@@ -175,7 +175,7 @@ test("edited acceptance preserves generated artifact and discard remains non-can
     { type: "usage", usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 } },
     { type: "completed", text: "Generated original", stopReason: "stop" },
   ]);
-  const { base } = await fixture(t, runtime);
+  const { base, dbPath } = await fixture(t, runtime);
   const simulation = await started(base);
   const discardedDraft = (await (await post(base, "/simulations/sim/drafts", generate(simulation.root.id, "discard-generate"))).json()) as {
     draft: { id: string };
@@ -215,12 +215,17 @@ test("edited acceptance preserves generated artifact and discard remains non-can
     };
   };
   assert.equal(acceptedResult.branch.headCommitId, acceptedResult.commit.id);
-  const acceptedMessage = acceptedResult.commit.events.find(
-    (event) => event.type === "message_accepted",
+  assert.deepEqual(Object.keys(acceptedResult.commit), ["id"]);
+  const inspection = await openBranchStore(dbPath).open();
+  const acceptedMessage = inspection.getCommit("local", "sim", acceptedResult.commit.id)!.events.find(
+    event => event.type === "message_accepted",
   )?.message;
+  inspection.close();
   assert.equal(acceptedMessage?.text, "Edited final");
-  assert.equal(acceptedMessage?.provenance.finalTextSource, "acceptor_edited");
-  assert.ok(acceptedMessage?.provenance.sourceArtifactDigest);
+  assert.equal(acceptedMessage?.provenance.mode, "generated");
+  if (acceptedMessage?.provenance.mode !== "generated") throw new Error("Missing generated provenance.");
+  assert.equal(acceptedMessage.provenance.finalTextSource, "acceptor_edited");
+  assert.ok(acceptedMessage.provenance.sourceArtifactDigest);
   const stored = await fetch(`${base}/simulations/sim/drafts/${generated.draft.id}`);
   const draft = (await stored.json()) as { artifact: { text: string }; acceptance?: { acceptedText: string } };
   assert.equal(draft.artifact.text, "Generated original");
@@ -477,7 +482,7 @@ test("Stage retry captures original routing and whispers; failed drafts can be d
       yield { type: "completed", text: "A measured answer.", stopReason: "stop" };
     },
   };
-  const { base } = await fixture(t, runtime);
+  const { base, dbPath } = await fixture(t, runtime);
   const start = await started(base);
   const whisper = await (await post(base, "/simulations/sim/whispers", { branchId: "main", expectedHead: start.root.id, commandId: "whisper", targetActorId: "ceo", text: "Keep the answer brief" })).json();
   const original = (await (await post(base, "/simulations/sim/drafts", { ...generate(start.root.id), stageWhisperIds: [whisper.id] })).json()).draft;
@@ -486,7 +491,12 @@ test("Stage retry captures original routing and whispers; failed drafts can be d
   const candidate = (await response.json()).draft;
   assert.notEqual(candidate.id, original.id);
   assert.deepEqual(candidate.audience, original.audience);
-  assert.deepEqual(candidate.stageWhispers, original.stageWhispers);
+  assert.ok(!Object.hasOwn(candidate, "stageWhispers"));
+  assert.ok(!Object.hasOwn(original, "stageWhispers"));
+  const inspection = await openBranchStore(dbPath).open();
+  assert.deepEqual(inspection.getActorTurnDraft("local", "sim", candidate.id)!.stageWhispers,
+    inspection.getActorTurnDraft("local", "sim", original.id)!.stageWhispers);
+  inspection.close();
   const replay = await post(base, `/simulations/sim/drafts/${original.id}/retry`, { commandId: "retry" });
   assert.equal((await replay.json()).draft.id, candidate.id);
   const rejected = await post(base, `/simulations/sim/drafts/${original.id}/retry`, { commandId: "bad", actorId: "coo" });

@@ -36,7 +36,7 @@ export type ImportSimulationPackageOptions = {
 };
 export type SimulationPackageManifest = {
   doxveltVersion: string;
-  schemaVersion: 6;
+  schemaVersion: 6 | 7;
   exportedAt: string;
   ownerScope: string;
   simulationId: string;
@@ -50,7 +50,7 @@ export type ImportedSimulationPackageManifest = Omit<
   SimulationPackageManifest,
   "schemaVersion"
 > & {
-  schemaVersion: 4 | 5 | 6;
+  schemaVersion: 4 | 5 | 6 | 7;
 };
 export async function exportSimulationPackage({
   dbPath,
@@ -82,7 +82,7 @@ export async function exportSimulationPackage({
   const resolvedTarget = path.resolve(targetDir);
   const manifest: SimulationPackageManifest = {
     doxveltVersion: "0.0.0",
-    schemaVersion: 6,
+    schemaVersion: archive.schemaVersion as 6 | 7,
     exportedAt: new Date().toISOString(),
     ownerScope,
     simulationId,
@@ -538,7 +538,7 @@ function validateManifest(
   if (
     !manifest ||
     typeof manifest !== "object" ||
-    ![4, 5, 6].includes(manifest.schemaVersion) ||
+    ![4, 5, 6, 7].includes(manifest.schemaVersion) ||
     Object.keys(manifest).length !== 8 ||
     !Object.hasOwn(manifest, "doxveltVersion") ||
     !Object.hasOwn(manifest, "exportedAt") ||

@@ -157,7 +157,7 @@ export function commitManualTurn(
   });
 }
 
-function buildManualCommit(
+export function buildManualCommit(
   repository: SimulationRepository,
   command: CommandEnvelope<ManualTurnPayload>,
   provenance?: {

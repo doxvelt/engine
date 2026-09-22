@@ -300,11 +300,14 @@ test("accepted API drafts consume only their captured whisper snapshot", async (
   );
   assert.equal(draftResponse.status, 200);
   const draft = (await draftResponse.json()) as {
-    draft: { id: string; stageWhispers: Array<{ id: string }> };
+    draft: { id: string };
   };
-  assert.deepEqual(draft.draft.stageWhispers.map((whisper) => whisper.id), [whisperA.id]);
+  assert.equal("stageWhispers" in draft.draft, false);
+  assert.equal("context" in draft.draft, false);
+  assert.equal("prompt" in draft.draft, false);
   const whisperB = await stage("whisper-b", "Whisper B");
   const setupStore = await openBranchStore(dbPath).open();
+  assert.deepEqual(setupStore.getActorTurnDraft("local", "snapshot", draft.draft.id)!.stageWhispers.map(whisper => whisper.id), [whisperA.id]);
   const foreignActorWhisper = setupStore.createStageWhisper({
     ownerScope: "local",
     simulationId: "snapshot",
@@ -349,15 +352,16 @@ test("accepted API drafts consume only their captured whisper snapshot", async (
   );
   assert.equal(acceptedResponse.status, 200);
   const accepted = (await acceptedResponse.json()) as {
-    commit: { id: string; events: Array<{ type: string; whisperId?: string }> };
+    commit: { id: string };
   };
-  const consumed = accepted.commit.events
-    .filter((event) => event.type === "stage_whisper_consumed")
-    .map((event) => event.whisperId);
-  assert.deepEqual(consumed, [whisperA.id]);
+  assert.equal("events" in accepted.commit, false);
 
   const store = await openBranchStore(dbPath).open();
   try {
+    const consumed = store.getCommit("local", "snapshot", accepted.commit.id)!.events
+      .filter(event => event.type === "stage_whisper_consumed")
+      .map(event => event.whisperId);
+    assert.deepEqual(consumed, [whisperA.id]);
     const pendingAtDraftHead = store.listPendingStageWhispers(
       "local",
       "snapshot",
