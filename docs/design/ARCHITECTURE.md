@@ -253,7 +253,7 @@ Keep Nuxt and Nuxt UI as the preferred workbench frontend unless a concrete prod
 
 Reasons:
 
-- Michael can still review framework usage, component consistency, and inefficient agent output;
+- the familiar framework supports effective review of component usage, consistency, and implementation efficiency;
 - the existing design system and Nuxt UI integration are useful assets;
 - Nuxt supports local web, hosted web, and possible desktop-shell packaging;
 - replacing a competent frontend would not solve the runtime architecture problem.

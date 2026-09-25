@@ -280,7 +280,7 @@ Users create a simulation by selecting a world, scenario, entities, connections,
 
 The same structure should support entertainment and educational use cases. A scenario can be a mystery, a strategy-class stakeholder interview, a supply-chain coordination game, a crisis-response room, or a mission reenactment. The common requirement is that different actors can hold partial, subjective, or mistaken views of the same underlying situation.
 
-Multiple connection variants may exist between the same entities. For example, `jade-michael-1` and `jade-michael-2` can encode different starting dynamics and give the same scenario different social momentum.
+Multiple connection variants may exist between the same entities. For example, `jade-mike-1` and `jade-mike-2` can encode different starting dynamics and give the same scenario different social momentum.
 
 ## Stateless Invokable Entities
 
