@@ -288,7 +288,7 @@ test("OpenAI-compatible model diagnostics normalize valid base URLs", () => {
 
 test("AI generation reports invalid OpenAI-compatible base URLs without SDK retry noise", async () => {
   const model = modelRecord({
-    base_url: "https://https://inf1-ein.tail8a1c20.ts.net/v1",
+    base_url: "https://https://inference.example.invalid/v1",
   });
 
   await assert.rejects(
