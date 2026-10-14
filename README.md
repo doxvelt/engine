@@ -49,12 +49,21 @@ one. See AI Drafts below and the [slice scope](docs/design/LAST_CROSSING.md).
 - Control who is in the audience for each turn.
 - Add private stage whispers for one actor's next turn.
 - Grant and revoke runtime access without editing source files.
-- Edit, regenerate, and fork accepted history without destroying its original branch.
+- Edit, regenerate, and fork accepted history through the CLI or local API without
+  destroying its original branch.
 - Close episodes to write actor-specific memories and extract beliefs.
 - Revise or retract memories on one branch without contaminating siblings.
 - Request, inspect, observe failures, and retry causally anchored memory jobs
   through the local API.
 - Export and import local simulation packages.
+
+Stage currently supports manual Perform and generated continuation drafts, including
+review, complete-whisper regeneration, acceptance, discard and saved-draft recovery.
+Editing or regenerating **accepted turns**, and cycling between their alternative
+continuations, are not yet available in the shipped Stage UI. Those controls and
+browser-local recovery of unsent edits are tracked in [#17](https://github.com/doxvelt/engine/issues/17).
+The CLI and local API expose engine capabilities beyond the visual play surface;
+the list above is not a list of Stage controls.
 
 Doxvelt is local single-user software. Hosted accounts, collaboration,
 publishing and marketplaces remain outside this slice.
