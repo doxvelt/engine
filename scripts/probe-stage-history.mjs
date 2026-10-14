@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { validStageBuffer } from '../src/local-ui/lib/stage-buffer.ts';
 import { stageHistoryBrowserFixture } from './stage-history-browser-fixture.ts';
 
 await mkdir('.scratch', { recursive: true });
@@ -49,6 +50,90 @@ try {
   async function api(simulation, suffix, body) {
     const response = await fetch(`${apiBase}/simulations/${simulation}${suffix}`, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
     const data = await response.json(); assert.ok(response.ok, JSON.stringify(data)); return data;
+  }
+  async function recoverContinuation(width, height, action, entry) {
+    const simulation = `recovery-${width}-${height}-${action}-${entry}`;
+    const response = await fetch(`${apiBase}/simulations/start`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ simulationId: simulation, branchId: 'main', commandId: 'start', workspacePath: path.resolve('examples/executive-interviews'), scenarioId: 'executive-interviews' }) });
+    assert.ok(response.ok, await response.clone().text());
+    const context = await browser.newContext({ viewport: { width, height } });
+    ownedContexts.add(context);
+    let page = await context.newPage(); observe(page);
+    const errors = []; page.on('pageerror', e => errors.push(String(e)));
+    const url = `${webOrigin}/stage?simulation=${simulation}&branch=main`;
+    const suffix = action === 'perform' ? '/turns' : '/drafts';
+    const posts = [];
+    let dropped = false;
+    await context.route(`${apiBase}/simulations/${simulation}${suffix}`, async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      posts.push(route.request().postDataJSON());
+      // Commit/generate on the actual fixture API, then lose only its response.
+      const result = await route.fetch();
+      assert.ok(result.ok(), await result.text());
+      if (!dropped) { dropped = true; await route.abort('failed'); }
+      else await route.fulfill({ response: result });
+    });
+    await page.goto(url);
+    await page.getByText('Saved in this browser only.', { exact: false }).waitFor();
+    await page.getByRole('textbox', { name: 'Stage whisper', exact: true }).fill('RECOVERY-DIRECTION');
+    await page.getByRole('tab', { name: 'Perform', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Performance', exact: true }).fill('RECOVERY-PERFORMANCE');
+    if (action === 'generate') await page.getByRole('tab', { name: 'Stage whisper', exact: true }).click();
+    const modelCalls = fixture.requests.length;
+    await page.getByRole('button', { name: action === 'perform' ? 'Perform' : 'Generate draft', exact: true }).click();
+    await page.getByRole('button', { name: 'Retry request', exact: true }).waitFor();
+    await page.waitForFunction(() => document.querySelector('.stage-dock .dx-error-note')?.textContent.includes('Failed to fetch'));
+    assert.equal(posts.length, 1);
+    const before = await api(simulation, '/stage?branchId=main');
+    assert.equal(before.transcript.length, action === 'perform' ? 1 : 0);
+    if (entry === 'reload') await page.reload();
+    else {
+      await page.close(); page = await context.newPage(); observe(page); page.on('pageerror', e => errors.push(String(e)));
+      const opened = page.waitForResponse(r => r.url() === `${apiBase}/simulations/${simulation}/navigation` && r.request().method() === 'POST');
+      await page.goto(url); assert.ok((await opened).ok(), 'fresh-entry navigation bookkeeping succeeds');
+    }
+    // Reload has no transient transport error. This must be a visible, usable
+    // recovery action, never a direct call to the controller's resume method.
+    const retry = page.getByRole('button', { name: 'Retry request', exact: true });
+    await retry.waitFor(); assert.equal(await retry.isEnabled(), true);
+    await page.getByText('A saved request is unresolved. Retry the original request to reconcile it.', { exact: true }).waitFor();
+    assert.equal(posts.length, 1, 'reopening must not automatically submit another mutation');
+    async function journal() {
+      const records = await page.evaluate(sim => Object.keys(localStorage).filter(k => k.startsWith('doxvelt.stage.v1:')).map(k => JSON.parse(localStorage.getItem(k))).filter(r => r.scope.simulationId === sim), simulation);
+      assert.ok(records.length > 0);
+      for (const r of records) { assert.equal(validStageBuffer(r.data), true); assert.ok(r.data.requests.every(command => command.suffix !== '/navigation')); }
+      const dominates = (a, b) => Object.entries(b).every(([id, n]) => (a[id] || 0) >= n);
+      const heads = records.filter(r => !records.some(other => other !== r && dominates(other.clock, r.clock) && !dominates(r.clock, other.clock)));
+      assert.equal(heads.length, 1, 'one authoritative browser buffer version');
+      return heads[0].data;
+    }
+    const stored = await journal();
+    assert.deepEqual(stored.requests.find(r => r.suffix === suffix).body, posts[0]);
+    assert.equal(stored.performance, 'RECOVERY-PERFORMANCE'); assert.equal(stored.direction, 'RECOVERY-DIRECTION');
+    await retry.click();
+    await page.waitForFunction(() => ![...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Retry request'));
+    assert.equal(posts.length, 2); assert.deepEqual(posts[1], posts[0], 'exact command ID and payload replay');
+    const after = await api(simulation, '/stage?branchId=main');
+    assert.equal(after.branch.headCommitId, before.branch.headCommitId);
+    assert.equal(after.transcript.length, action === 'perform' ? 1 : 0, 'no duplicate canonical turn');
+    assert.equal(fixture.requests.length, modelCalls + (action === 'generate' ? 1 : 0), 'no duplicate model call');
+    assert.equal((await journal()).requests.length, 0);
+    await page.getByRole('tab', { name: 'Stage whisper', exact: true }).click();
+    assert.equal(await page.getByRole('textbox', { name: 'Stage whisper', exact: true }).inputValue(), 'RECOVERY-DIRECTION');
+    await page.getByRole('tab', { name: 'Perform', exact: true }).click();
+    const performance = page.getByRole('textbox', { name: 'Performance', exact: true });
+    assert.equal(await performance.inputValue(), 'RECOVERY-PERFORMANCE');
+    assert.equal(await performance.isEnabled(), true, 'Stage unlocks after reconciliation');
+    await performance.fill('NEXT-INDEPENDENT-PERFORMANCE');
+    await page.getByRole('button', { name: 'Perform', exact: true }).click();
+    await page.getByText('NEXT-INDEPENDENT-PERFORMANCE', { exact: true }).waitFor();
+    await page.waitForFunction(() => document.querySelector('textarea[aria-label="Performance"]')?.disabled === false);
+    assert.equal((await api(simulation, '/stage?branchId=main')).transcript.length, action === 'perform' ? 2 : 1);
+    await page.getByRole('tab', { name: 'Stage whisper', exact: true }).click();
+    assert.equal(await page.getByRole('textbox', { name: 'Stage whisper', exact: true }).inputValue(), 'RECOVERY-DIRECTION');
+    await journal(); assert.deepEqual(errors, []);
+    await page.screenshot({ path: path.join(root, `${width}x${height}-${action}-${entry}.png`), fullPage: true });
+    results.push({ width, height, action, entry, visibleRetry: true, exactReplay: true, navigationExcluded: true, noDuplicate: true, continued: true, buffersPreserved: true });
+    await context.close(); ownedContexts.delete(context); activePage = null;
   }
   for (const [width, height] of [[1440, 900], [1280, 600], [390, 844], [360, 640]]) {
     const simulation = `browser-${width}-${height}`;
@@ -113,6 +198,7 @@ try {
     assert.deepEqual(errors, []);
     results.push({ width, height, closeReopen: true, suspendedModes: true, focusCancel: true, generatedAlternative: true, inputIsolation: true, cycleContinuation: true, overflow: false });
     await context.close(); ownedContexts.delete(context); activePage = null;
+    for (const action of ['perform', 'generate']) for (const entry of ['reload', 'fresh']) await recoverContinuation(width, height, action, entry);
   }
   await writeFile(path.join(root, 'results.json'), JSON.stringify(results, null, 2));
   console.log(`Deterministic real-browser proofs passed: ${root}. Live model quality, phone keyboards and assistive technology remain human gates.`);

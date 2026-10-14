@@ -1,6 +1,6 @@
 import { StageHistory } from "./stage-history.ts";
 import { StageRecovery, type BrowserStorage } from "./stage-recovery.ts";
-import { validStageBuffer, type StageBuffer, type FrozenRequest } from "./stage-buffer.ts";
+import { validFrozenRequest, validStageBuffer, type StageBuffer, type FrozenRequest } from "./stage-buffer.ts";
 import type { StageRecoveryIdentity } from "../../local-api/stage-contracts.ts";
 import { ACTOR_KNOWLEDGE_POLICY, type GenerateStageDraftBody, type PerformStageTurnBody, stageDraft, type ReviseStageDraftBody, type StageDraft, type StageProjection } from "../../local-api/stage-contracts.ts";
 import {
@@ -294,7 +294,9 @@ export class StageSession {
     if (body && suffix !== "/alternatives/origin" && this.recoveryRequired) {
       if (!this.recoveryReady || !this.recovery) throw new Error("Recovery identity is not ready; mutation not submitted.");
       await this.assertRecoveryIdentity();
-      if (this.pending && !suffix.startsWith("/alternatives")) {
+      // Only replayable continuation transports belong to this journal. Open-run
+      // navigation bookkeeping may run while an older mutation is unresolved.
+      if (this.pending && !suffix.startsWith("/alternatives") && validFrozenRequest({ suffix, body })) {
         const request = { suffix, body: JSON.parse(JSON.stringify(body)) as Record<string, unknown> };
         if (!this.requests.some(r => JSON.stringify(r) === JSON.stringify(request))) this.requests.push(request);
       }

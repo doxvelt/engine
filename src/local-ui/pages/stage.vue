@@ -103,8 +103,8 @@
       <p v-if="session.continuationStale && !session.selectedDraft" class="dx-warning-note p-2 text-sm" role="status">The original continuation basis has advanced. Your buffers are preserved.
         <UButton color="neutral" variant="link" :disabled="locked" @click="session.allowFreshContinuation()">Use these buffers at the current head</UButton>
       </p>
-      <div v-if="session.error" class="dx-error-note mb-2 rounded-sm p-2 text-sm" role="alert">
-        {{ session.error }}
+      <div v-if="session.error || session.needsReconcile" class="dx-error-note mb-2 rounded-sm p-2 text-sm" role="alert">
+        <p>{{ session.error || 'A saved request is unresolved. Retry the original request to reconcile it.' }}</p>
         <UButton v-if="session.needsReconcile" class="ml-1" color="neutral" variant="link" :loading="session.busy" @click="session.resume()">Retry request</UButton>
       </div>
       <p v-else-if="session.notice" class="mb-2 text-xs text-muted" role="status">{{ session.notice }}</p>
