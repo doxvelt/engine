@@ -23,8 +23,10 @@
               </StageAudience>
             </div>
             <p class="stage-prose">{{ turn.text }}</p>
+            <UButton v-if="!session.history.editor" :data-revise-turn="turn.messageVersionId" color="neutral" variant="link" size="xs" :disabled="locked" @click="openHistory(turn, $event)">Revise / alternate paths</UButton>
+            <StageHistoricalEditor v-if="session.history.editor?.selection.messageVersionId === turn.messageVersionId" :history="session.history" :actors="session.actors" :runtime-configured="!!runtime?.configured" @cancel="cancelHistory" />
           </article>
-          <article v-if="session.selectedDraft" :data-history-key="session.selectedDraft.id" class="stage-turn stage-draft" aria-label="Draft performance">
+          <article v-if="session.selectedDraft && !session.history.editor" :data-history-key="session.selectedDraft.id" class="stage-turn stage-draft" aria-label="Draft performance">
             <p class="dx-label mb-2">Draft · {{ draftStatus }}</p>
             <div class="mb-2 flex items-center justify-between gap-3">
               <StageIdentity :actor-id="session.selectedDraft.actorId" :actors="session.actors" />
@@ -73,8 +75,36 @@
     </div>
 
     <footer class="stage-dock">
-      <div v-if="session.error" class="dx-error-note mb-2 rounded-sm p-2 text-sm" role="alert">
-        {{ session.error }}
+      <div v-if="session.recoveryWarning || session.recovery?.warning" class="dx-warning-note mb-2 space-y-2 rounded-sm p-2 text-sm" role="alert">
+        <p>{{ session.recoveryWarning || session.recovery?.warning }}</p>
+        <p>Text remains in this tab. Browser storage has no server backup or cross-device sync.</p>
+        <UButton color="neutral" variant="subtle" @click="copyRecovery">Copy recovery text</UButton>
+        <p v-if="copyNotice" role="status">{{ copyNotice }}</p>
+        <details><summary>Copy-out text</summary><UTextarea :model-value="JSON.stringify(session.copyOut(), null, 2)" readonly aria-label="Recovery copy-out" class="w-full" /></details>
+        <template v-if="session.recovery?.conflicts.length">
+          <UButton color="neutral" variant="subtle" @click="session.resolveRecovery(null)">Keep this tab's version</UButton>
+          <details v-for="(conflict, index) in session.recovery.conflicts" :key="conflict.writer">
+            <summary>Conflicting version {{ index + 1 }}</summary>
+            <UTextarea :model-value="JSON.stringify(conflict.data, null, 2)" readonly :aria-label="`Conflicting version ${index + 1}`" class="w-full" />
+            <UButton v-if="conflict.data.requests.length || conflict.data.history.command" color="neutral" variant="subtle" :disabled="session.busy" @click="session.reconcileConflict(index)">Reconcile this version’s exact requests</UButton>
+            <UButton color="neutral" variant="subtle" @click="session.resolveRecovery(index)">Use version {{ index + 1 }}</UButton>
+          </details>
+        </template>
+        <UButton v-else color="neutral" variant="subtle" @click="retryLocalRecovery">Retry recovery / local save</UButton>
+      </div>
+      <p v-else-if="session.recovery?.saved" class="mb-2 text-xs text-muted" role="status">Saved in this browser only. Clearing browser storage loses unsent text.</p>
+      <p v-if="session.history.editor" class="text-sm text-muted">Continuation preserved on {{ session.scope.branchId }}. Historical controls are at the selected turn.</p>
+      <template v-else>
+      <div v-if="session.history.command" class="mb-2 space-y-2 text-sm" role="status">
+        <p>An earlier historical request is unresolved. Its exact input is preserved independently of the continuation.</p>
+        <UButton color="neutral" variant="subtle" :disabled="session.history.busy" @click="session.history.resume()">Reconcile historical request</UButton>
+        <p v-if="session.history.error" role="alert">{{ session.history.error }}</p>
+      </div>
+      <p v-if="session.continuationStale && !session.selectedDraft" class="dx-warning-note p-2 text-sm" role="status">The original continuation basis has advanced. Your buffers are preserved.
+        <UButton color="neutral" variant="link" :disabled="locked" @click="session.allowFreshContinuation()">Use these buffers at the current head</UButton>
+      </p>
+      <div v-if="session.error || session.needsReconcile" class="dx-error-note mb-2 rounded-sm p-2 text-sm" role="alert">
+        <p>{{ session.error || 'A saved request is unresolved. Retry the original request to reconcile it.' }}</p>
         <UButton v-if="session.needsReconcile" class="ml-1" color="neutral" variant="link" :loading="session.busy" @click="session.resume()">Retry request</UButton>
       </div>
       <p v-else-if="session.notice" class="mb-2 text-xs text-muted" role="status">{{ session.notice }}</p>
@@ -150,6 +180,7 @@
         </div>
         <p v-if="session.mode === 'direct' && runtime && !runtime.configured" class="mt-2 text-xs text-muted">Generation unavailable. Perform is ready to use.</p>
       </form>
+      </template>
     </footer>
   </main>
 
@@ -171,9 +202,10 @@
 </template>
 
 <script setup lang="ts">
+import type { TranscriptTurn } from "../../core/types";
 import { StageSession, StageApiError } from "../lib/stage-session";
 import { classifyDraftReview, createCommandLease, runLeasedMutation } from "../lib/stage-play";
-import { stageSetupRequest, type RuntimeStatus, type SourceFile, type NavigationState } from "../lib/stage-api";
+import { enableBrowserRecovery, stageSetupRequest, type RuntimeStatus, type SourceFile, type NavigationState } from "../lib/stage-api";
 
 const route = useRoute();
 const initialHydration = useNuxtApp().isHydrating;
@@ -188,6 +220,7 @@ const sourceFiles = ref<SourceFile[]>([]);
 const setupBusy = ref(false);
 const setupError = ref("");
 const navigationWarning = ref("");
+const copyNotice = ref("");
 let openingScope = "";
 const setupCommands = createCommandLease(() => crypto.randomUUID());
 const session = ref(new StageSession({ apiBase: apiBase.value, simulationId: simulationId.value, branchId: branchId.value }));
@@ -204,7 +237,7 @@ let historyScrollTop: number | null = null;
 let followingLatest = true;
 let focusVersion = 0;
 let pendingComposerResume: (() => boolean) | null = null;
-const locked = computed(() => session.value.busy || session.value.needsReconcile);
+const locked = computed(() => session.value.busy || session.value.needsReconcile || session.value.recoveryBlocked || session.value.history.busy || !!session.value.history.command);
 const actorItems = computed(() => session.value.actors.map(actor => ({ label: actor.name, value: actor.id })));
 const audienceItems = computed(() => session.value.availableAudience.filter(actor => actor.id !== session.value.actorId).map(actor => ({ label: actor.name, value: actor.id })));
 const actorName = (id: string) => session.value.actors.find(actor => actor.id === id)?.name || id;
@@ -226,7 +259,7 @@ const review = computed(() => session.value.selectedDraft ? classifyDraftReview(
 const recoverable = computed(() => ['ready', 'failed', 'generating'].includes(session.value.selectedDraft?.status || ''));
 const draftStatus = computed(() => ({ ready: 'Not accepted', generating: 'Generating', failed: 'Generation failed', accepted: 'Accepted', discarded: 'Discarded' })[session.value.selectedDraft?.status || 'ready']);
 const draftItems = computed(() => [{ label: 'Compose a new turn', value: 'compose' }, ...session.value.reviewDrafts.map((draft, index) => ({ value: draft.id, label: `${index + 1}. ${actorName(draft.actorId)} · ${draft.status}${session.value.hasBufferedReview(draft.id) ? ' · unsent edits' : ''}${draft.basisHeadCommitId !== session.value.projection?.branch.headCommitId ? ' · stale' : ''}` }))]);
-const canSubmit = computed(() => !locked.value && !!session.value.actorId && (session.value.mode === 'perform' ? !!session.value.performance.trim() : !!runtime.value?.configured));
+const canSubmit = computed(() => !locked.value && !session.value.continuationStale && !!session.value.actorId && (session.value.mode === 'perform' ? !!session.value.performance.trim() : !!runtime.value?.configured));
 
 // Prose is a single Vue text node. Read Range geometry without touching DOM or
 // Selection; binary search keeps long continuous turns logarithmic per scroll.
@@ -400,19 +433,59 @@ async function retry(): Promise<void> { if (permitEditorLoss()) { await session.
 async function discard(): Promise<void> { if (permitEditorLoss()) await session.value.discard(); }
 async function submit(): Promise<void> { if (!canSubmit.value) return; try { if (session.value.mode === 'direct') await session.value.generate(); else await session.value.perform(); } catch (error) { session.value.error = String(error); } }
 async function refreshPendingDraft(): Promise<void> { try { await session.value.refresh(); } catch { /* session displays the error */ } await nextTick(); restoreHistory(); }
-function warnBeforeUnload(event: BeforeUnloadEvent): void { if (session.value.unsaved) { event.preventDefault(); event.returnValue = ''; } }
-onBeforeRouteLeave(() => !session.value.unsaved || window.confirm('Leave Stage with unsaved text? Saved drafts will be recoverable.'));
-onBeforeRouteUpdate(() => !session.value.unsaved || window.confirm('Change run with unsaved text? Saved drafts will be recoverable.'));
+let historyTrigger: HTMLElement | null = null;
+let suspendedReadingTop = 0;
+async function openHistory(turn: TranscriptTurn, event: Event): Promise<void> {
+  historyTrigger = event.currentTarget as HTMLElement;
+  suspendedReadingTop = history.value?.scrollTop ?? 0;
+  const current = session.value;
+  await current.history.open(turn);
+  await nextTick();
+  if (session.value !== current || current.history.editor?.selection.messageVersionId !== turn.messageVersionId) return;
+  const editor = history.value?.querySelector<HTMLElement>('[aria-label="Historical revision"]');
+  editor?.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true });
+  editor?.scrollIntoView({ block: 'nearest' });
+}
+async function cancelHistory(): Promise<void> {
+  const version = session.value.history.editor?.selection.messageVersionId;
+  session.value.history.cancel();
+  await nextTick();
+  if (history.value) history.value.scrollTop = suspendedReadingTop;
+  const button = historyTrigger?.isConnected ? historyTrigger : Array.from(history.value?.querySelectorAll<HTMLElement>('[data-revise-turn]') ?? []).find(e => e.dataset.reviseTurn === version);
+  button?.focus({ preventScroll: true });
+  measureHistory();
+}
+async function retryLocalRecovery(): Promise<void> {
+  if (session.value.recovery) await session.value.retryRecovery();
+  else await enableBrowserRecovery(session.value, window);
+}
+async function copyRecovery(): Promise<void> {
+  try { await navigator.clipboard.writeText(JSON.stringify(session.value.copyOut(), null, 2)); copyNotice.value = "Recovery text copied."; }
+  catch { copyNotice.value = 'Clipboard unavailable. Select and copy the recovery text below.'; }
+}
+function storageChanged(): void { session.value.recovery?.check(); }
+watch(() => JSON.stringify(session.value.snapshot()), () => { session.value.autosave(); }, { flush: 'post' });
+watch(() => session.value.history.target, async target => {
+  if (!target) return;
+  const current = session.value;
+  if (!current.autosave()) return;
+  current.history.leaveForTarget();
+  await navigateTo({ path: '/stage', query: { ...route.query, simulation: current.scope.simulationId, branch: target.branch.id } });
+});
+function warnBeforeUnload(event: BeforeUnloadEvent): void { if (!session.value.autosave() && session.value.unsaved) { event.preventDefault(); event.returnValue = ''; } }
+onBeforeRouteLeave(() => session.value.autosave() || !session.value.unsaved || window.confirm('Leave Stage with text that could not be saved locally? Copy it first.'));
+onBeforeRouteUpdate(() => session.value.autosave() || !session.value.unsaved || window.confirm('Change run with text that could not be saved locally? Copy it first.'));
 let mounted = true;
 let setupVersion = 0;
 onMounted(async () => {
   window.addEventListener('beforeunload', warnBeforeUnload);
+  window.addEventListener('storage', storageChanged);
   window.addEventListener('resize', restoreHistory);
   const browserReload = initialHydration && (window.performance?.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'reload';
   await openRun(false, captureSetupScope(), !browserReload);
   if (!session.value.projection && !route.query.simulation) await discoverSource();
 });
-onBeforeUnmount(() => { mounted = false; setupVersion++; focusVersion++; historyObserver?.disconnect(); session.value.dispose(); window.removeEventListener('beforeunload', warnBeforeUnload); window.removeEventListener('resize', restoreHistory); });
+onBeforeUnmount(() => { mounted = false; setupVersion++; focusVersion++; historyObserver?.disconnect(); session.value.dispose(); window.removeEventListener('beforeunload', warnBeforeUnload); window.removeEventListener('storage', storageChanged); window.removeEventListener('resize', restoreHistory); });
 watch(() => [route.query.simulation, route.query.branch], async () => {
   const nextSimulation = String(route.query.simulation || 'default');
   const nextBranch = String(route.query.branch || 'main');
@@ -449,6 +522,13 @@ async function openRun(updateRoute = true, scope = captureSetupScope(), recordOp
     }
     await current.refresh();
     if (!ownsSetup() || !current.projection) return;
+    await enableBrowserRecovery(current, window);
+    if (!ownsSetup()) return;
+    if (current.history.editor) {
+      await nextTick();
+      if (!ownsSetup()) return;
+      history.value?.querySelector<HTMLElement>('[aria-label="Historical revision"]')?.scrollIntoView({ block: 'nearest' });
+    }
     if (navigation) {
       const input = { branchId: scope.branchId, operationId: crypto.randomUUID(), expectedVersion: navigation.version };
       try { await current.request('/navigation', input); }

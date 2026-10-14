@@ -11,3 +11,9 @@ export async function stageSetupRequest<T>(apiBase: string, path: string, body?:
   if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
   return result as T;
 }
+
+/** Browser storage access itself can throw (denied profile / privacy mode). */
+export async function enableBrowserRecovery(session: import("./stage-session.ts").StageSession, browser: Window): Promise<void> {
+  try { await session.enableRecovery(browser.localStorage); }
+  catch (error) { session.blockRecovery(String(error)); }
+}
