@@ -1,4 +1,5 @@
 import { Agent } from "@earendil-works/pi-agent-core";
+import { actorOutputContract, AUDIENCE_PROPOSAL_JSON_SCHEMA } from "../core/output-contracts.ts";
 import type {
   Api,
   AssistantMessage,
@@ -28,7 +29,7 @@ export const PI_ACTOR_TURN_RUNTIME_ID = "pi-agent-core";
 export const PI_ACTOR_TURN_RUNTIME_VERSION = "0.84.3";
 
 /**
- * Disposable, text-only bridge from Doxvelt's runtime port to low-level Pi.
+ * Disposable, no-tools bridge from Doxvelt's runtime port to low-level Pi.
  * Pi transcripts are confined to one invocation and never escape this adapter.
  */
 export class PiActorTurnRuntime implements ActorTurnRuntime {
@@ -67,6 +68,12 @@ export class PiActorTurnRuntime implements ActorTurnRuntime {
       return;
     }
 
+    const contract = actorOutputContract(request.outputSchema);
+    if (contract === null || (contract === "audience-proposal" && this.model.api !== "openai-completions")) {
+      yield { type: "failed", stopReason: "error" };
+      return;
+    }
+
     const agent = new Agent({
       initialState: {
         model: this.model,
@@ -75,7 +82,22 @@ export class PiActorTurnRuntime implements ActorTurnRuntime {
         tools: [],
         thinkingLevel: this.options.thinkingLevel ?? "off",
       },
-      streamFn: this.models.streamSimple.bind(this.models),
+      streamFn: (model, context, options) => this.models.streamSimple(model, context, {
+        ...options,
+        ...(contract === "audience-proposal" ? {
+          // Curated adapter-owned shaping only. Never merge request/context data
+          // into provider options, or retry with a weaker output contract.
+          maxRetries: 0,
+          onPayload: (payload: unknown) => {
+            if (!payload || typeof payload !== "object" || Array.isArray(payload))
+              throw new Error("Invalid structured runtime payload.");
+            return { ...payload, response_format: {
+              type: "json_schema",
+              json_schema: { name: "audience_proposal_v1", strict: true, schema: AUDIENCE_PROPOSAL_JSON_SCHEMA },
+            } };
+          },
+        } : {}),
+      }),
       ...(this.options.getApiKey
         ? { getApiKey: this.options.getApiKey }
         : {}),
