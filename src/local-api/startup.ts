@@ -1,4 +1,4 @@
-import { constants, closeSync, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { constants, closeSync, fstatSync, mkdirSync, mkdtempSync, linkSync, rmSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { isIP } from "node:net";
 import { normalizeLocalOpenAICompatibleBaseUrl, type LocalOpenAICompatibleRuntimeConfig } from "../agent-runtime/local-openai-compatible.ts";
@@ -11,7 +11,7 @@ export function resolveStartup(args: string[], env: NodeJS.ProcessEnv = process.
   const flags = new Map<string, string[]>();
   for (let index = 0; index < args.length; index += 2) {
     const flag = args[index]!;
-    if (!valueFlags.has(flag)) throw new Error("Unknown startup option. See README for supported flags.");
+    if (!valueFlags.has(flag)) throw new Error("Unknown startup option. See docs/LOCAL_REFERENCE.md for supported flags.");
     const value = args[index + 1];
     if (!value || value.startsWith("--")) throw new Error(`${flag} requires a nonempty value.`);
     if (flags.has(flag) && flag !== "--origin") throw new Error(`${flag} may be supplied only once.`);
@@ -27,22 +27,22 @@ export function resolveStartup(args: string[], env: NodeJS.ProcessEnv = process.
   }
   if (Object.hasOwn(env, "DOXVELT_RUNTIME_API_KEY")) merged.apiKey = env.DOXVELT_RUNTIME_API_KEY;
   if (typeof merged.apiKey !== "undefined" && (typeof merged.apiKey !== "string" || /[\r\n\x00]/.test(merged.apiKey))) throw new Error("Runtime apiKey must be a string without line breaks or NUL.");
-  const active = Object.keys(file).length > 0 || Object.keys(merged).some(key => key !== "apiKey");
-  const runtime = active ? validateProfile(merged) : undefined;
+  const runtime = validateProfile(merged);
   const host = get("--host") ?? "127.0.0.1";
   if (!isIP(host) && !/^(?:localhost|[a-zA-Z0-9.-]+)$/.test(host)) throw new Error("Invalid API host.");
   const port = integer(get("--port") ?? "8787", "--port", 65535);
   const uiPort = integer(get("--ui-port") ?? "3000", "--ui-port", 65535);
   if (port === uiPort) throw new Error("API and UI ports must differ.");
-  return { host, port, uiPort, dbPath: get("--db") ?? ".doxvelt/runtime.sqlite", allowedOrigins: (flags.get("--origin") ?? []).flatMap(value => value.split(",")).map(value => value.trim()).filter(Boolean), runtime };
+  return { configPath, host, port, uiPort, dbPath: get("--db") ?? ".doxvelt/runtime.sqlite", allowedOrigins: (flags.get("--origin") ?? []).flatMap(value => value.split(",")).map(value => value.trim()).filter(Boolean), runtime };
 }
 
-function validateProfile(value: Record<string, unknown>): LocalOpenAICompatibleRuntimeConfig {
+function validateProfile(value: Record<string, unknown>): LocalOpenAICompatibleRuntimeConfig | undefined {
+  for (const key of ["contextWindow", "maxTokens"] as const) if (value[key] !== undefined) integer(value[key], key, 1_000_000);
+  if ((value.maxTokens as number ?? 1024) > (value.contextWindow as number ?? 16384)) throw new Error("Runtime maxTokens must not exceed contextWindow.");
+  if ((value.baseUrl === undefined || value.baseUrl === "") && (value.modelId === undefined || value.modelId === "")) return undefined;
   if (typeof value.baseUrl !== "string" || !value.baseUrl || typeof value.modelId !== "string" || !value.modelId.trim()) throw new Error("Runtime baseUrl and modelId are required together. Edit the runtime configuration.");
   normalizeLocalOpenAICompatibleBaseUrl(value.baseUrl);
   if (value.modelId.length > 1024 || /[\x00-\x1f\x7f]/.test(value.modelId)) throw new Error("Runtime modelId must be nonempty text without control characters (up to 1024 characters).");
-  for (const key of ["contextWindow", "maxTokens"] as const) if (value[key] !== undefined) integer(value[key], key, 1_000_000);
-  if ((value.maxTokens as number ?? 1024) > (value.contextWindow as number ?? 16384)) throw new Error("Runtime maxTokens must not exceed contextWindow.");
   return value as LocalOpenAICompatibleRuntimeConfig;
 }
 
@@ -56,7 +56,14 @@ function readConfig(file: string, explicit: boolean): Record<string, unknown> {
   let fd: number;
   try { fd = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0)); }
   catch (error) {
-    if (!explicit && (error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    if (!explicit && (error as NodeJS.ErrnoException).code === "ENOENT") {
+      try { setupInference(path.dirname(path.dirname(file))); }
+      catch (creationError) {
+        if (((creationError as Error).cause as NodeJS.ErrnoException | undefined)?.code === "EEXIST") return readConfig(file, true);
+        throw creationError;
+      }
+      return readConfig(file, true);
+    }
     throw new Error("Cannot read runtime configuration. Check the file exists and is a readable regular file.");
   }
   try {
@@ -73,15 +80,24 @@ function readConfig(file: string, explicit: boolean): Record<string, unknown> {
     // Validate present file independently: CLI overrides must not hide mistakes.
     for (const key of ["contextWindow", "maxTokens"]) if (Object.hasOwn(result, key) && (typeof result[key] !== "number" || !Number.isInteger(result[key]) || (result[key] as number) < 1 || (result[key] as number) > 1_000_000)) throw new Error("Runtime sizing fields must be integer JSON numbers from 1 to 1000000.");
     if (typeof result.apiKey === "string" && /[\r\n\x00]/.test(result.apiKey)) throw new Error("Runtime apiKey must not contain line breaks or NUL.");
-    if (Object.keys(result).length) validateProfile(result);
+    validateProfile(result);
     return result;
   } finally { closeSync(fd); }
 }
 
+/** Publish a complete private file exclusively, so concurrent readers never see a partial skeleton. */
 export function setupInference(cwd = process.cwd()): void {
   const dir = path.join(cwd, ".doxvelt");
+  let temporary: string | undefined;
   try {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
-    writeFileSync(path.join(dir, "inference.json"), "{}\n", { flag: "wx", mode: 0o600 });
-  } catch { throw new Error("Cannot create runtime configuration: it already exists or the directory is not writable. Existing content was preserved."); }
+    temporary = mkdtempSync(path.join(dir, ".inference-"));
+    const file = path.join(temporary, "inference.json");
+    writeFileSync(file, JSON.stringify({ baseUrl: "", modelId: "", contextWindow: 16384, maxTokens: 1024, apiKey: "" }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+    linkSync(file, path.join(dir, "inference.json"));
+  } catch (cause) {
+    throw new Error("Cannot create runtime configuration: it already exists or the directory is not writable. Existing content was preserved.", { cause });
+  } finally {
+    if (temporary) rmSync(temporary, { recursive: true, force: true });
+  }
 }

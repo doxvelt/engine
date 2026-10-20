@@ -14,6 +14,8 @@ try {
   const options = { detached: process.platform !== "win32", stdio: "inherit" };
   const api = spawn("node", ["src/local-api/index.ts", ...args, ...origins.flatMap(origin => ["--origin", origin])], options);
   const ui = spawn("node", ["node_modules/@nuxt/cli/bin/nuxi.mjs", "dev", "src/local-ui", "--host", "127.0.0.1", "--port", String(config.uiPort), "--dotenv", fileURLToPath(new URL("./empty.env", import.meta.url)), "--no-fork"], { ...options, env: uiEnvironment(process.env, apiBase) });
+  console.log(`Open Doxvelt at http://127.0.0.1:${config.uiPort} once startup completes. Manual play is available.`);
+  console.log(`Optional AI configuration: ${config.configPath} (edit privately, then restart; values are never displayed).`);
   console.log(`Doxvelt dev child PIDs: API ${api.pid}, UI ${ui.pid}`);
   const startup = new AbortController();
   const failed = new AbortController();
