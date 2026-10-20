@@ -76,6 +76,21 @@ Historical regeneration instead safely commits/selects an alternate path after v
 `POST /simulations/:id/drafts`, followed by explicit acceptance or discard for continuation drafts.
 Saved drafts can be recovered after reload or API restart.
 
+Stage AI generation requires server-enforced JSON-schema output from the configured
+endpoint/model. The Pi adapter sends OpenAI-compatible chat completions with
+`response_format: { type: "json_schema", json_schema: { name: "audience_proposal_v1",
+strict: true, schema: ... } }`. The schema requires exactly `text` (string) and
+`audience` (array of strings), with no additional properties. Any endpoint that
+honors this contract can be used; there is no host allowlist, capability probe or
+formatting switch. Configuration does not verify this prerequisite.
+
+Doxvelt also validates nonempty performance text, available/nonduplicate recipients
+and director-corrected audience. Unsupported schema requests (including HTTP400/422)
+or invalid output fail without advancing history or saving a performance artifact.
+There is no prompt-only fallback or automatic repair call. Explicit Retry repeats
+the saved prompt/context and output contract. Existing legacy unrouted text requests
+retain their text behavior. Manual Perform remains available without inference.
+
 Ordinary `bun start` (or `bun run dev`) creates the private editable configuration automatically. Manual
 Perform works with no configuration and makes no model request.
 

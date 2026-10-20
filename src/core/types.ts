@@ -589,7 +589,7 @@ export type DraftRouting = DraftRoutingInput & {
 };
 
 export type ActorTurnDraftFailure = {
-  code: "runtime_failure" | "invalid_stream";
+  code: "runtime_failure" | "invalid_stream" | "output_contract";
   message: string;
   provenance: DraftRuntimeProvenance;
 };

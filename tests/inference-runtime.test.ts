@@ -17,7 +17,7 @@ test("provider auth detail cannot escape status, API replies, durable failure or
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-inference-failure-"));
   const dbPath = path.join(root, "runtime.sqlite");
   const secret = "TEST_SECRET_SENTINEL";
-  const faux = fauxProvider({ provider: "fixture-provider", models: [{ id: "fixture-model" }] });
+  const faux = fauxProvider({ api: "openai-completions", provider: "fixture-provider", models: [{ id: "fixture-model" }] });
   const models = createModels();
   models.setProvider(faux.provider);
   faux.setResponses([fauxAssistantMessage("", { stopReason: "error", errorMessage: `401 Unauthorized ${secret}` })]);

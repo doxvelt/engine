@@ -41,7 +41,9 @@ if you want AI configuration.
 ## AI drafts
 
 AI generation is optional. Doxvelt does not install or provide a model server;
-use an OpenAI-compatible server you arrange separately. Open the configuration path printed in the startup terminal, normally
+use an OpenAI-compatible server and model that support **strict JSON-schema output**
+(`response_format: json_schema`), arranged separately. There is no prompt-only fallback;
+manual play does not need a model server. Open the configuration path printed in the startup terminal, normally
 `.doxvelt/inference.json`. Fill its existing `baseUrl` and `modelId` fields with
 your OpenAI-compatible endpoint URL and exact model ID. Put an optional `apiKey`
 in the file using your editor; keep it private. Leave `contextWindow` and

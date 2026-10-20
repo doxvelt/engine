@@ -21,7 +21,11 @@ an existing story.
 
 With [AI configured](../README.md#ai-drafts), **Stage whisper** supplies
 private direction to the selected actor. It is separate from the performance other
-characters receive. **Generate draft** creates a saved candidate; review both its
+characters receive. AI generation requires an endpoint and model that enforce
+strict JSON-schema output. An incompatible endpoint or invalid performance/audience
+response fails safely; Doxvelt does not retry with prompt-only formatting. Manual
+**Perform** remains available without inference.
+**Generate draft** creates a saved candidate; review both its
 words and audience, then **Accept** or **Discard**. You can edit performance text,
 retry the captured request, or edit the complete whisper and generate afresh.
 Saved drafts remain available after API restart. A draft whose branch has moved
