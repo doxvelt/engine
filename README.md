@@ -1,6 +1,6 @@
 # Doxvelt
 
-Doxvelt is a local, single-user prototype for turn-based chat RPGs and role-play
+Doxvelt is a local, single-user source-run prototype for turn-based chat RPGs and role-play
 simulations. Choose who acts and who hears each turn; play their words yourself
 or optionally ask a model for a draft. Characters have subjective knowledge,
 beliefs and memories. No Doxvelt account is required.
@@ -33,7 +33,10 @@ beliefs and memories. No Doxvelt account is required.
 Use `bun start` each time; `bun run dev` remains supported. Both start the local
 API and UI in one terminal. First launch creates an ignored private
 `.doxvelt/inference.json` with blank AI fields and usable sizing defaults.
-Manual play works immediately and makes no provider request.
+Manual play works immediately and makes no provider request. If the filesystem
+cannot publish the configuration atomically, startup warns and manual play
+remains available; [create the full skeleton privately by hand](docs/LOCAL_REFERENCE.md#ai-drafts)
+if you want AI configuration.
 
 ## AI drafts
 
@@ -45,7 +48,9 @@ in the file using your editor; keep it private. Leave `contextWindow` and
 `maxTokens` at their defaults unless your model requires different limits.
 Save, stop with **Ctrl+C**, and run `bun start` again.
 
-Both endpoint and model blank means manual-only; filling just one is an error.
+To return to manual play, clear both `baseUrl` and `modelId`, then restart
+`bun start`. Remove explicit endpoint/model overrides if you used them.
+Filling just one field is an error.
 Existing `{}` files still work for manual play. Existing files are never replaced.
 Startup's **configured (connection unverified)** message does not test the server.
 In Stage, choose **Stage whisper**, enter private direction, and click

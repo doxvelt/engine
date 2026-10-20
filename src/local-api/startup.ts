@@ -1,9 +1,11 @@
-import { constants, closeSync, fstatSync, mkdirSync, mkdtempSync, linkSync, rmSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { constants, closeSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, linkSync, rmSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { isIP } from "node:net";
 import { normalizeLocalOpenAICompatibleBaseUrl, type LocalOpenAICompatibleRuntimeConfig } from "../agent-runtime/local-openai-compatible.ts";
 
 const valueFlags = new Set(["--host", "--port", "--db", "--origin", "--runtime-config", "--runtime-base-url", "--runtime-model", "--runtime-context-window", "--runtime-max-tokens", "--ui-port"]);
+class PublicationError extends Error {}
+const unsupportedLinks = new Set(["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EXDEV"]);
 const fields = new Set(["baseUrl", "modelId", "contextWindow", "maxTokens", "apiKey"]);
 
 /** Deployment configuration only. Never pass this result into content or persistence. */
@@ -57,9 +59,23 @@ function readConfig(file: string, explicit: boolean): Record<string, unknown> {
   try { fd = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0)); }
   catch (error) {
     if (!explicit && (error as NodeJS.ErrnoException).code === "ENOENT") {
+      // A dangling symlink must remain an error, even where opening it gives ENOENT.
+      try {
+        lstatSync(file);
+        throw new Error("Runtime configuration must be a readable regular file.");
+      } catch (statError) {
+        if ((statError as NodeJS.ErrnoException).code !== "ENOENT") throw statError;
+      }
       try { setupInference(path.dirname(path.dirname(file))); }
       catch (creationError) {
-        if (((creationError as Error).cause as NodeJS.ErrnoException | undefined)?.code === "EEXIST") return readConfig(file, true);
+        if (creationError instanceof PublicationError) {
+          const code = (creationError.cause as NodeJS.ErrnoException).code;
+          if (code === "EEXIST") return readConfig(file, true);
+          if (code && unsupportedLinks.has(code)) {
+            console.warn("Automatic configuration could not be created; manual play remains available. To configure AI manually, privately create the full skeleton described in docs/LOCAL_REFERENCE.md, then restart.");
+            return {};
+          }
+        }
         throw creationError;
       }
       return readConfig(file, true);
@@ -94,9 +110,16 @@ export function setupInference(cwd = process.cwd()): void {
     temporary = mkdtempSync(path.join(dir, ".inference-"));
     const file = path.join(temporary, "inference.json");
     writeFileSync(file, JSON.stringify({ baseUrl: "", modelId: "", contextWindow: 16384, maxTokens: 1024, apiKey: "" }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
-    linkSync(file, path.join(dir, "inference.json"));
+    try { linkSync(file, path.join(dir, "inference.json")); }
+    catch (cause) {
+      const message = (cause as NodeJS.ErrnoException).code === "EEXIST"
+        ? "Cannot publish runtime configuration: it already exists. Existing content was preserved."
+        : "Cannot publish runtime configuration. Existing content was preserved.";
+      throw new PublicationError(message, { cause });
+    }
   } catch (cause) {
-    throw new Error("Cannot create runtime configuration: it already exists or the directory is not writable. Existing content was preserved.", { cause });
+    if (cause instanceof PublicationError) throw cause;
+    throw new Error("Cannot create runtime configuration. Existing content was preserved.", { cause });
   } finally {
     if (temporary) rmSync(temporary, { recursive: true, force: true });
   }

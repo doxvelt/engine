@@ -84,7 +84,16 @@ The optional `bun run inference:setup` command exclusively creates the same skel
 when no file exists; it is never a launch prerequisite.
 
 Ordinary launch exclusively creates an owner-only, ignored `.doxvelt/inference.json`
-with these editable fields. Existing files are never overwritten:
+with these editable fields. Existing files are never overwritten. Publication uses
+a complete temporary file and an exclusive hard link. If the filesystem does not
+support that publication, only an implicit missing default falls back to manual
+play with a warning; explicit setup still fails. Other creation/read errors remain
+errors. Ordinary CLI runtime overrides still apply.
+
+On such a filesystem, stop Doxvelt and create `.doxvelt` privately (mode 700 on
+POSIX), then create `inference.json` in your editor with the **full** skeleton below
+and owner-only permissions (mode 600 on POSIX; private user ACL on Windows).
+Save the complete file before restarting; do not replace an existing file or symlink:
 
 ```json
 {
@@ -100,7 +109,9 @@ Enter an optional API key in the editor, keeping it out of shell history. An omi
 or empty key selects the existing keyless transport (which sends a fixed placeholder
 Bearer key). Model IDs are opaque and sent exactly as entered, including colons and
 quantization suffixes. Configuration is validated locally; **configured does not
-mean connection-verified**. Restart `bun run dev` after editing configuration.
+mean connection-verified**. Restart `bun start` after editing configuration.
+To return to manual play, clear both `baseUrl` and `modelId` and restart `bun start`;
+remove explicit `--runtime-base-url` and `--runtime-model` overrides if used.
 
 This file is plaintext. On POSIX it must be owned by the current user with no group
 or other permissions (`chmod 600 .doxvelt/inference.json`); setup creates the directory
@@ -117,7 +128,7 @@ workspace, profile or credential-store discovery:
 | Config file | `--runtime-config FILE`, otherwise `.doxvelt/inference.json` relative to the launch directory |
 | Endpoint/model/sizing | CLI flag > JSON field > sizing defaults (16384 context, 1024 output) |
 | API key | Present `DOXVELT_RUNTIME_API_KEY` environment variable > JSON `apiKey`; an explicitly empty environment value forces keyless mode |
-| No file | Missing default file is initialized for manual play; an explicitly selected missing file is an error |
+| No file | Missing default file is initialized for manual play, or warns and continues if hard-link publication is unsupported; an explicitly selected missing file is an error |
 | Blank/present file | `{}` or both endpoint/model blank means manual-only; partial nonblank profiles, invalid JSON, unknown fields, types, values or unsafe permissions fail startup with values withheld |
 
 The endpoint and model must be configured together. Sizing fields are positive

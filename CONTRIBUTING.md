@@ -89,12 +89,15 @@ configuration and command examples.
 
 ## Startup acceptance harness
 
-Run `node scripts/verify-inference-startup.ts` with Node >=24, Bun and Git on PATH
-from a checkout with dependencies already installed. No UI build is required.
+Run `node scripts/verify-inference-startup.ts` with Node >=24 and Bun on PATH
+from a source folder (ZIP extraction or checkout) with dependencies already installed. No UI build is required.
 CI runs this after the unchanged package checks and production UI build.
 
-The harness copies only tracked working source/config/assets into a writable temp
-launch directory. It links installed packages into a separate node_modules
+The harness traverses `src`, `scripts`, `examples` and `design-system`, plus
+`package.json` and `tsconfig.json`, copying allowed source/config/asset file types
+including untracked source into a writable temp launch directory. Git is not required.
+It excludes hidden metadata, dotenv, inference configuration, runtime state, databases,
+secret/key files, build/cache directories and symlinks; it never follows source links. It links installed packages into a separate node_modules
 directory, keeping writable caches local. It starts `bun start` without an inference
 file, explicit config path, or prebuilt `.nuxt`/`.output` files. Runtime state,
 configuration, home/cache/temp directories, logs, archives and child PIDs stay under
@@ -111,5 +114,6 @@ The occupied-port check preserves the unrelated listener.
 
 Network/listen permissions are required. The harness stops its servers and leaves
 evidence under TMPDIR. Fixture replies are deterministic synthetic output, not
-real-model quality or connectivity verification. Browser and Windows ACL/process
+real-model quality or connectivity verification. Focused tests inject hard-link
+failures; they do not prove behavior on a real exFAT filesystem. Browser and Windows ACL/process
 validation remain separate. The app does not install or provide a model server.

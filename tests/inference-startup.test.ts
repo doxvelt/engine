@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, readFile, stat, mkdir, symlink, chmod, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, stat, mkdir, symlink, chmod, rm, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { resolveStartup, setupInference } from "../src/local-api/startup.ts";
 import { uiEnvironment, supervise } from "../scripts/dev-processes.ts";
 import { spawn } from "node:child_process";
@@ -214,4 +216,47 @@ test("process-tree escalation stops descendants that ignore graceful termination
     await new Promise(resolve => setTimeout(resolve, 10));
   }
   assert.equal(alive, false, "descendant must no longer be running");
+});
+
+// Builtin mocking stays inside this test file's isolated Node test process.
+test("unsupported hard-link publication falls back only for implicit missing defaults", async t => {
+  const { root } = await fixture(t);
+  const warnings: string[] = [];
+  t.mock.method(console, "warn", (message: string) => warnings.push(message));
+  const link = t.mock.method(fs, "linkSync", () => { throw Object.assign(new Error("SECRET path"), { code: "EPERM" }); });
+  syncBuiltinESMExports();
+  t.after(() => { link.mock.restore(); syncBuiltinESMExports(); });
+  for (const code of ["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EXDEV"]) {
+    link.mock.mockImplementation(() => { throw Object.assign(new Error("SECRET path"), { code }); });
+    assert.equal(resolveStartup([], {}, root).runtime, undefined);
+    assert.deepEqual(await readdir(path.join(root, ".doxvelt")), []);
+    assert.deepEqual(resolveStartup(["--runtime-base-url", config.baseUrl, "--runtime-model", config.modelId], { DOXVELT_RUNTIME_API_KEY: "override" }, root).runtime,
+      { baseUrl: config.baseUrl, modelId: config.modelId, apiKey: "override" });
+    assert.throws(() => setupInference(root), /Cannot publish runtime configuration/);
+    assert.deepEqual(await readdir(path.join(root, ".doxvelt")), []);
+    assert.throws(() => resolveStartup(["--runtime-config", path.join(root, ".doxvelt/inference.json")], {}, root), /Cannot read/);
+  }
+  assert.equal(warnings.length, 10);
+  for (const warning of warnings) {
+    assert.match(warning, /Automatic configuration could not be created.*manual play remains available/);
+    assert.match(warning, /docs\/LOCAL_REFERENCE.md/);
+    assert.ok(!warning.includes(root));
+    assert.doesNotMatch(warning, /SECRET/);
+  }
+  link.mock.mockImplementation(() => { throw Object.assign(new Error("SECRET"), { code: "EIO" }); });
+  assert.throws(() => resolveStartup([], {}, root), /Cannot publish/);
+  assert.equal(warnings.length, 10);
+  const mkdir = t.mock.method(fs, "mkdirSync", () => { throw Object.assign(new Error("SECRET"), { code: "EPERM" }); });
+  syncBuiltinESMExports();
+  assert.throws(() => resolveStartup([], {}, root), /Cannot create/);
+  assert.equal(warnings.length, 10);
+  mkdir.mock.restore();
+  link.mock.restore();
+  const write = t.mock.method(fs, "writeFileSync", () => { throw Object.assign(new Error("SECRET"), { code: "EPERM" }); });
+  syncBuiltinESMExports();
+  assert.throws(() => resolveStartup([], {}, root), /Cannot create/);
+  assert.deepEqual(await readdir(path.join(root, ".doxvelt")), []);
+  assert.equal(warnings.length, 10);
+  write.mock.restore();
+  syncBuiltinESMExports();
 });
