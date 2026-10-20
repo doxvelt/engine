@@ -90,10 +90,15 @@ support that publication, only an implicit missing default falls back to manual
 play with a warning; explicit setup still fails. Other creation/read errors remain
 errors. Ordinary CLI runtime overrides still apply.
 
-On such a filesystem, stop Doxvelt and create `.doxvelt` privately (mode 700 on
-POSIX), then create `inference.json` in your editor with the **full** skeleton below
-and owner-only permissions (mode 600 on POSIX; private user ACL on Windows).
-Save the complete file before restarting; do not replace an existing file or symlink:
+If the filesystem supports private file permissions but not hard links, stop
+Doxvelt and create `.doxvelt` privately (mode 700 on POSIX), then create
+`inference.json` in your editor with the **full** skeleton below and owner-only
+permissions (mode 600 on POSIX; private user ACL on Windows).
+If the filesystem or mount cannot enforce owner-only permissions (common on POSIX
+FAT/exFAT mounts), keep the file on a suitable local filesystem instead and launch
+`bun start -- --runtime-config /absolute/path/to/inference.json`. Do not relax the
+permission check. Save the complete file before restarting; do not replace an
+existing file or symlink:
 
 ```json
 {
