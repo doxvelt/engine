@@ -15,6 +15,8 @@ import type {
 } from "./contracts.ts";
 
 export type PiActorTurnRuntimeOptions = Readonly<{
+  /** Deployment-only feedback; never forward provider text into domain events. */
+  onFailure?: (detail: unknown) => void;
   getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
   thinkingLevel?: ModelThinkingLevel;
   transport?: Transport;
@@ -124,6 +126,7 @@ export class PiActorTurnRuntime implements ActorTurnRuntime {
         finishFailure("tool_use");
         return;
       }
+      if (final.stopReason === "error") this.options.onFailure?.(final.errorMessage);
       const usage = normalizeUsage(final.usage);
       if (!usage) {
         finishFailure("error");
@@ -146,7 +149,8 @@ export class PiActorTurnRuntime implements ActorTurnRuntime {
       agent.abort();
     };
     signal?.addEventListener("abort", onAbort, { once: true });
-    const prompting = agent.prompt(request.prompt).catch(() => {
+    const prompting = agent.prompt(request.prompt).catch((error) => {
+      if (!signal?.aborted) this.options.onFailure?.(error);
       finishFailure(signal?.aborted ? "aborted" : "error");
     });
 

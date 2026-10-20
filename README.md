@@ -19,13 +19,38 @@ Install dependencies:
 bun install
 ```
 
-Start the local API and Studio UI:
+The following commands work in POSIX shells and Windows PowerShell.
+For generated drafts, configure inference once before starting; skip this step
+for manual play:
+
+```sh
+bun run inference:setup
+```
+
+Open `.doxvelt/inference.json` in your editor, add your endpoint and exact model ID
+using the [inference configuration example](#ai-drafts), and save it. Enter any
+optional key in the editor, not in a shell command. On Windows PowerShell you can
+open the file with:
+
+```powershell
+notepad .doxvelt/inference.json
+```
+
+Start the API and UI together in one terminal:
 
 ```sh
 bun run dev
 ```
 
-The API listens on `http://127.0.0.1:8787`. Nuxt prints the UI URL, usually `http://localhost:3000`.
+Use that same command for every start; no repeated flags or second terminal are
+needed. Changes to the file take effect on restart. Without configuration, Stage
+explains that generation is not configured and **Perform** remains available.
+With configuration, the terminal reports **configured (connection unverified)**:
+configuration alone does not test connectivity. Failed generation provides a
+bounded authentication/unavailable diagnostic on Stage.
+
+The API listens on `http://127.0.0.1:8787`. The UI uses `http://127.0.0.1:3000`
+(or the port selected with `--ui-port`).
 
 On Home, choose **Play the example** to open **The last crossing** directly on Stage.
 Mara, Nell and Corin meet at the last ferry before a storm. Choose an actor and
@@ -176,18 +201,107 @@ Model output is a durable, non-canonical draft until accepted. Stage uses
 `POST /simulations/:id/drafts`, followed by explicit acceptance or discard.
 Saved drafts can be recovered after reload or API restart.
 
-Configure the existing Pi runtime on the API process, separately from authored
-content. For example, with a locally installed compatible model:
+Configure inference once, then start both processes with `bun run dev`. Manual
+Perform works with no configuration and makes no model request.
 
 ```sh
-bun run api -- --runtime-base-url http://localhost:11434/v1 --runtime-model YOUR_MODEL --runtime-context-window 16384 --runtime-max-tokens 768
-bun run ui
+bun run inference:setup
+# Open .doxvelt/inference.json in your editor, then:
+bun run dev
 ```
 
-For an authenticated runtime, supply `DOXVELT_RUNTIME_API_KEY` in the API process
-environment. Credentials and endpoint configuration do not belong in the example.
-The legacy blank scaffold still contains `models/` metadata; this slice does not
-migrate that authoring contract.
+Setup exclusively creates an owner-only, ignored `.doxvelt/inference.json` containing
+`{}`. It never overwrites an existing file. Replace the empty object in your editor
+with your deployment's values, for example:
+
+```json
+{
+  "baseUrl": "http://127.0.0.1:11434/v1",
+  "modelId": "YOUR_EXACT_MODEL_ID",
+  "contextWindow": 16384,
+  "maxTokens": 768,
+  "apiKey": ""
+}
+```
+
+Enter an optional API key in the editor, keeping it out of shell history. An omitted
+or empty key selects the existing keyless transport (which sends a fixed placeholder
+Bearer key). Model IDs are opaque and sent exactly as entered, including colons and
+quantization suffixes. Configuration is validated locally; **configured does not
+mean connection-verified**. Restart `bun run dev` after editing configuration.
+
+This file is plaintext. On POSIX it must be owned by the current user with no group
+or other permissions (`chmod 600 .doxvelt/inference.json`); setup creates the directory
+with mode 700 and the file with mode 600. Symlink config files are rejected on POSIX.
+On Windows, restrict its ACL to your user using Windows file security settings;
+POSIX permission checks do not enforce Windows ACLs. Keep the file out of shared
+folders, backups and authored content packages. Git ignore is not encryption.
+
+Direct `bun run api` and `bun run dev` use the same resolver, with no home-directory,
+workspace, profile or credential-store discovery:
+
+| Setting | Precedence / behavior |
+|---|---|
+| Config file | `--runtime-config FILE`, otherwise `.doxvelt/inference.json` relative to the launch directory |
+| Endpoint/model/sizing | CLI flag > JSON field > sizing defaults (16384 context, 1024 output) |
+| API key | Present `DOXVELT_RUNTIME_API_KEY` environment variable > JSON `apiKey`; an explicitly empty environment value forces keyless mode |
+| No file | Missing default file means manual-only; an explicitly selected missing file is an error |
+| Blank/present file | `{}` means manual-only; incomplete fields, invalid JSON, unknown fields, types, values or unsafe permissions fail startup with values withheld |
+
+The endpoint and model must be configured together. Sizing fields are positive
+integers up to 1000000, with output no larger than context. URLs must be HTTP(S)
+without embedded credentials, query or fragment. CLI values must be nonempty;
+unknown options, missing values and duplicate singleton options are errors. There
+is no API-key CLI option. Bun's normal dotenv loading can populate the **API's**
+environment; the UI gets an allowlisted environment and an intentionally empty
+dotenv file, never the runtime key or configuration file. Ambient Nuxt variables
+are intentionally not forwarded by `dev`.
+
+Supported API options (also forwarded by `dev`): `--host`, `--port`, `--db`,
+repeatable/comma-separated `--origin`, `--runtime-config`, `--runtime-base-url`,
+`--runtime-model`, `--runtime-context-window`, `--runtime-max-tokens`.
+`dev` also accepts `--ui-port` (default 3000; API default 8787). It supplies the
+matching UI API URL and allowed UI origins. For example:
+
+```sh
+bun run dev -- --port 8788 --ui-port 3001 --runtime-max-tokens 512
+```
+
+Startup checks that both requested ports can be bound before launching children.
+Either child's exit or startup failure stops its sibling. SIGINT and SIGTERM
+trigger process-tree cleanup, with a 1.5-second grace period then forced termination
+(POSIX process groups; Windows `taskkill /T /F`). Nuxt startup is bounded to 90
+seconds, including its first page compilation. Only processes started by this
+launcher are targeted.
+
+After a failed request, `GET /runtime` provides a fixed, bounded diagnostic for the
+most recent failure in that API process: authentication, unavailable endpoint, or
+other provider/configuration failure. Stage shows that diagnostic on failed drafts.
+No raw provider body is returned or persisted. After restart, the transient diagnostic
+is empty; durable draft failures remain available. Check your configured endpoint,
+server availability, key and model locally, then retry. These diagnostics are not
+an inference quality or connection-health test.
+
+Configuration, credential paths and credentials never enter authored content,
+actor prompts, draft provenance or portable archives. Existing safe provider/model
+identity provenance remains portable under its existing policy; IDs that cannot
+be represented safely are recorded as unavailable while the exact ID is still used
+for inference. The legacy blank scaffold's `models/` metadata is unchanged.
+
+For deterministic startup acceptance (localhost **fixture**, no real-model
+verification), first build the UI, then run:
+
+```sh
+bun run ui:build
+node scripts/verify-inference-startup.ts
+```
+
+Use Node >=24. The harness runs the actual `bun run dev`, API and Nuxt through
+manual play, authenticated/keyless generation, environment override, restart,
+bad-auth/unavailable errors, secret exclusion and shutdown. It keeps logs, the
+portable archive and child PIDs under `TMPDIR` and stops its servers. Network/listen
+permissions are required. Browser interaction and Windows process/ACL checks
+remain separate verification.
 
 ## Local Development
 

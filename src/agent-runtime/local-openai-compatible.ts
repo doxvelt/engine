@@ -6,7 +6,6 @@ import {
   type Transport,
 } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
-import { requiredSafeIdentifier } from "../core/draft-contracts.ts";
 import { PiActorTurnRuntime } from "./pi.ts";
 
 export const LOCAL_OPENAI_COMPATIBLE_PROVIDER_ID = "local-openai-compatible";
@@ -28,8 +27,9 @@ export type LocalOpenAICompatibleRuntimeConfig = Readonly<{
 /** Creates exactly one deployment-configured OpenAI-compatible Pi runtime. */
 export function createLocalOpenAICompatibleRuntime(
   config: LocalOpenAICompatibleRuntimeConfig,
-): PiActorTurnRuntime {
+): PiActorTurnRuntime & { getDiagnostic(): string | null } {
   const baseUrl = normalizeBaseUrl(config.baseUrl);
+  let diagnostic: string | null = null;
   const modelId = requiredModelId(config.modelId);
   const apiKey = config.apiKey || LOCAL_OPENAI_COMPATIBLE_KEYLESS_TRANSPORT_KEY;
   const contextWindow = boundedPositiveInteger(config.contextWindow, LOCAL_OPENAI_COMPATIBLE_DEFAULT_CONTEXT_WINDOW, "contextWindow");
@@ -57,11 +57,13 @@ export function createLocalOpenAICompatibleRuntime(
   });
   const models = createModels();
   models.setProvider(provider);
-  return new PiActorTurnRuntime(models, model, {
+  const runtime = new PiActorTurnRuntime(models, model, {
+    onFailure: detail => { diagnostic = safeRuntimeDiagnostic(detail); },
     getApiKey: () => apiKey,
     ...(config.thinkingLevel ? { thinkingLevel: config.thinkingLevel } : {}),
     ...(config.transport ? { transport: config.transport } : {}),
   });
+  return Object.assign(runtime, { getDiagnostic: () => diagnostic });
 }
 
 export function normalizeLocalOpenAICompatibleBaseUrl(value: string): string {
@@ -78,7 +80,8 @@ function normalizeBaseUrl(value: string): string {
 }
 
 function requiredModelId(value: string): string {
-  return requiredSafeIdentifier(value, "runtime model ID");
+  if (typeof value !== "string" || !value.trim() || value.length > 1024 || /[\x00-\x1f\x7f]/.test(value)) throw new Error("runtime model ID must be nonempty text without control characters (up to 1024 characters).");
+  return value;
 }
 
 function boundedPositiveInteger(value: number | undefined, fallback: number, label: string): number {
@@ -86,4 +89,14 @@ function boundedPositiveInteger(value: number | undefined, fallback: number, lab
   if (!Number.isInteger(resolved) || resolved < 1 || resolved > 1_000_000)
     throw new Error(`${label} must be an integer from 1 to 1000000.`);
   return resolved;
+}
+
+/** Classify internally, return only fixed copy. Never log or retain provider detail. */
+export function safeRuntimeDiagnostic(detail: unknown): string {
+  const text = typeof detail === "string" ? detail : detail instanceof Error ? detail.message : "";
+  if (/\b(?:401|403)\b|unauthori[sz]ed|authentication|invalid.{0,12}(?:key|token)/i.test(text))
+    return "Runtime authentication failed. Check the API key in server configuration or DOXVELT_RUNTIME_API_KEY, then restart.";
+  if (/connect|ECONN|fetch failed|unavailable|timed? ?out|\b50[234]\b/i.test(text))
+    return "Runtime unavailable. Check the configured endpoint and that the inference server is running, then retry.";
+  return "Runtime request failed. Check server configuration, model availability and provider compatibility, then retry. Provider details are withheld.";
 }
