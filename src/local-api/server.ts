@@ -62,6 +62,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "http://127.0.0.1:3000",
 ];
 export type LocalApiOptions = {
+  runtimeDiagnostic?: () => string | null;
   dbPath?: string;
   actorTurnRuntime?: ActorTurnRuntime;
   allowedOrigins?: readonly string[];
@@ -95,7 +96,7 @@ export async function handleLocalApiRequest(
   if (method === "GET" && url.pathname === "/health")
     return send(response, 200, { ok: true });
   if (method === "GET" && url.pathname === "/runtime")
-    return send(response, 200, runtimeStatus(options.actorTurnRuntime));
+    return send(response, 200, { ...runtimeStatus(options.actorTurnRuntime), diagnostic: options.runtimeDiagnostic?.() ?? null });
   if (parts[0] === "source")
     return sourceRoute(method, parts, url, request, response);
   if (method === "POST" && parts[0] === "packages") {

@@ -17,7 +17,8 @@
     "test": "node --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
     "ui": "nuxt dev src/local-ui",
-    "ui:build": "nuxt build src/local-ui"
+    "ui:build": "nuxt build src/local-ui",
+    "inference:setup": "node ./scripts/setup-inference.ts"
   },
   "engines": {
     "node": ">=24"

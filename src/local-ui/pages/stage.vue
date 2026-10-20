@@ -57,6 +57,7 @@
               <p v-if="session.unsavedReview" class="mt-2 text-xs text-muted" role="status">Performance edits change text only; actor, recipients and generation input stay fixed. Saved only when accepted.</p>
             </template>
             <p v-else class="stage-prose" role="status">{{ review.message }}</p>
+            <p v-if="review.kind === 'failed' && runtime?.diagnostic" class="mt-2 text-sm" role="status">Most recent runtime failure: {{ runtime.diagnostic }}</p>
             <UPopover v-if="review.kind === 'ready' || review.kind === 'failed'">
               <UButton class="mt-3" color="neutral" variant="link" size="xs">Generation details</UButton>
               <template #content>
@@ -178,7 +179,7 @@
           <UTabs v-model="session.mode" :items="[{ label: 'Stage whisper', value: 'direct' }, { label: 'Perform', value: 'perform' }]" :content="false" @mousedown.capture="beginComposerMode" @click="activateComposerMode" size="xs" :ui="{ list: 'w-52' }" />
           <UButton type="submit" color="primary" :loading="session.busy" :disabled="!canSubmit">{{ session.mode === 'direct' ? 'Generate draft' : 'Perform' }}</UButton>
         </div>
-        <p v-if="session.mode === 'direct' && runtime && !runtime.configured" class="mt-2 text-xs text-muted">Generation unavailable. Perform is ready to use.</p>
+        <p v-if="session.mode === 'direct' && runtime && !runtime.configured" class="mt-2 text-xs text-muted">Generation is not configured. Run bun run inference:setup, edit .doxvelt/inference.json, then restart. Perform is ready to use.</p>
       </form>
       </template>
     </footer>
@@ -332,6 +333,15 @@ function jumpToLatest(): void {
   restoreHistory();
   history.value.focus({ preventScroll: true });
 }
+watch(() => [session.value.selectedDraftId, session.value.selectedDraft?.status], async () => {
+  if (session.value.selectedDraft?.status !== 'failed') return;
+  const current = session.value;
+  try {
+    const status = await stageSetupRequest<RuntimeStatus>(current.scope.apiBase, '/runtime');
+    if (session.value === current) runtime.value = status;
+  } catch { /* Preserve the durable draft failure when diagnostics are unavailable. */ }
+});
+
 watch(history, el => {
   historyObserver?.disconnect();
   readingAnchor = null; readingTop = 0; historyScrollTop = null; followingLatest = true;
