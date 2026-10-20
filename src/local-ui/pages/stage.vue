@@ -179,7 +179,7 @@
           <UTabs v-model="session.mode" :items="[{ label: 'Stage whisper', value: 'direct' }, { label: 'Perform', value: 'perform' }]" :content="false" @mousedown.capture="beginComposerMode" @click="activateComposerMode" size="xs" :ui="{ list: 'w-52' }" />
           <UButton type="submit" color="primary" :loading="session.busy" :disabled="!canSubmit">{{ session.mode === 'direct' ? 'Generate draft' : 'Perform' }}</UButton>
         </div>
-        <p v-if="session.mode === 'direct' && runtime && !runtime.configured" class="mt-2 text-xs text-muted">Generation is not configured. Run bun run inference:setup, edit .doxvelt/inference.json, then restart. Perform is ready to use.</p>
+        <p v-if="session.mode === 'direct' && runtime && !runtime.configured" class="mt-2 text-xs text-muted">Generation is not configured. Edit the runtime configuration identified in the startup terminal, then restart. Perform is ready to use.</p>
       </form>
       </template>
     </footer>

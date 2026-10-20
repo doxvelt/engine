@@ -23,6 +23,7 @@ try {
   });
   server.listen(config.port, config.host, () => {
     console.log(`Doxvelt local API listening at http://${config.host}:${config.port}`);
+    console.log(`Runtime configuration: ${config.configPath} (edit privately, then restart). Manual play is available.`);
     console.log(actorTurnRuntime ? "runtime: configured (connection unverified)" : "runtime: not configured; manual play available");
   });
 } catch (error) {

@@ -40,3 +40,6 @@ jobs:
 
       - name: Build Nuxt workbench
         run: bun run ui:build
+
+      - name: Verify isolated first launch and inference fixture
+        run: node scripts/verify-inference-startup.ts
