@@ -15,6 +15,8 @@ import type {
 } from "./contracts.ts";
 
 export type PiActorTurnRuntimeOptions = Readonly<{
+  /** Deployment-only lifecycle feedback, including pre-aborted invocations. */
+  onStart?: () => void;
   /** Deployment-only feedback; never forward provider text into domain events. */
   onFailure?: (detail: unknown) => void;
   getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
@@ -59,6 +61,7 @@ export class PiActorTurnRuntime implements ActorTurnRuntime {
     request: RunActorTurnRequest,
     signal?: AbortSignal,
   ): AsyncIterable<AgentRuntimeEvent> {
+    this.options.onStart?.();
     if (signal?.aborted) {
       yield { type: "failed", stopReason: "aborted" };
       return;

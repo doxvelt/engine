@@ -58,6 +58,7 @@ export function createLocalOpenAICompatibleRuntime(
   const models = createModels();
   models.setProvider(provider);
   const runtime = new PiActorTurnRuntime(models, model, {
+    onStart: () => { diagnostic = null; },
     onFailure: detail => { diagnostic = safeRuntimeDiagnostic(detail); },
     getApiKey: () => apiKey,
     ...(config.thinkingLevel ? { thinkingLevel: config.thinkingLevel } : {}),

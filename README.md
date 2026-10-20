@@ -277,6 +277,8 @@ launcher are targeted.
 After a failed request, `GET /runtime` provides a fixed, bounded diagnostic for the
 most recent failure in that API process: authentication, unavailable endpoint, or
 other provider/configuration failure. Stage shows that diagnostic on failed drafts.
+Each new runtime invocation clears the previous diagnostic before dispatch, including
+pre-aborted attempts, so recovery and non-provider failures do not retain an older error.
 No raw provider body is returned or persisted. After restart, the transient diagnostic
 is empty; durable draft failures remain available. Check your configured endpoint,
 server availability, key and model locally, then retry. These diagnostics are not

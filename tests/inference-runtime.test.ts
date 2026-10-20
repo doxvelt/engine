@@ -7,7 +7,8 @@ import path from "node:path";
 import test from "node:test";
 import { createModels, fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
 import { PiActorTurnRuntime } from "../src/agent-runtime/pi.ts";
-import { safeRuntimeDiagnostic } from "../src/agent-runtime/local-openai-compatible.ts";
+import { createLocalOpenAICompatibleRuntime, safeRuntimeDiagnostic } from "../src/agent-runtime/local-openai-compatible.ts";
+import type { AgentRuntimeEvent, RunActorTurnRequest } from "../src/agent-runtime/contracts.ts";
 import { createLocalApiServer } from "../src/local-api/server.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
 
@@ -59,4 +60,56 @@ test("provider auth detail cannot escape status, API replies, durable failure or
     assert.ok(!archive.includes(secret));
     assert.ok(!archive.includes("authentication failed"), "transient diagnostic is not portable history");
   } finally { store.close(); }
+});
+
+// Exercise the production factory and Pi adapter against deterministic fetch responses.
+// Diagnostics are process-local feedback, never the cause of an unrelated later draft.
+test("a new runtime invocation clears earlier provider diagnostics, including non-provider failures", async t => {
+  const runtime = createLocalOpenAICompatibleRuntime({ baseUrl: "http://inference.invalid/v1", modelId: "fixture-model" });
+  let mode: "error" | "success" | "tool" | "empty" = "error";
+  let calls = 0;
+  const diagnosticsAtDispatch: (string | null)[] = [];
+  t.mock.method(globalThis, "fetch", async () => {
+    calls++;
+    diagnosticsAtDispatch.push(runtime.getDiagnostic());
+    if (mode === "error") return new Response(JSON.stringify({ error: { message: "401 Unauthorized TEST_SECRET_SENTINEL" } }), { status: 401, headers: { "content-type": "application/json" } });
+    const delta = mode === "tool"
+      ? { tool_calls: [{ index: 0, id: "fixture-tool", type: "function", function: { name: "unsupported", arguments: "{}" } }] }
+      : { content: mode === "empty" ? "" : "Recovered response." };
+    const chunks = [
+      { id: "fixture", object: "chat.completion.chunk", choices: [{ index: 0, delta, finish_reason: null }] },
+      { id: "fixture", object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: mode === "tool" ? "tool_calls" : "stop" }], usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 } },
+    ];
+    return new Response(chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join("") + "data: [DONE]\n\n", { headers: { "content-type": "text/event-stream" } });
+  });
+  const request: RunActorTurnRequest = {
+    draftId: "draft", ownerScope: "owner", simulationId: "sim", branchId: "main",
+    basisHeadCommitId: "head", contentRevisionId: "content", actorId: "actor", audience: [],
+    context: {}, contextHash: "context-hash", prompt: "Speak briefly.", promptHash: "prompt-hash",
+    runtimeProfile: { id: "character", version: "v1" }, promptPolicy: { id: "default", version: "v1" },
+    outputSchema: { id: "screenplay", digest: "schema-v1" }, skillDigests: [], capabilityGrant: [],
+  };
+  const run = async (signal?: AbortSignal) => {
+    const events: AgentRuntimeEvent[] = [];
+    for await (const event of runtime.runActorTurn(request, signal)) events.push(event);
+    return events.at(-1);
+  };
+  for (const recovery of ["success", "tool", "empty", "pre-abort"] as const) {
+    mode = "error";
+    assert.deepEqual(await run(), { type: "failed", stopReason: "error" });
+    assert.match(runtime.getDiagnostic()!, /authentication failed/);
+    assert.doesNotMatch(runtime.getDiagnostic()!, /TEST_SECRET_SENTINEL/);
+    const before = calls;
+    if (recovery === "pre-abort") {
+      assert.deepEqual(await run(AbortSignal.abort()), { type: "failed", stopReason: "aborted" });
+      assert.equal(calls, before, "pre-aborted generation must not dispatch");
+    } else {
+      mode = recovery;
+      const result = await run();
+      assert.equal(result?.type, recovery === "tool" ? "failed" : "completed");
+      assert.equal(result?.stopReason, recovery === "tool" ? "tool_use" : "stop");
+    }
+    assert.equal(runtime.getDiagnostic(), null, `${recovery} must not retain the earlier auth failure`);
+    assert.ok(diagnosticsAtDispatch.every(value => value === null), "old provider feedback must be cleared before dispatch");
+  }
 });
