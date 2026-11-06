@@ -1,4 +1,5 @@
 import type { ActorTurnRuntime } from "../agent-runtime/contracts.ts";
+import { capturedEpisodeRecall, type EpisodeRecall } from "./candidate-routing.ts";
 import { generateActorTurnDraft } from "./draft-lifecycle.ts";
 import { buildAcceptedCommit, receiptFor, validateReadyDraft } from "./draft-acceptance.ts";
 import { buildManualCommit } from "./branch-kernel.ts";
@@ -15,6 +16,7 @@ export type HistoricalSelection = {
 export type AlternativeRequest = HistoricalSelection & {
   ownerScope: string; simulationId: string; commandId: string;
   action: "generate" | "manual"; audience: string[] | null;
+  replacementActorId?: string;
   completeWhisper?: string; manualText?: string; retryOf?: string;
 };
 export type OriginInput = {
@@ -57,7 +59,7 @@ const equal = (a: unknown, b: unknown) => stableStringify(a) === stableStringify
 export function validateAlternativeRequest(value: unknown): AlternativeRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new DomainValidationError("Invalid historical request.");
   const r = value as AlternativeRequest;
-  const keys = ["ownerScope", "simulationId", "commandId", "sourceBranchId", "expectedHead", "sourceCommitId", "messageVersionId", "logicalMessageId", "actorId", "action", "audience", "completeWhisper", "manualText", "retryOf"];
+  const keys = ["ownerScope", "simulationId", "commandId", "sourceBranchId", "expectedHead", "sourceCommitId", "messageVersionId", "logicalMessageId", "actorId", "action", "audience", "completeWhisper", "manualText", "retryOf", "replacementActorId"];
   if (Object.keys(r).some(k => !keys.includes(k))) throw new DomainValidationError("Unknown historical request field.");
   for (const key of keys.slice(0, 9) as (keyof AlternativeRequest)[]) requiredSafeIdentifier(r[key], key);
   if (!["generate", "manual"].includes(r.action)) throw new DomainValidationError("Invalid historical action.");
@@ -66,6 +68,7 @@ export function validateAlternativeRequest(value: unknown): AlternativeRequest {
   for (const id of r.audience || []) requiredSafeIdentifier(id, "audience");
   if (r.completeWhisper !== undefined && (typeof r.completeWhisper !== "string" || r.completeWhisper.length > 100_000)) throw new DomainValidationError("Invalid complete whisper.");
   if (r.retryOf !== undefined) requiredSafeIdentifier(r.retryOf, "retryOf");
+  if (r.replacementActorId !== undefined) requiredSafeIdentifier(r.replacementActorId, "replacementActorId");
   if (r.action === "manual") {
     assertRuntimeText(r.manualText, "Manual performance");
     if (!r.audience || r.completeWhisper !== undefined || r.retryOf !== undefined) throw new DomainValidationError("Manual editing requires concrete audience and performance only.");
@@ -159,7 +162,15 @@ export function historicalDraftRepository(repository: SavedAlternativeRepository
   } });
 }
 
-export async function createSavedAlternative(repository: SavedAlternativeRepository, runtime: ActorTurnRuntime | undefined, input: AlternativeRequest) {
+export async function createSavedAlternative(
+  repository: SavedAlternativeRepository,
+  runtime: ActorTurnRuntime | undefined,
+  input: AlternativeRequest,
+  options: {
+    signal?: AbortSignal;
+    recall?: (parentCommitId: string, actorId: string, whisper: string) => Promise<EpisodeRecall>;
+  } = {},
+) {
   const request = validateAlternativeRequest(input);
   const id = alternativeId(request), fingerprint = sha256(stableStringify(request));
   const existing = repository.getAlternative(request.ownerScope, request.simulationId, id);
@@ -171,14 +182,18 @@ export async function createSavedAlternative(repository: SavedAlternativeReposit
   assertSupportedHistoricalEffects(selection.selected);
   const simulation = repository.getSimulation(request.ownerScope, request.simulationId)!;
   const origin = originatingInput(repository, request);
-  const completeWhisper = request.action === "manual" ? null : request.completeWhisper ?? origin.completeWhisper;
+  const actorId = request.replacementActorId ?? request.actorId;
+  const completeWhisper = request.action === "manual" ? null
+    : request.completeWhisper ?? (actorId === request.actorId ? origin.completeWhisper : null);
   if (request.action === "generate" && completeWhisper === null) throw new DomainValidationError("Origin requires an explicit complete replacement whisper (empty is permitted).");
+  let retrySource: AlternativeRecord | null = null;
   if (request.retryOf) {
     const source = repository.getAlternative(request.ownerScope, request.simulationId, request.retryOf);
     if (!source || source.request.action !== "generate" || !["failed", "discarded"].includes(source.status)) throw new DomainValidationError("Retry requires failed or discarded historical work.");
     const { commandId: _a, retryOf: _b, ...old } = source.request;
     const { commandId: _c, retryOf: _d, ...next } = request;
     if (!equal(old, next) || completeWhisper !== source.completeWhisper) throw new DomainValidationError("Retry must repeat the frozen historical request.");
+    retrySource = source;
   }
   if (request.action === "generate" && !runtime) throw new DomainValidationError("No actor-turn runtime configured.");
   const createdAt = new Date().toISOString();
@@ -190,15 +205,17 @@ export async function createSavedAlternative(repository: SavedAlternativeReposit
     if (request.action === "generate") {
       const view = historicalDraftRepository(repository, reserved.operation);
       const generationCommandId = domainId("alternative_generation", id);
+      const episodeRecall = retrySource?.draft ? capturedEpisodeRecall(retrySource.draft.context)
+        : await options.recall?.(selection.parentCommitId, actorId, completeWhisper!);
       await generateActorTurnDraft(view, runtime!, {
         ownerScope: request.ownerScope, simulationId: request.simulationId, branchId: request.sourceBranchId,
         expectedHead: selection.parentCommitId, commandId: generationCommandId,
-        payload: { actorId: request.actorId, audience: normalizeAudience(request.actorId, request.audience ?? []),
+        payload: { actorId, audience: normalizeAudience(actorId, request.audience ?? []),
           stageWhisperIds: [], runtimeProfile: { id: "local-character", version: "v1" },
           promptPolicy: { id: "actor-knowledge-v1", version: "v1" }, outputSchema: { id: "audience-proposal", digest: "v1" }, skillDigests: [],
           routing: { version: 4, completeWhisper: completeWhisper!, initialAudience: null, correctedAudience: request.audience,
             correction: "", preservedText: null, sourceDraftId: null } },
-      });
+      }, { ...(options.signal ? { signal: options.signal } : {}), ...(episodeRecall === undefined ? {} : { episodeRecall }) });
       const completed = repository.getAlternative(request.ownerScope, request.simulationId, id)!;
       if (completed.status !== "pending") return { operation: completed, replayed: false };
       if (completed.draft?.status !== "ready" || completed.draft.artifact?.provenance.stopReason === "length") return { operation: repository.settleAlternative(request.ownerScope, request.simulationId, id, "failed", "generation_failed"), replayed: false };
@@ -211,6 +228,7 @@ export async function createSavedAlternative(repository: SavedAlternativeReposit
 
 export function buildAlternativeCommit(repository: SavedAlternativeRepository, operation: AlternativeRecord): { command: AlternativeCommand; commit: CommitRecord } {
   const r = operation.request;
+  const actorId = r.replacementActorId ?? r.actorId;
   const selected = resolveHistoricalSelection(repository, r);
   assertSupportedHistoricalEffects(selected.selected);
   if (selected.parentCommitId !== operation.parentCommitId) throw new DomainValidationError("Historical parent mismatch.");
@@ -220,7 +238,7 @@ export function buildAlternativeCommit(repository: SavedAlternativeRepository, o
   if (r.action === "generate") {
     const draft = operation.draft;
     if (!draft || draft.branchId !== r.sourceBranchId || draft.basisHeadCommitId !== operation.parentCommitId ||
-        draft.ownerScope !== r.ownerScope || draft.simulationId !== r.simulationId || draft.actorId !== r.actorId)
+        draft.ownerScope !== r.ownerScope || draft.simulationId !== r.simulationId || draft.actorId !== actorId)
       throw new DomainValidationError("Historical candidate basis mismatch.");
     const validated = validateReadyDraft(view, { ownerScope: r.ownerScope, simulationId: r.simulationId, draftId: operation.draft!.id, commandId: r.commandId }, operation.draft!);
     generated = receiptFor(validated.draft, validated.acceptedText);
@@ -229,11 +247,11 @@ export function buildAlternativeCommit(repository: SavedAlternativeRepository, o
     if (event.type !== "message_accepted") throw new DomainValidationError("Missing replacement message.");
     event.message.logicalMessageId = r.logicalMessageId;
     event.message.provenance.operation = "regenerate";
-    commit.events.push({ type: "stage_whisper_consumed", whisperId: domainId("alternative_input", operation.id), targetActorId: r.actorId, text: operation.completeWhisper! });
+    commit.events.push({ type: "stage_whisper_consumed", whisperId: domainId("alternative_input", operation.id), targetActorId: actorId, text: operation.completeWhisper! });
   } else {
     commit = buildManualCommit(repository, { ownerScope: r.ownerScope, simulationId: r.simulationId, branchId: r.sourceBranchId,
       expectedHead: operation.parentCommitId, commandId: r.commandId,
-      payload: { actorId: r.actorId, text: r.manualText!, audience: r.audience!, stageWhisperIds: [], knowledgePolicy: "actor-knowledge-v1" } },
+      payload: { actorId, text: r.manualText!, audience: r.audience!, stageWhisperIds: [], knowledgePolicy: "actor-knowledge-v1" } },
     { logicalMessageId: r.logicalMessageId, operation: "edit" });
     commit.createdAt = operation.createdAt;
   }
@@ -283,7 +301,7 @@ export function decodeAlternativeCommand(value: unknown): AlternativeCommand {
     decodeAcceptDraftReceipt(p.generated);
     if (typeof p.completeWhisper !== "string" || p.generated?.routing?.version !== 4 || p.generated.routing.completeWhisper !== p.completeWhisper ||
       p.generated.routing.source !== null || p.generated.routing.sourceDraftId !== null || p.generated.routing.preservedText !== null ||
-      p.generated.stageWhispers.length || p.generated.actorId !== r.actorId || p.generated.contentRevisionId !== p.contentRevisionId ||
+      p.generated.stageWhispers.length || p.generated.actorId !== (r.replacementActorId ?? r.actorId) || p.generated.contentRevisionId !== p.contentRevisionId ||
       p.generated.generatedArtifact.provenance.stopReason === "length" ||
       p.generated.accepted.textSource !== "generated_verbatim" || !equal(p.generated.routing.correctedAudience, r.audience) ||
       p.generated.generationCommandId !== domainId("alternative_generation", alternativeId(r)) ||

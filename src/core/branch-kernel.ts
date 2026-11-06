@@ -1,4 +1,5 @@
 import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
+import { branchBodyCorrections } from "./body-revisions.ts";
 import { compileWorkspace } from "./compiler.ts";
 import {
   applyAccessChange,
@@ -640,6 +641,7 @@ export function projectBranch(
     query.simulationId,
   );
   const transcript: TranscriptTurn[] = [];
+  const turnsByVersion = new Map<string, TranscriptTurn>();
   const audience = new Map<string, "active" | "inactive">();
   let accessLinks = [...revision.compiled.accessLinks];
   const beliefs: SubjectiveBeliefRecord[] = [...revision.compiled.beliefs];
@@ -659,8 +661,8 @@ export function projectBranch(
   for (const commit of commits)
     for (const event of commit.events) {
       switch (event.type) {
-        case "message_accepted":
-          transcript.push({
+        case "message_accepted": {
+          const turn: TranscriptTurn = {
             id: event.message.id,
             messageVersionId: event.message.id,
             logicalMessageId: event.message.logicalMessageId,
@@ -671,7 +673,12 @@ export function projectBranch(
             audience: event.message.audience,
             episodeId: null,
             createdAt: commit.createdAt,
-          });
+          };
+          transcript.push(turn);
+          turnsByVersion.set(event.message.id, turn);
+          break;
+        }
+        case "message_body_corrected":
           break;
         case "audience_changed":
           if (event.action === "remove") audience.delete(event.actorId);
@@ -723,6 +730,12 @@ export function projectBranch(
           assertNever(event);
       }
     }
+  for (const [versionId, correction] of branchBodyCorrections(repository, branch)) {
+    const turn = turnsByVersion.get(versionId);
+    if (!turn) continue;
+    turn.text = correction.text;
+    turn.bodyRevisionId = correction.commitId;
+  }
   const activeMemories = foldMemoryOperations(memoryOperations).active;
   const originalEpisodeMemories = episodeClosures.flatMap((item) => item.memories);
   const originalLongTermMemories = episodeClosures.flatMap(

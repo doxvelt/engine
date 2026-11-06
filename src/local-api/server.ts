@@ -1,5 +1,6 @@
 import { createSavedAlternative, discoverSavedAlternatives, originatingInput, type HistoricalSelection } from "../core/saved-alternatives.ts";
 import { ACTOR_KNOWLEDGE_POLICY } from "../core/types.ts";
+import { correctTurnBody } from "../core/turn-correction.ts";
 import { ROUTING_POLICY, routingInput } from "../core/candidate-routing.ts";
 import { navigationToken } from "../application/simulation-collection.ts";
 import path from "node:path";
@@ -197,6 +198,9 @@ export async function handleLocalApiRequest(
         scenarioName: scenario?.name || simulation.scenarioId || "Stage",
         branch: projection.branch,
         transcript: projection.transcript,
+        episodes: projection.episodeClosures.map(({ episode }, index) => ({
+          id: episode.id, label: episode.label || "Episode " + (index + 1),
+        })),
         audience: projection.audience,
         generationActorIds: actors.filter(actor => runtimeFor(options, actor.id)).map(actor => actor.id),
         actors: actors.map(actor => ({
@@ -349,6 +353,16 @@ export async function handleLocalApiRequest(
         sourceCommitId: required(body, "sourceCommitId"), messageVersionId: required(body, "messageVersionId"),
         logicalMessageId: required(body, "logicalMessageId"), actorId: required(body, "actorId"),
       });
+      const historicalGeneration = (sourceBranchId: string) => {
+        const signal = new AbortController();
+        response.once?.("close", () => signal.abort());
+        const memory = options.episodeMemory;
+        return {
+          signal: signal.signal,
+          ...(memory ? { recall: (head: string, actorId: string, whisper: string) => memory.recall(store,
+            { ownerScope, simulationId, branchId: sourceBranchId, head }, actorId, whisper, signal.signal) } : {}),
+        };
+      };
       if (method === "POST" && parts[3] === "origin" && parts.length === 4) {
         const body = await bodyOf(request);
         if (Object.keys(body).some(key => !["sourceBranchId", "expectedHead", "sourceCommitId", "messageVersionId", "logicalMessageId", "actorId"].includes(key)))
@@ -363,7 +377,11 @@ export async function handleLocalApiRequest(
       }
       if (method === "POST" && parts.length === 3) {
         const body = await bodyOf(request);
-        const result = await createSavedAlternative(store, runtimeFor(options, required(body, "actorId")), { ...body, ownerScope, simulationId } as Parameters<typeof createSavedAlternative>[2]);
+        const sourceBranchId = required(body, "sourceBranchId");
+        const actorId = body.replacementActorId === undefined ? required(body, "actorId") : required(body, "replacementActorId");
+        const result = await createSavedAlternative(store, runtimeFor(options, actorId),
+          { ...body, ownerScope, simulationId } as Parameters<typeof createSavedAlternative>[2],
+          body.action === "generate" ? historicalGeneration(sourceBranchId) : undefined);
         return send(response, 200, { operation: stageAlternativeDetail(result.operation, store), replayed: result.replayed });
       }
       if (parts[3]) {
@@ -378,8 +396,10 @@ export async function handleLocalApiRequest(
         if (method === "POST" && parts[4] === "retry" && parts.length === 5) {
           const body = await bodyOf(request);
           if (Object.keys(body).some(k => k !== "commandId")) throw new HttpError(400, "Historical retry accepts only commandId.");
-          const result = await createSavedAlternative(store, runtimeFor(options, operation.request.actorId), { ...operation.request,
-            commandId: required(body, "commandId"), retryOf: operation.id });
+          const original = operation.request;
+          const result = await createSavedAlternative(store, runtimeFor(options, original.replacementActorId ?? original.actorId), {
+            ...original, commandId: required(body, "commandId"), retryOf: operation.id,
+          }, historicalGeneration(original.sourceBranchId));
           return send(response, 200, { operation: stageAlternativeDetail(result.operation, store), replayed: result.replayed });
         }
       }
@@ -623,6 +643,16 @@ export async function handleLocalApiRequest(
           actorId,
         ),
       });
+    }
+    if (method === "POST" && parts[2] === "correct-turn-body" && parts.length === 3) {
+      const body = await bodyOf(request);
+      if (Object.keys(body).some(key => !["sourceBranchId", "expectedHead", "commandId", "messageVersionId", "text"].includes(key)))
+        throw new HttpError(400, "Save correction changes only the performance wording.");
+      return send(response, 200, correctTurnBody(store, {
+        ownerScope, simulationId, sourceBranchId: required(body, "sourceBranchId"),
+        expectedHead: required(body, "expectedHead"), commandId: required(body, "commandId"),
+        payload: { messageVersionId: required(body, "messageVersionId"), text: required(body, "text") },
+      }));
     }
     if (method === "POST" && parts[2] === "edit") {
       const body = await bodyOf(request);

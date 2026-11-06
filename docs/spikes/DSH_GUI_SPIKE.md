@@ -23,7 +23,7 @@ The follow-up kept the stock composer and transcript on DSH Web `0.2.2-rc.1`. Af
 
 **Open saved episode** lists saved Doxvelt simulations and opens the current episode on the saved branch. The test started *The last crossing* through the real Doxvelt local API, wrote one turn to SQLite before launching DSH, then restarted the local API and opened the episode in a fresh DSH profile with an empty transcript. DSH projected the saved row, returned the caret to the composer, and appended two Perform turns to the same Doxvelt branch. The API verified all three turns in order and the same private audience. The picker stays disabled while the composer contains an unsent draft.
 
-The saved-episode path exercises the current open episode on a saved branch. Generate uses the real Doxvelt draft and acceptance flow with a scripted runtime in the browser test. A model response that contradicts a fixed audience leaves the turn uncommitted and the direction editable. Named episode navigation through the DSH sidebar, closed episode selection, live model verification, and historical edits on a saved branch remain open integration work. DSH continues to label the underlying sidebar entry **New Session**.
+The saved-episode path exercises the current open episode on a saved branch. Generate uses the real Doxvelt draft and acceptance flow with a scripted runtime in the browser test. A model response that contradicts a fixed audience leaves the turn uncommitted and the direction editable. The DSH sidebar keeps its stock session naming. The episode transcript picker and revision actions are described below. Live model verification remains open. DSH continues to label the underlying sidebar entry **New Session**.
 
 ## Reverie episode memory
 
@@ -33,7 +33,29 @@ Doxvelt fingerprints the perceived source revision and keeps each publication bo
 
 The browser test uses the pinned DSH Web build, the real Doxvelt API and native Reverie executable, and scripted inference. It exercises cancelling an in-progress reflection and verifies that the provider receives cancellation, the episode remains unmemorized, and an explicit retry publishes inspectable memories. It then opens a later episode, generates a turn using those memories, and checks that the earlier raw dialogue is absent from that prompt. The API tests also verify that a prequel, an excluded character, and a sibling path receive only eligible memories, and that returning to a compatible path restores its earlier publication.
 
-**Story path** opens the selected path in a fresh DSH conversation. The browser test created an alternate through the engine API, selected it in DSH, and saw an out-of-date memory notice. Returning to **Original** restored its transcript and the matching memory publication. Historical edit actions and reopening closed transcripts still need a browser flow. The prototype uses one fictional date per episode slot and keeps the local memory catalog separate from portable simulation archives.
+**Story path** opens the selected path in a fresh DSH conversation. **Episode transcript** opens a closed episode on that path, including its memory status. Returning to **Original** restores its transcript and matching memory publication. The prototype uses one fictional date per episode slot and keeps the local memory catalog separate from portable simulation archives.
+
+## Revise saved turns
+
+**Save correction** creates a path with the revised wording at the same
+position. It keeps the later performances, character, audience, and unsent
+composer draft. The correction changes the episode revision, so a previously
+memorized episode shows a drift notice until the player memorizes that path.
+
+**Save & generate next turn** opens a new continuation. The old next character
+is preselected when that character has a configured model. Otherwise the first
+configured actor is offered and can be changed. The action can also change the
+edited turn's speaker or audience. If generation fails after the edit saves,
+the editor offers retry or lets the player open the saved path.
+
+**Regenerate this turn** starts from the original actor, recipients, and
+recorded whisper when available. The replacement actor receives only their
+eligible knowledge immediately before that turn. The new continuation opens
+after the generated turn commits.
+
+The launcher browser test exercises these actions with separate actor models
+and verifies the archived branch receipts. It forces a rejected successor and
+checks that retry generates it once on the existing edited path.
 
 ## Play with your models
 

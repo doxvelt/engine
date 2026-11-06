@@ -109,7 +109,7 @@ export class EpisodeMemory {
           observation: { foundation: "The remembering character is " + actor.name + ".", messages } }] : [];
       });
       return { slot, episodeId, label, date, sources,
-        revision: fingerprint([slot, date, simulation.contentRevisionId, turns.map(turn => turn.messageVersionId ?? turn.id)]) };
+        revision: fingerprint([slot, date, simulation.contentRevisionId, turns.map(turn => turn.bodyRevisionId ?? turn.messageVersionId ?? turn.id)]) };
     });
   }
 

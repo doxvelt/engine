@@ -14,11 +14,18 @@ export function decodeRecordedCommand(value: unknown): RecordedCommand {
   const command = record(value, "recorded command");
   const kind = enumString(command.kind, "recorded command kind", [
     "start", "turn", "effects", "closure", "edit", "regenerate", "fork",
-    "whisper", "accept_draft", "saved_alternative", "revise_memory", "retract_memory",
+    "whisper", "accept_draft", "saved_alternative", "revise_memory", "retract_memory", "correct_turn_body",
   ] as const);
   if (kind === "saved_alternative") decodeAlternativeCommand(command);
   else if (kind === "start") decodeStartCommand(command);
   else if (kind === "turn") decodeTurnCommand(command, false);
+  else if (kind === "correct_turn_body") {
+    exact(command, ["kind", "ownerScope", "simulationId", "branchId", "expectedHead", "commandId", "sourceBranchId", "payload"]);
+    strings(command, ["ownerScope", "simulationId", "branchId", "expectedHead", "commandId", "sourceBranchId"]);
+    const payload = record(command.payload, "turn correction");
+    exact(payload, ["messageVersionId", "text"]);
+    strings(payload, ["messageVersionId", "text"]);
+  }
   else if (kind === "edit" || kind === "regenerate")
     decodeTurnCommand(command, true);
   else if (kind === "effects") decodeEffectsCommand(command);
@@ -104,12 +111,12 @@ export function assertRecordedOutcomeIdentity(
     return;
   }
   if (outcome.kind === "commit") {
-    if (!["turn", "effects", "closure", "edit", "regenerate", "accept_draft", "saved_alternative", "revise_memory", "retract_memory"].includes(
+    if (!["turn", "effects", "closure", "edit", "regenerate", "accept_draft", "saved_alternative", "revise_memory", "retract_memory", "correct_turn_body"].includes(
       command.kind,
     )) fail();
     const commitCommand = command as Extract<
       RecordedCommand,
-      { kind: "turn" | "effects" | "closure" | "edit" | "regenerate" }
+      { kind: "turn" | "effects" | "closure" | "edit" | "regenerate" | "correct_turn_body" }
     >;
     if (
       outcome.branch.ownerScope !== commitCommand.ownerScope ||
@@ -499,13 +506,16 @@ function decodeCommit(value: unknown): void {
 function decodeRuntimeEvent(value: unknown): void {
   const event = record(value, "runtime event");
   const type = enumString(event.type, "runtime event type", [
-    "message_accepted", "audience_changed", "access_changed",
+    "message_accepted", "message_body_corrected", "audience_changed", "access_changed",
     "first_impression_formed", "stage_whisper_consumed", "episode_closed",
     "memory_operation",
   ] as const);
   if (type === "message_accepted") {
     exact(event, ["type", "message"]);
     decodeMessage(event.message);
+  } else if (type === "message_body_corrected") {
+    exact(event, ["type", "messageVersionId", "text"]);
+    strings(event, ["messageVersionId", "text"]);
   } else if (type === "audience_changed") {
     exact(event, ["type", "actorId", "action", "reason"]);
     string(event.actorId, "audience actor");

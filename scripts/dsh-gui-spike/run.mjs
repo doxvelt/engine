@@ -333,6 +333,20 @@ try {
     assert.equal(await page.locator('[data-doxvelt-turn]').count(), 1);
     results.push('Stock DSH forms inspectable native memories and uses them in a later fictional episode');
 
+    const transcriptPicker = page.getByLabel('Episode transcript', { exact: true });
+    await transcriptPicker.selectOption({ index: 1 });
+    await page.getByText('Closed episode', { exact: true }).waitFor();
+    await page.locator('[data-doxvelt-turn]').getByText(savedLine, { exact: false }).waitFor();
+    assert.equal(await page.locator('[data-doxvelt-turn]').count(), 4);
+    await page.getByRole('button', { name: 'Episode memory', exact: true }).click();
+    await page.getByText('I still remember the sealed letter agreement.', { exact: true }).first().waitFor();
+    await page.getByRole('button', { name: 'Close episode memory' }).click();
+    await transcriptPicker.selectOption({ label: 'Current episode' });
+    await page.getByText('Closed episode', { exact: true }).waitFor({ state: 'hidden' });
+    await page.locator('[data-doxvelt-turn]').getByText('I have the lantern.', { exact: true }).waitFor();
+    assert.equal(await page.locator('[data-doxvelt-turn]').count(), 1);
+    results.push('A closed episode reopens with its own transcript and memory, then returns to current play');
+
     const source = await engineRequest(engineUrl, savedRoute + '/stage');
     const original = source.transcript[0];
     const { operation } = await engineRequest(engineUrl, savedRoute + '/alternatives', {
@@ -356,6 +370,25 @@ try {
     await page.getByLabel('Memory episode').selectOption({ index: 0 });
     await page.getByText('I still remember the sealed letter agreement.', { exact: true }).first().waitFor();
     results.push('Stock DSH switches saved paths, shows memory drift and restores the original memory version');
+
+    await page.getByRole('button', { name: 'Close episode memory' }).click();
+    await transcriptPicker.selectOption({ index: 1 });
+    const closedTurns = page.locator('[data-doxvelt-turn]');
+    const originalRow = closedTurns.filter({ hasText: savedLine });
+    await originalRow.getByRole('button', { name: 'Edit turn', exact: true }).click();
+    const closedCorrection = 'I left the sealed letter beside the mooring post.';
+    await page.getByLabel('Revised performance').fill(closedCorrection);
+    await page.getByRole('button', { name: 'Save correction', exact: true }).click();
+    await closedTurns.getByText(closedCorrection, { exact: true }).waitFor();
+    await page.getByText('Closed episode', { exact: true }).waitFor();
+    assert.equal(await closedTurns.count(), 4);
+    await page.getByText('Memories are out of date for', { exact: false }).waitFor();
+    await transcriptPicker.selectOption({ label: 'Current episode' });
+    await page.getByText('Closed episode', { exact: true }).waitFor({ state: 'hidden' });
+    await closedTurns.getByText('I have the lantern.', { exact: true }).waitFor();
+    assert.equal(await closedTurns.count(), 1);
+    await page.getByText('Memories are out of date for', { exact: false }).waitFor();
+    results.push('Correcting a closed episode preserves its sequel and shows memory drift in both episodes');
   }
   console.log(JSON.stringify({ results, evidence: root }, null, 2));
 } catch (error) {

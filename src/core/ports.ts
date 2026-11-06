@@ -143,7 +143,14 @@ type BranchMutation = MutationIdentity & {
   expectedHead: string;
 };
 
+export type CorrectTurnBodyCommand = BranchMutation & {
+  kind: "correct_turn_body";
+  sourceBranchId: string;
+  payload: { messageVersionId: string; text: string };
+};
+
 export type RecordedCommand =
+  | CorrectTurnBodyCommand
   | import("./saved-alternatives.ts").AlternativeCommand
   | ({ kind: "start" } & (CreateSimulationInput | StartSimulationInput))
   | ({ kind: "turn"; payload: ManualTurnPayload } & BranchMutation)
