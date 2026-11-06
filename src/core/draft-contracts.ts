@@ -402,7 +402,7 @@ function validateDraftState(
 function assertFailure(value: unknown): asserts value is ActorTurnDraftFailure {
   const failure = object(value, "Draft failure");
   exact(failure, ["code", "message", "provenance"], "Draft failure");
-  if (failure.code !== "runtime_failure" && failure.code !== "invalid_stream")
+  if (failure.code !== "runtime_failure" && failure.code !== "invalid_stream" && failure.code !== "output_contract")
     throw invalid("Draft failure code is invalid.");
   assertRuntimeText(failure.message, "Draft failure message");
   assertRuntimeProvenance(failure.provenance, "failed");

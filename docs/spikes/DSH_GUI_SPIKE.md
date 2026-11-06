@@ -101,7 +101,8 @@ control.
 ```
 
 Use the actor IDs in the story and the model IDs advertised by your endpoints.
-The launcher uses OpenAI-compatible chat completions. Set any named credential
+The launcher uses OpenAI-compatible chat completions. Actor endpoints must
+support strict JSON-schema output (`response_format: json_schema`). Set any named credential
 environment variables before starting. An optional `defaultActor` supplies
 generation for characters without a specific route and serves as the default
 reflection model when you omit `reflection`. You can perform as any character.

@@ -72,6 +72,7 @@ type ActorConfiguration = {
 };
 
 export type LocalApiOptions = {
+  runtimeDiagnostic?: () => string | null;
   dbPath?: string;
   actorTurnRuntime?: ActorTurnRuntime;
   actorTurnRuntimes?: ReadonlyMap<string, ActorTurnRuntime>;
@@ -107,8 +108,11 @@ export async function handleLocalApiRequest(
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
   if (method === "GET" && url.pathname === "/health")
     return send(response, 200, { ok: true });
-  if (method === "GET" && url.pathname === "/runtime")
-    return send(response, 200, runtimeStatus(options.actorTurnRuntime ?? options.actorTurnRuntimes?.values().next().value ?? options.actorConfigurations?.[0]?.runtime));
+  if (method === "GET" && url.pathname === "/runtime") {
+    const runtime = options.actorTurnRuntime ?? options.actorTurnRuntimes?.values().next().value
+      ?? options.actorConfigurations?.[0]?.runtime;
+    return send(response, 200, { ...runtimeStatus(runtime), diagnostic: options.runtimeDiagnostic?.() ?? null });
+  }
   if (parts[0] === "source")
     return sourceRoute(method, parts, url, request, response);
   if (method === "POST" && parts[0] === "packages") {

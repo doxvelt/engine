@@ -253,18 +253,26 @@ test("unconfigured and caller-selected runtime requests fail before generation",
   assert.equal(runtime.calls, 0);
 });
 
-test("local runtime configuration rejects credential, endpoint, and unsupported model IDs", () => {
+test("local runtime configuration rejects unsafe endpoints and empty model IDs", () => {
   for (const config of [
     { baseUrl: "ftp://localhost/v1", modelId: "model" },
     { baseUrl: "http://user:password@localhost/v1", modelId: "model" },
     { baseUrl: "http://localhost/v1?token=secret", modelId: "model" },
-    { baseUrl: "http://localhost/v1", modelId: "https://host/model" },
-    { baseUrl: "http://localhost/v1", modelId: "sk_live_not-a-model" },
-    { baseUrl: "http://localhost/v1", modelId: "gpt-oss:20b" },
+    { baseUrl: "http://localhost/v1", modelId: "" },
+    { baseUrl: "http://localhost/v1", modelId: "bad\nmodel" },
   ]) assert.throws(() => createLocalOpenAICompatibleRuntime(config));
+  for (const modelId of ["gpt-oss:20b", "org/model:Q4_K_M", "https://host/model", "sk_live_not-a-model"]) {
+    const runtime = createLocalOpenAICompatibleRuntime({ baseUrl: "http://localhost/v1", modelId });
+    // Opaque IDs are dispatched unchanged, while unsafe portable metadata remains null.
+    assert.equal(runtime.identity.modelId, null);
+  }
 });
 
-test("local API startup rejects incomplete and orphan runtime flags", async () => {
+test("local API startup rejects incomplete and orphan runtime flags", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-cli-runtime-flags-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const runtimeConfig = path.join(root, "inference.json");
+  await writeFile(runtimeConfig, "{}\n", { mode: 0o600 });
   for (const args of [
     ["--runtime-max-tokens", "0"],
     ["--runtime-context-window"],
@@ -273,7 +281,7 @@ test("local API startup rejects incomplete and orphan runtime flags", async () =
     ["--runtime-base-url", "http://localhost:8000/v1"],
   ]) {
     await assert.rejects(
-      run(process.execPath, ["src/local-api/index.ts", ...args]),
+      run(process.execPath, ["src/local-api/index.ts", "--runtime-config", runtimeConfig, ...args], { timeout: 3000 }),
       (error: unknown) => {
         const stderr = String((error as { stderr?: string }).stderr || error);
         assert.match(stderr, /runtime|Runtime/);

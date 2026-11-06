@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSimulationArchive } from '../../src/core/archive-verifier.ts';
+import { AUDIENCE_PROPOSAL_JSON_SCHEMA } from '../../src/core/output-contracts.ts';
 import { openBranchStore } from '../../src/store/branch-sqlite.ts';
 
 const [dependencies, chrome, reverie] = process.argv.slice(2);
@@ -49,6 +50,10 @@ const provider = createServer(async (request, response) => {
     const usage = { prompt_tokens: 40, completion_tokens: 20, total_tokens: 60 };
     if (input.stream) {
       assert.ok(performances[model]);
+      assert.deepEqual(input.response_format, {
+        type: 'json_schema',
+        json_schema: { name: 'audience_proposal_v1', strict: true, schema: AUDIENCE_PROPOSAL_JSON_SCHEMA },
+      });
       const send = (delta, finish_reason) => {
         response.write('data: ' + JSON.stringify({ id: 'turn', object: 'chat.completion.chunk', model,
           choices: [{ index: 0, delta, finish_reason }], ...(finish_reason ? { usage } : {}) }) + '\n\n');

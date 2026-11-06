@@ -240,7 +240,7 @@ async function runDraft(
     let proposal: { text: string; audience: string[] } | null = null;
     if (draft.routing) {
       try { proposal = parseAudienceProposal(outcome.completion.text, draft); }
-      catch { throw new InvalidRuntimeStreamError(outcome.observation); }
+      catch { throw new OutputContractError(outcome.observation); }
     }
     const text = proposal?.text ?? outcome.completion.text;
     const artifact: ActorTurnDraftArtifact = {
@@ -260,7 +260,9 @@ async function runDraft(
         ? error.observation
         : emptyObservation();
     const code =
-      error instanceof InvalidRuntimeStreamError
+      error instanceof OutputContractError
+        ? "output_contract"
+        : error instanceof InvalidRuntimeStreamError
         ? "invalid_stream"
         : "runtime_failure";
     return failOrCurrent(
@@ -587,7 +589,9 @@ function failureFor(
   return {
     code,
     message:
-      code === "invalid_stream"
+      code === "output_contract"
+        ? "Runtime output did not satisfy the required JSON performance and audience contract."
+        : code === "invalid_stream"
         ? "Runtime output was invalid."
         : "Runtime generation failed.",
     provenance: {
@@ -845,6 +849,7 @@ class RuntimeStreamError extends Error {
   }
 }
 class InvalidRuntimeStreamError extends RuntimeStreamError {}
+class OutputContractError extends RuntimeStreamError {}
 class RuntimeFailureError extends RuntimeStreamError {}
 
 function assertNever(value: never): never {

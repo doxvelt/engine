@@ -71,8 +71,9 @@ function generation(head: string, commandId = "generate") {
 
 function runtimeWithFaux(
   responses: Parameters<ReturnType<typeof fauxProvider>["setResponses"]>[0],
+  api?: string,
 ) {
-  const faux = fauxProvider({ provider: "faux-provider", models: [{ id: "faux-model" }] });
+  const faux = fauxProvider({ ...(api ? { api } : {}), provider: "faux-provider", models: [{ id: "faux-model" }] });
   const models = createModels();
   models.setProvider(faux.provider);
   faux.setResponses(responses);
@@ -392,14 +393,14 @@ test("Pi runtime snapshots model dispatch and provenance from one deep copy", as
   assert.equal(modelReads, 1);
 });
 
-test("Pi carries the structured proposal through the text-only no-tools transport", async t => {
+test("Pi carries the structured proposal through the no-tools transport", async t => {
   const { store, started } = await fixture(t);
   const { runtime } = runtimeWithFaux([context => {
     assert.deepEqual(context.tools, []);
     assert.equal(context.messages.length, 1);
     assert.match(textOf(context.messages[0]!), /audience-proposal-v1/);
     return fauxAssistantMessage(JSON.stringify({ text: "Private response.", audience: ["ceo", "cfo"] }));
-  }]);
+  }], "openai-completions");
   const original = generation(started.root.id);
   const request = { ...original, payload: { ...original.payload,
     promptPolicy: { id: "audience-proposal-v1", version: "v1" },
@@ -411,4 +412,21 @@ test("Pi carries the structured proposal through the text-only no-tools transpor
   assert.equal(result.draft.artifact?.text, "Private response.");
   assert.deepEqual(result.draft.artifact?.proposedAudience, ["ceo", "cfo"]);
   assert.equal(result.draft.artifact?.provenance.adapter.id, "pi-agent-core");
+});
+
+test("Pi rejects structured output on an unsupported API before dispatch", async t => {
+  const { store, started } = await fixture(t);
+  const { runtime, faux } = runtimeWithFaux([fauxAssistantMessage("Must not run.")]);
+  const original = generation(started.root.id);
+  const request = { ...original, payload: { ...original.payload,
+    promptPolicy: { id: "audience-proposal-v1", version: "v1" },
+    outputSchema: { id: "audience-proposal", digest: "v1" },
+    routing: { version: 1 as const, initialAudience: ["cfo"], correction: "", correctedAudience: null, preservedText: null, sourceDraftId: null },
+  } };
+  const before = store.exportSimulation("owner", "sim");
+  const result = await generateActorTurnDraft(store, runtime, request);
+  assert.equal(result.draft.status, "failed");
+  assert.equal(result.draft.artifact, null);
+  assert.equal(faux.state.callCount, 0);
+  assert.deepEqual(store.exportSimulation("owner", "sim"), before);
 });
