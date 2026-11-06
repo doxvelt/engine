@@ -566,6 +566,7 @@ export type DraftRoutingInput = {
   /** Required for v2/v3. Complete replacement, including an intentionally empty whisper. */
   completeWhisper?: string;
   initialAudience: string[] | null;
+  audienceLimit?: string[];
   correction: string;
   correctedAudience: string[] | null;
   preservedText: string | null;

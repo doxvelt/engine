@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -10,14 +11,18 @@ const { values } = parseArgs({ options: {
   reverie: { type: "string" },
   models: { type: "string" },
   data: { type: "string", default: ".doxvelt/stage" },
+  database: { type: "string" },
+  story: { type: "string" },
+  scenario: { type: "string" },
   "no-open": { type: "boolean" },
   help: { type: "boolean" },
 } });
-const usage = "node scripts/dsh-stage.mjs --dsh <DSH CLI bin.js> --reverie <native executable> --models <config.json> [--data <directory>] [--no-open]";
+const usage = "node scripts/dsh-stage.mjs --dsh <DSH CLI bin.js> --reverie <native executable> --models <config.json> [--data <directory>] [--database <saved SQLite file>] [--story <source directory> --scenario <id>] [--no-open]";
 if (values.help) {
   console.log(usage);
 } else {
   if (!values.dsh || !values.reverie || !values.models) throw new Error(usage);
+  if (Boolean(values.story) !== Boolean(values.scenario)) throw new Error("Supply --story and --scenario together.");
   await launch(values);
 }
 
@@ -28,6 +33,9 @@ async function launch(config) {
     await import("../src/agent-runtime/local-openai-compatible.ts");
   const { createLocalApiServer } = await import("../src/local-api/server.ts");
   const { EpisodeMemory } = await import("../src/memory/episodes.ts");
+  const [dsh, reverie] = await Promise.all([
+    existingFile(config.dsh, "DSH CLI"), existingFile(config.reverie, "Reverie executable"),
+  ]);
   const models = JSON.parse(await readFile(config.models, "utf8"));
   const defaultRoute = models.defaultActor ? resolveRoute(models.defaultActor, "defaultActor") : undefined;
   const actors = new Map(Object.entries(models.actors ?? {}).map(([id, route]) =>
@@ -42,13 +50,17 @@ async function launch(config) {
   }).chatModel(reflection.modelId);
 
   const root = path.resolve(config.data);
+  const defaultDatabase = path.join(root, "doxvelt.sqlite");
+  const dbPath = config.database ? await existingFile(config.database, "Doxvelt database") : defaultDatabase;
+  const memoryRoot = path.join(root, "memory");
+  const memoryDirectory = path.relative(defaultDatabase, dbPath) === "" ? memoryRoot : path.join(memoryRoot, hashIdentity(dbPath));
   const workspace = path.join(root, "stage");
   const overlay = path.join(root, "dsh-overlay.json");
   const plugin = fileURLToPath(new URL("./dsh-gui-spike/host.mjs", import.meta.url));
   await mkdir(workspace, { recursive: true });
   await writeFile(overlay, JSON.stringify([{ insert: [{ id: "doxvelt-stage", name: plugin }] }]));
   const memory = new EpisodeMemory({
-    directory: path.join(root, "memory"), executable: path.resolve(config.reverie), modelKey: reflection.modelId,
+    directory: memoryDirectory, executable: reverie, modelKey: reflection.modelId,
     async reflect(request, signal) {
       try {
         const result = await generateText({
@@ -65,7 +77,7 @@ async function launch(config) {
     },
   });
   const engine = createLocalApiServer({
-    dbPath: path.join(root, "doxvelt.sqlite"), episodeMemory: memory,
+    dbPath, episodeMemory: memory,
     ...(defaultRoute ? { actorTurnRuntime: createLocalOpenAICompatibleRuntime(defaultRoute) } : {}),
     actorTurnRuntimes: actors,
   });
@@ -73,15 +85,11 @@ async function launch(config) {
     engine.listen(0, "127.0.0.1");
     await once(engine, "listening");
     const origin = "http://127.0.0.1:" + engine.address().port;
-    const seeded = await fetch(origin + "/examples/last-crossing/play", {
-      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
-    });
-    if (!seeded.ok) throw new Error("Could not open The Last Crossing in Doxvelt.");
-    await seeded.arrayBuffer();
+    await prepareStory(origin, config);
 
     const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
       /^(path|systemroot|comspec|pathext|temp|tmp|windir|localappdata|userprofile|lang|lc_all|tz)$/i.test(key)));
-    const child = spawn(process.execPath, [path.resolve(config.dsh), "web", "--patch", overlay, "--port", "0",
+    const child = spawn(process.execPath, [dsh, "web", "--patch", overlay, "--port", "0",
       ...(config["no-open"] ? ["--no-open"] : [])], {
       cwd: workspace, windowsHide: true, stdio: "inherit",
       env: { ...inherited, DSH_HOME: path.join(root, "dsh-home"),
@@ -107,6 +115,43 @@ async function launch(config) {
     }
     memory.close();
   }
+}
+
+function hashIdentity(value) {
+  return createHash("sha256").update(value).digest("hex").slice(0, 32);
+}
+
+async function existingFile(file, label) {
+  const resolved = await realpath(file).catch(() => null);
+  if (!resolved || !(await stat(resolved)).isFile()) throw new Error(label + " file was not found.");
+  return resolved;
+}
+
+async function prepareStory(origin, config) {
+  const list = await fetch(origin + "/simulations");
+  if (!list.ok) throw new Error("Could not read the saved Doxvelt stories.");
+  const { simulations } = await list.json();
+  let endpoint;
+  let body = {};
+  if (config.story) {
+    const workspacePath = await realpath(config.story);
+    const scenarioId = config.scenario;
+    const simulationId = "story-" + hashIdentity(JSON.stringify([workspacePath, scenarioId]));
+    if (simulations.some(story => story.simulationId === simulationId)) return;
+    const { compileWorkspace } = await import("../src/core/compiler.ts");
+    const compiled = await compileWorkspace(workspacePath);
+    if (!compiled.scenarios.some(item => item.id === scenarioId)) throw new Error("The scenario was not found in this story.");
+    endpoint = "/simulations/start";
+    body = { workspacePath, scenarioId, simulationId, commandId: simulationId + "-start" };
+  } else if (!simulations.length && !config.database) {
+    endpoint = "/examples/last-crossing/play";
+  }
+  if (!endpoint) return;
+  const response = await fetch(origin + endpoint, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error ?? "Could not prepare the Doxvelt story.");
 }
 
 function resolveRoute(value, label) {

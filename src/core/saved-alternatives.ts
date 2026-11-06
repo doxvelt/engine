@@ -17,6 +17,7 @@ export type AlternativeRequest = HistoricalSelection & {
   ownerScope: string; simulationId: string; commandId: string;
   action: "generate" | "manual"; audience: string[] | null;
   replacementActorId?: string;
+  audienceLimit?: string[];
   completeWhisper?: string; manualText?: string; retryOf?: string;
 };
 export type OriginInput = {
@@ -59,13 +60,19 @@ const equal = (a: unknown, b: unknown) => stableStringify(a) === stableStringify
 export function validateAlternativeRequest(value: unknown): AlternativeRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new DomainValidationError("Invalid historical request.");
   const r = value as AlternativeRequest;
-  const keys = ["ownerScope", "simulationId", "commandId", "sourceBranchId", "expectedHead", "sourceCommitId", "messageVersionId", "logicalMessageId", "actorId", "action", "audience", "completeWhisper", "manualText", "retryOf", "replacementActorId"];
+  const keys = ["ownerScope", "simulationId", "commandId", "sourceBranchId", "expectedHead", "sourceCommitId", "messageVersionId", "logicalMessageId", "actorId", "action", "audience", "completeWhisper", "manualText", "retryOf", "replacementActorId", "audienceLimit"];
   if (Object.keys(r).some(k => !keys.includes(k))) throw new DomainValidationError("Unknown historical request field.");
   for (const key of keys.slice(0, 9) as (keyof AlternativeRequest)[]) requiredSafeIdentifier(r[key], key);
   if (!["generate", "manual"].includes(r.action)) throw new DomainValidationError("Invalid historical action.");
   if (r.audience !== null && (!Array.isArray(r.audience) || r.audience.some(id => typeof id !== "string") || new Set(r.audience).size !== r.audience.length))
     throw new DomainValidationError("Invalid historical audience.");
   for (const id of r.audience || []) requiredSafeIdentifier(id, "audience");
+  if (r.audienceLimit !== undefined) {
+    if (r.action !== "generate" || r.audience !== null || !Array.isArray(r.audienceLimit) ||
+        new Set(r.audienceLimit).size !== r.audienceLimit.length)
+      throw new DomainValidationError("An audience limit requires an actor choice.");
+    for (const id of r.audienceLimit) requiredSafeIdentifier(id, "audienceLimit");
+  }
   if (r.completeWhisper !== undefined && (typeof r.completeWhisper !== "string" || r.completeWhisper.length > 100_000)) throw new DomainValidationError("Invalid complete whisper.");
   if (r.retryOf !== undefined) requiredSafeIdentifier(r.retryOf, "retryOf");
   if (r.replacementActorId !== undefined) requiredSafeIdentifier(r.replacementActorId, "replacementActorId");
@@ -214,6 +221,7 @@ export async function createSavedAlternative(
           stageWhisperIds: [], runtimeProfile: { id: "local-character", version: "v1" },
           promptPolicy: { id: "actor-knowledge-v1", version: "v1" }, outputSchema: { id: "audience-proposal", digest: "v1" }, skillDigests: [],
           routing: { version: 4, completeWhisper: completeWhisper!, initialAudience: null, correctedAudience: request.audience,
+            ...(request.audienceLimit ? { audienceLimit: request.audienceLimit } : {}),
             correction: "", preservedText: null, sourceDraftId: null } },
       }, { ...(options.signal ? { signal: options.signal } : {}), ...(episodeRecall === undefined ? {} : { episodeRecall }) });
       const completed = repository.getAlternative(request.ownerScope, request.simulationId, id)!;
@@ -304,6 +312,7 @@ export function decodeAlternativeCommand(value: unknown): AlternativeCommand {
       p.generated.stageWhispers.length || p.generated.actorId !== (r.replacementActorId ?? r.actorId) || p.generated.contentRevisionId !== p.contentRevisionId ||
       p.generated.generatedArtifact.provenance.stopReason === "length" ||
       p.generated.accepted.textSource !== "generated_verbatim" || !equal(p.generated.routing.correctedAudience, r.audience) ||
+      !equal(p.generated.routing.audienceLimit ?? null, r.audienceLimit ?? null) ||
       p.generated.generationCommandId !== domainId("alternative_generation", alternativeId(r)) ||
       p.generated.draftId !== domainId("actor_turn_draft", r.ownerScope, r.simulationId, p.generated.generationCommandId))
       throw new DomainValidationError("Historical generated receipt mismatch.");

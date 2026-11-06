@@ -8,7 +8,7 @@ Stage is one continuous transcript and one composer. A typical episode has two t
 
 The player can limit who receives a performance. A generated performance can also choose its audience within the player's routing constraints. Each turn shows who spoke and who received it. A stage whisper privately directs the selected actor and is recorded separately from the performance. The actor's whisper and knowledge are distinct from what the audience receives.
 
-Actor, character, audience, and stage whisper should be expressible inline where practical. Visible controls and notation edit the same values in both directions. A player can use the controls without learning syntax. Ordinary mentions in dialogue stay part of the performance. Only explicit routing changes who receives a turn.
+Actor, character, audience, and stage whisper should be expressible inline where practical. Visible controls and notation edit the same values in both directions. A player can use the controls without learning syntax. Ordinary mentions in dialogue stay part of the performance. Only explicit routing changes who receives a turn. The prototype starts with Everyone, supports named groups, and can constrain a delegated choice to a named group.
 
 A manual performance appends on submit. A generated performance appends automatically when its text and audience are complete and valid. The player continues from it or opens the turn to change it. Failed or cancelled generation leaves the last committed history available and keeps enough input to try again.
 
@@ -19,6 +19,8 @@ A manual performance appends on submit. A generated performance appends automati
 | **Save correction** | Replaces the selected turn's wording at the same place in the transcript and keeps the subsequent turns. Available for body-only edits. |
 | **Save & generate next turn** | Saves the edit and generates a new immediate successor from that point. The original continuation remains selectable. Use this save action when the edit changes the speaking character or audience. Preselect the actor who generated the old next turn when there is one. |
 | **Regenerate this turn** | Generates a replacement at the selected turn's original position, using what the selected character knew immediately before it. Start with the original actor and recorded stage whisper when available. The player can change the actor, complete whisper, or audience before generating. The original path remains selectable. |
+
+If the old next character has a configured model, the editor offers that actor. Otherwise it offers the first configured actor and lets the player change the selection. If the new next turn fails to generate, the saved edit remains available and the editor can retry that generation.
 
 An edit that looks in place to the player still has a new source revision. Existing performances, performer attribution, and audiences remain traceable to their versions. Changing which character performs a turn changes whose knowledge the model receives. Changing the audience changes who receives the resulting performance.
 
@@ -46,9 +48,8 @@ This is a target for Stage. It changes the existing generated-turn review flow, 
 
 | When it matters | Decision |
 | --- | --- |
-| Before shipping the composer | Choose the notation and audience default. Define how the player expresses a fixed audience versus asking an actor to choose within a limit, and how ambiguous names or invalid routing are shown. |
-| Before shipping historical edits | Decide who plays the new next turn when the old next turn was player-authored or the edit is at the end of an episode. Define whether a failed or cancelled **Save & generate next turn** leaves the saved correction in effect, and how retry resumes. |
-| Before integrating memory | Choose the minimum fictional date and time controls. Decide how much older dialogue is supplied directly, since handing the model full old transcripts can undo selective recall. Define what a player must memorize again when an earlier revision also invalidates memories formed in later episodes. |
+| Before shipping Stage | Try the visible notation, audience defaults, and actor fallback in real play. |
+| Before making stories portable | Decide how to package the local memory catalog with a story and whether fictional dates need finer resolution. |
 | Before packaging | Decide whether existing Pi stories need import, which model routes the first release must support, and whether a local browser launch is sufficient or a desktop package is needed. |
 
 Use the [Doxvelt ubiquitous language](STAGE_UBIQUITOUS_LANGUAGE.md) for the play terms and the [DeepSeek Harness GUI spike](../spikes/DSH_GUI_SPIKE.md) to test the host.

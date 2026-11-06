@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -20,6 +20,7 @@ const stage = fileURLToPath(new URL('../dsh-stage.mjs', import.meta.url));
 const scratch = await mkdtemp(path.resolve(dependencies, 'stage-launch-'));
 const config = path.join(scratch, 'models.json');
 const calls = [];
+const providerErrors = [];
 const privateLine = 'I left a silver key under the ferry rope.';
 const recall = 'Nell remembers where Corin left the key.';
 const newWhisper = 'Answer Corin from the landing.';
@@ -27,6 +28,10 @@ const replacement = 'There is a lantern on the landing.';
 const nextWhisper = 'Answer Mara after the revised opening.';
 const nextPerformance = 'Mara, I will take the long way home.';
 let nextAttempts = 0;
+const limitWhisper = 'Choose within the audience limit and keep @Mara out of the exchange.';
+const limitedPerformance = 'Corin, I can see the far bank.';
+const limitedRevision = 'Corin, the far bank is still in sight.';
+let limitAttempts = 0;
 const performances = {
   'nell-route': { text: 'I will guard the key.', audience: ['nell', 'corin'] },
   'mara-route': { text: 'The far bank is quiet.', audience: ['mara', 'corin'] },
@@ -46,14 +51,22 @@ const provider = createServer(async (request, response) => {
         response.write('data: ' + JSON.stringify({ id: 'turn', object: 'chat.completion.chunk', model,
           choices: [{ index: 0, delta, finish_reason }], ...(finish_reason ? { usage } : {}) }) + '\n\n');
       };
-      response.writeHead(200, { 'content-type': 'text/event-stream' });
-      const prompt = JSON.stringify(input.messages);
+      const prompt = input.messages.map(({ content }) => Array.isArray(content) ? content.map(part => part.text ?? '').join('\n') : content).join('\n');
       let performance = performances[model];
       if (prompt.includes(newWhisper)) performance = { text: replacement, audience: ['mara', 'corin'] };
       if (prompt.includes(nextWhisper)) {
         nextAttempts++;
         performance = { text: nextPerformance, audience: nextAttempts === 1 ? ['nell', 'mara'] : ['nell', 'corin'] };
       }
+      if (prompt.includes(limitWhisper)) {
+        limitAttempts++;
+        assert.match(prompt, /The director limits your choice/);
+        const references = prompt.match(/Available recipient identity references \(no additional knowledge\): (.+)/);
+        assert.deepEqual(JSON.parse(references?.[1] ?? '[]').map(item => item.id), ['corin', 'nell']);
+        performance = { text: limitAttempts === 3 ? limitedRevision : limitedPerformance,
+          audience: limitAttempts === 1 ? ['nell', 'mara'] : ['nell', 'corin'] };
+      }
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
       send({ role: 'assistant', content: JSON.stringify(performance) }, null);
       send({}, 'stop');
       response.end('data: [DONE]\n\n');
@@ -66,6 +79,8 @@ const provider = createServer(async (request, response) => {
         choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }], usage }));
     }
   } catch (error) {
+    providerErrors.push(error.message);
+    if (response.headersSent) { response.destroy(); return; }
     response.writeHead(500, { 'content-type': 'application/json' });
     response.end(JSON.stringify({ error: { message: error.message } }));
   }
@@ -77,6 +92,12 @@ let browser;
 let launcher;
 let launcherDone;
 let launcherLog = '';
+async function stopLauncher() {
+  if (launcher?.connected) launcher.disconnect();
+  await launcherDone;
+  launcher = undefined;
+  launcherDone = undefined;
+}
 try {
   const baseUrl = 'http://127.0.0.1:' + provider.address().port + '/v1';
   const route = modelId => ({ modelId, baseUrl });
@@ -84,9 +105,10 @@ try {
     actors: { nell: route('nell-route'), mara: route('mara-route') }, reflection: route('memory-route'),
   }));
 
-  async function launch() {
+  async function launch(args = [], data = scratch) {
+    launcherLog = '';
     launcher = spawn(process.execPath, [stage, '--dsh', dsh, '--reverie', reverie,
-      '--models', config, '--data', scratch, '--no-open'],
+      '--models', config, '--data', data, '--no-open', ...args],
     { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
     launcherDone = once(launcher, 'exit');
     return new Promise((resolve, reject) => {
@@ -225,6 +247,50 @@ try {
   assert.match(JSON.stringify(calls.at(-1).messages), /a lost hound on the ferry/);
   assert.doesNotMatch(JSON.stringify(calls.at(-1).messages), /under the ferry rope|Watch the key|I will guard the key|The far bank is quiet/);
 
+  const groupLine = 'Nell and Mara, the ferryman is waiting.';
+  await play(page, '/perform @Corin to @Nell, @Mara | ' + groupLine, groupLine);
+  assert.match(await turns.last().innerText(), /Corin → (Mara, Nell|Nell, Mara)/);
+  const audience = page.getByLabel('Audience', { exact: true });
+  assert.match(await audience.locator('option:checked').textContent(), /Mara \+ Nell|Nell \+ Mara/);
+  await audience.selectOption({ label: 'Everyone' });
+  const composer = page.locator('[contenteditable="true"]').first();
+  await composer.press('End');
+  await page.keyboard.insertText('The crossing is clear for everyone.');
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  await turns.getByText('The crossing is clear for everyone.', { exact: true }).waitFor();
+  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/perform @Corin to all |');
+  assert.match(await turns.last().innerText(), /Corin → (Mara, Nell|Nell, Mara)/);
+
+  await page.getByLabel('Action', { exact: true }).selectOption('generate');
+  await page.getByLabel('Actor', { exact: true }).selectOption('Nell');
+  await audience.selectOption({ label: 'Actor chooses' });
+  await page.getByLabel('Audience limit', { exact: true }).selectOption('Corin');
+  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/generate @Nell to actor among @Corin |');
+  await composer.fill('/generate @Nell to actor among @Mara | ');
+  assert.equal(await page.getByLabel('Audience limit', { exact: true }).inputValue(), 'Mara');
+  await composer.fill('/generate @Nell to actor among @Corin | ' + limitWhisper);
+  const beforeLimitedTurn = await turns.count();
+  await composer.press('Enter');
+  await page.getByText('Generation did not produce a valid turn.', { exact: false }).waitFor();
+  assert.equal(await turns.count(), beforeLimitedTurn);
+  assert.match(await composer.innerText(), /within the audience limit/);
+  await composer.press('Enter');
+  await turns.getByText(limitedPerformance, { exact: true }).waitFor();
+  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/generate @Nell to actor among @Corin |');
+  assert.equal(limitAttempts, 2);
+  assert.deepEqual(providerErrors, []);
+  assert.match(await turns.last().innerText(), /Nell → Corin/);
+
+  await turns.filter({ hasText: limitedPerformance }).getByRole('button', { name: 'Regenerate this turn' }).click();
+  const revisionAudience = page.getByRole('group', { name: 'Revision audience' });
+  await revisionAudience.getByRole('checkbox', { name: 'Actor chooses' }).check();
+  await revisionAudience.getByRole('checkbox', { name: 'Corin' }).check();
+  assert.equal(await page.getByLabel('Revision stage whisper').inputValue(), limitWhisper);
+  await page.getByRole('button', { name: 'Generate and open new path' }).click();
+  await turns.getByText(limitedRevision, { exact: true }).waitFor();
+  assert.equal(limitAttempts, 3);
+  assert.deepEqual(providerErrors, []);
+
   const revised = await openBranchStore(path.join(scratch, 'doxvelt.sqlite')).open();
   try {
     const [story] = revised.listSimulations('local');
@@ -235,17 +301,65 @@ try {
       item.canonicalInput.payload.request.action === 'manual');
     assert.equal(manual.length, 1);
     assert.equal(manual[0].canonicalInput.payload.request.replacementActorId, 'mara');
+    const limited = archive.commandResults.find(item => item.canonicalInput.kind === 'accept_draft' &&
+      item.canonicalInput.payload.routing?.audienceLimit);
+    assert.deepEqual(limited.canonicalInput.payload.routing.audienceLimit, ['corin']);
+    assert.deepEqual(limited.canonicalInput.payload.audience, ['nell', 'corin']);
+    const historicalLimit = archive.commandResults.find(item => item.canonicalInput.kind === 'saved_alternative' &&
+      item.canonicalInput.payload.request.audienceLimit);
+    assert.deepEqual(historicalLimit.canonicalInput.payload.request.audienceLimit, ['corin']);
+    assert.deepEqual(historicalLimit.canonicalInput.payload.generated.audience, ['nell', 'corin']);
   } finally {
     revised.close();
   }
-  console.log('Passed launcher model routes, native reflection, historical regeneration, wording correction, and safe retry after saving an edit.');
+  const playedPath = await page.getByLabel('Story path').inputValue();
+  await page.close();
+  await stopLauncher();
+  const database = path.join(scratch, 'doxvelt.sqlite');
+  const reopened = await openEpisode(await launch(['--database', database], path.join(scratch, 'fresh-dsh')));
+  const restoredTurns = reopened.locator('[data-doxvelt-turn]');
+  await restoredTurns.getByText(limitedRevision, { exact: true }).waitFor();
+  assert.equal(await reopened.getByLabel('Story path').inputValue(), playedPath);
+  assert.equal(await restoredTurns.getByText(groupLine, { exact: true }).count(), 1);
+  assert.match(await restoredTurns.last().innerText(), /Nell → Corin/);
+  await reopened.close();
+  await stopLauncher();
+
+  const source = path.join(scratch, 'authored-source');
+  await cp(fileURLToPath(new URL('../../examples/last-crossing', import.meta.url)), source, { recursive: true });
+  const joss = path.join(source, 'entities', 'joss');
+  await mkdir(joss);
+  await writeFile(path.join(joss, 'IDENTITY.md'), '---\nid: joss\nkind: agent\nname: Joss\nvisibility: public\n---\n\n@joss is a passenger on the ferry. :+3\n');
+  const authored = path.join(scratch, 'authored-story');
+  const openedSource = await openEpisode(await launch(['--story', source, '--scenario', 'last-crossing'], authored));
+  const authoredTurns = openedSource.locator('[data-doxvelt-turn]');
+  assert.equal(await authoredTurns.count(), 0);
+  const sharedAside = 'The violet parcel is under my coat.';
+  await openedSource.getByLabel('Audience', { exact: true }).selectOption({ label: 'Joss + Nell' });
+  const authoredComposer = openedSource.locator('[contenteditable="true"]').first();
+  await authoredComposer.press('End');
+  await openedSource.keyboard.insertText(sharedAside);
+  await authoredComposer.press('Enter');
+  await authoredTurns.getByText(sharedAside, { exact: true }).waitFor();
+  assert.match(await authoredTurns.first().innerText(), /Corin → Joss, Nell/);
+  await play(openedSource, '/generate @Mara to @Corin | Check the far bank.', performances['mara-route'].text);
+  assert.doesNotMatch(JSON.stringify(calls.at(-1).messages), /violet parcel/);
+  const sourceStore = await openBranchStore(path.join(authored, 'doxvelt.sqlite')).open();
+  try {
+    const [story, example] = sourceStore.listSimulations('local');
+    assert.match(story.simulationId, /^story-/);
+    assert.equal(example, undefined);
+  } finally {
+    sourceStore.close();
+  }
+  console.log('Passed launcher routes, native reflection, saved-turn editing, fixed and bounded audiences, and reopening a saved database and authored story.');
 } catch (error) {
+  if (providerErrors.length) console.error(providerErrors);
   console.error(launcherLog.replace(/http:\/\/127\.0\.0\.1:\d+\/[^\s]+/g, '[local launch link]'));
   throw error;
 } finally {
   await browser?.close();
-  if (launcher?.connected) launcher.disconnect();
-  await launcherDone;
+  await stopLauncher();
   const closed = once(provider, 'close');
   provider.close();
   provider.closeAllConnections();

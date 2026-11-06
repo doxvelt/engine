@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { playedTurn, savedEpisodeRequest } from './saved-episode.mjs';
+import { playedTurn, resolvePlayAudience, savedEpisodeRequest } from './saved-episode.mjs';
 
 export const inject = ['connection', 'sessions', 'workspaceRegistry'];
 
@@ -54,11 +54,10 @@ export async function apply(ctx) {
         return Response.json({ ok: true });
       }
 
-      const { mode, character, audience } = command;
-      if (!['perform', 'generate'].includes(mode) || !cast.includes(character) ||
-          (audience !== 'actor' && (!cast.includes(audience) || character === audience)) ||
-          (mode === 'perform' && (audience === 'actor' || !body)) ||
-          (mode === 'generate' && !actors[character])) {
+      const { mode, character } = command;
+      const route = resolvePlayAudience(command.audience, character, cast, mode === 'generate');
+      if (!['perform', 'generate'].includes(mode) || !cast.includes(character) || !route ||
+          (mode === 'perform' && !body) || (mode === 'generate' && !actors[character])) {
         return Response.json({ error: 'Choose a valid performer and audience.' }, { status: 400 });
       }
 
@@ -73,14 +72,15 @@ export async function apply(ctx) {
         fixture.calls.push({
           configuration: actor.configuration,
           whisper: body,
-          perceived: fixture.turns.filter(turn => turn.character === character || turn.audience === character).map(turn => turn.id),
+          perceived: fixture.turns.filter(turn => turn.character === character || turn.audience.split(', ').includes(character)).map(turn => turn.id),
         });
       }
 
+      const recipients = route.recipients ?? (route.limit?.includes(actor.audience) || !route.limit ? [actor.audience] : route.limit.slice(0, 1));
       const turn = {
         id: String(fixture.turns.length + 1),
         character,
-        audience: audience === 'actor' ? actor.audience : audience,
+        audience: recipients.join(', '),
         body: actor?.text ?? body,
         performer: actor?.configuration ?? 'player',
       };

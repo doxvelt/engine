@@ -427,6 +427,9 @@ export async function handleLocalApiRequest(
       const fixedAudience = body.fixedAudience === true;
       if (fixedAudience && (!knowledge || !Array.isArray(body.audience)))
         throw new HttpError(400, "A fixed audience requires an explicit audience and actor knowledge policy.");
+      const audienceLimit = Object.hasOwn(body, "audienceLimit") ? requiredStrings(body, "audienceLimit") : undefined;
+      if (audienceLimit && (!knowledge || fixedAudience || body.audience != null))
+        throw new HttpError(400, "An audience limit requires an actor choice.");
       if (knowledge && typeof body.completeWhisper !== "string")
         throw new HttpError(400, "New actor knowledge policy requires completeWhisper.");
       const base = envelope(body, ownerScope, simulationId);
@@ -461,6 +464,7 @@ export async function handleLocalApiRequest(
           ...(routed ? { routing: { version: knowledge ? 3 as const : 1 as const,
             ...(knowledge ? { completeWhisper: body.completeWhisper as string } : {}),
             initialAudience: fixedAudience || body.audience == null ? null : audience, correction: "", correctedAudience: fixedAudience ? audience : null,
+            ...(audienceLimit ? { audienceLimit } : {}),
             preservedText: null, sourceDraftId: null } } : {}),
           skillDigests: [],
         },

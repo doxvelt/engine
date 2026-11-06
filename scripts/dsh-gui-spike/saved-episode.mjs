@@ -51,6 +51,16 @@ async function savedBranches(origin, selection) {
   }));
 }
 
+async function rememberOpenedPath(origin, selection, signal) {
+  const endpoint = simulationRoute(selection.simulationId) + '/navigation';
+  const { version } = await engineRequest(origin, endpoint + '?branchId=' + encodeURIComponent(selection.branchId), undefined, signal);
+  try {
+    await engineRequest(origin, endpoint, { branchId: selection.branchId, operationId: randomUUID(), expectedVersion: version }, signal);
+  } catch (error) {
+    if (error.status !== 409) throw error;
+  }
+}
+
 function mention(actor) {
   return actor.name.toLowerCase() === actor.id.toLowerCase() ? actor.name : actor.id;
 }
@@ -79,6 +89,19 @@ function syncRows(session, current, next) {
     if (JSON.stringify(current.get(row.id)) !== JSON.stringify(row)) session.append(playedTurn, row);
   }
   return true;
+}
+
+export function resolvePlayAudience(selection, speaker, cast, generating) {
+  if (typeof selection !== 'string') return undefined;
+  const others = cast.filter(token => token !== speaker);
+  if (selection === '!all') return { recipients: others };
+  if (selection === '!self') return { recipients: [] };
+  if (selection === '!actor') return generating ? { recipients: null } : undefined;
+  const limited = selection.startsWith('!actor:');
+  if (limited && !generating) return undefined;
+  const tokens = (limited ? selection.slice(7) : selection).split(',');
+  if (tokens.some(token => !others.includes(token)) || new Set(tokens).size !== tokens.length) return undefined;
+  return limited ? { recipients: null, limit: tokens } : { recipients: tokens };
 }
 
 function failure(error, status) {
@@ -114,6 +137,7 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
       return failure('Start a new DSH session to open another episode.', 409);
     }
     const next = { ...selection, title: stage.scenarioName, ...(episodeId ? { episodeId } : {}) };
+    if (!opened) await rememberOpenedPath(origin, selection, signal);
     if (JSON.stringify(opened) !== JSON.stringify(next)) session.append(openedEpisode, next);
     if (!syncRows(session, rows, displayRows(stage, episodeId))) return failure('Open this episode in a fresh DSH session to see the changed history.', 409);
     return Response.json({ opened: { ...next, cast: castFor(stage) }, branches, episodes: stage.episodes });
@@ -128,11 +152,11 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
   if (!generating && command.mode !== 'perform') return failure('Choose Perform or Generate.', 400);
 
   const stage = await engineRequest(origin, stageRoute(opened));
-  const actor = stage.actors.find(item => mention(item) === command.character);
-  const audience = stage.actors.find(item => mention(item) === command.audience);
-  const delegateAudience = generating && command.audience === 'actor';
+  const cast = new Map(stage.actors.map(actor => [mention(actor), actor.id]));
+  const actorId = cast.get(command.character);
+  const route = resolvePlayAudience(command.audience, command.character, [...cast.keys()], generating);
   const text = typeof command.body === 'string' ? command.body.trim() : '';
-  if (!actor || (!delegateAudience && (!audience || audience.id === actor.id)) || (!generating && !text)) {
+  if (!actorId || !route || (!generating && !text)) {
     return failure('Choose a valid performer and audience, and enter a performance for Perform.', 400);
   }
   if (!syncRows(session, episodeState(session).rows, displayRows(stage))) {
@@ -141,9 +165,11 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
 
   const simulation = simulationRoute(opened.simulationId);
   const basis = { branchId: opened.branchId, expectedHead: stage.branch.headCommitId, commandId: randomUUID(),
-    actorId: actor.id, stageWhisperIds: [] };
+    actorId, stageWhisperIds: [] };
+  const audience = route.recipients?.map(token => cast.get(token)) ?? null;
   if (generating) {
-    if (!await commitGeneratedTurn(origin, simulation, basis, delegateAudience ? null : [audience.id], text))
+    const audienceLimit = route.limit?.map(token => cast.get(token));
+    if (!await commitGeneratedTurn(origin, simulation, basis, audience, text, { audienceLimit }))
       return failure('Generation did not produce a valid turn. The direction is still in the composer.', 422);
     const updated = await engineRequest(origin, stageRoute(opened));
     if (!syncRows(session, episodeState(session).rows, displayRows(updated))) {
@@ -151,7 +177,7 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
     }
   } else {
     const { turn } = await engineRequest(origin, simulation + '/turns', {
-      ...basis, audience: [audience.id], manualText: text, knowledgePolicy: 'actor-knowledge-v1',
+      ...basis, audience, manualText: text, knowledgePolicy: 'actor-knowledge-v1',
     });
     const [row] = displayRows({ ...stage, transcript: [turn] });
     session.append(playedTurn, row);
@@ -159,9 +185,10 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
   return Response.json({ ok: true });
 }
 
-async function commitGeneratedTurn(origin, simulation, basis, audience, completeWhisper, signal) {
+async function commitGeneratedTurn(origin, simulation, basis, audience, completeWhisper, { signal, audienceLimit } = {}) {
   const { draft } = await engineRequest(origin, simulation + '/drafts', {
     ...basis, draftingPolicy: 'actor-knowledge-v1', completeWhisper, audience, fixedAudience: audience !== null,
+    ...(audienceLimit ? { audienceLimit } : {}),
   }, signal);
   if (draft.status === 'accepted') return true;
   if (draft.status !== 'ready') return false;
@@ -229,9 +256,12 @@ async function historicalRequest(origin, opened, command, signal) {
   const replacement = stage.actors.find(item => mention(item) === command.character);
   if (!replacement || !stage.generationActorIds?.includes(replacement.id)) return failure('Choose a character with a model.', 400);
   const audience = historyAudience(stage, replacement.id, command.audience);
-  if (audience === undefined) return failure('Choose recipients from the cast.', 400);
+  const audienceLimit = command.audienceLimit === undefined ? undefined : historyAudience(stage, replacement.id, command.audienceLimit);
+  if (audience === undefined || (command.audienceLimit !== undefined && (!audienceLimit || audience !== null)))
+    return failure('Choose recipients from the cast.', 400);
   const { operation } = await engineRequest(origin, endpoint, {
     ...selection, commandId: command.requestId, action: 'generate', audience,
+    ...(audienceLimit ? { audienceLimit } : {}),
     ...(replacement.id === turn.actorId ? {} : { replacementActorId: replacement.id }),
     completeWhisper: command.whisper,
   }, signal);
@@ -245,7 +275,9 @@ async function editAndGenerateNext(origin, simulation, stage, selection, simulat
   if (!performer || !next || !stage.generationActorIds?.includes(next.id)) return failure('Choose a speaking character and a next actor with a model.', 400);
   const editedAudience = historyAudience(stage, performer.id, command.editedAudience);
   const nextAudience = historyAudience(stage, next.id, command.audience);
-  if (!editedAudience || nextAudience === undefined) return failure('Choose recipients from the cast.', 400);
+  const audienceLimit = command.audienceLimit === undefined ? undefined : historyAudience(stage, next.id, command.audienceLimit);
+  if (!editedAudience || nextAudience === undefined || (command.audienceLimit !== undefined && (!audienceLimit || nextAudience !== null)))
+    return failure('Choose recipients from the cast.', 400);
   if (!Number.isSafeInteger(command.attempt) || command.attempt < 0 ||
       typeof command.whisper !== 'string' || command.whisper.length > 100_000)
     return failure('The turn editor could not submit that request. Reopen the turn and try again.', 400);
@@ -262,7 +294,7 @@ async function editAndGenerateNext(origin, simulation, stage, selection, simulat
     const generated = await commitGeneratedTurn(origin, simulation, {
       branchId, expectedHead: commitId, commandId: command.requestId + '-next-' + command.attempt,
       actorId: next.id, stageWhisperIds: [],
-    }, nextAudience, command.whisper, signal);
+    }, nextAudience, command.whisper, { signal, audienceLimit });
     return Response.json({ selection: nextPath, retry: generated ? null : 'next' });
   } catch {
     // A dropped response can follow acceptance. Retry with the same command identity.

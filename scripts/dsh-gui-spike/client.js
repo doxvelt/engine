@@ -8,7 +8,7 @@ window.__ModuleLoader__.load({
     const castFor = sessionId => casts.get(sessionId) ?? fixtureCast;
     const modes = ['perform', 'generate'];
     const kind = 'doxvelt-performance';
-    const defaultRoute = { mode: 'perform', character: 'Corin', audience: 'Nell' };
+    const defaultRoute = { mode: 'perform', character: 'Corin', audience: '!all' };
     const routes = new Map();
     const sceneListeners = new Map();
     const carryDrafts = new Map();
@@ -30,15 +30,27 @@ window.__ModuleLoader__.load({
     }
 
     function parseDraft(draft, cast) {
-      const match = /^\/(perform|generate)\s+@([\w-]+)\s+to\s+(@[\w-]+|actor)\s*\|\s*([\s\S]*)$/i.exec(draft.trimStart());
+      const match = /^\/(perform|generate)\s+@([\w-]+)\s+to\s+([^|]+)\|\s*([\s\S]*)$/i.exec(draft.trimStart());
       if (!match) return undefined;
       const resolve = name => cast.find(actor => actor.token.toLowerCase() === name.toLowerCase())?.token;
-      return {
-        mode: match[1].toLowerCase(),
-        character: resolve(match[2]),
-        audience: match[3].toLowerCase() === 'actor' ? 'actor' : resolve(match[3].slice(1)),
-        body: match[4],
-      };
+      const mode = match[1].toLowerCase();
+      const character = resolve(match[2]);
+      const direction = match[3].trim();
+      const delegate = /^actor(?:\s+among\s+(.+))?$/i.exec(direction);
+      let audience;
+      if (/^(all|self)$/i.test(direction)) audience = '!' + direction.toLowerCase();
+      else if (delegate && mode === 'generate' && !delegate[1]) audience = '!actor';
+      else if (!delegate || mode === 'generate') {
+        const recipients = (delegate?.[1] ?? direction).split(',').map(item => {
+          const mention = /^@([\w-]+)$/.exec(item.trim());
+          return mention && resolve(mention[1]);
+        });
+        if (recipients.every(item => item && item !== character) && new Set(recipients).size === recipients.length) {
+          const list = cast.filter(actor => recipients.includes(actor.token)).map(actor => actor.token).join(',');
+          audience = delegate ? '!actor:' + list : list;
+        }
+      }
+      return { mode, character, audience, body: match[4] };
     }
 
     function claim(session, mode) {
@@ -48,7 +60,7 @@ window.__ModuleLoader__.load({
         submit(args) {
           const command = parseDraft('/' + mode + ' ' + args, castFor(session.sessionId));
           if (!command?.character || !command.audience) {
-            return Promise.resolve({ kind: 'error', text: 'Use /perform @Corin to @Nell | your performance.' });
+            return Promise.resolve({ kind: 'error', text: 'Choose recipients with the Audience control, or use to all, to @Nell, @Mara, or to actor before |.' });
           }
           return submit(session.sessionId, command);
         },
@@ -56,7 +68,9 @@ window.__ModuleLoader__.load({
     }
 
     function formatDraft({ mode, character, audience, body = '' }) {
-      const recipients = audience === 'actor' ? 'actor' : '@' + audience;
+      const mentions = value => value.split(',').map(token => '@' + token).join(', ');
+      const recipients = ['!all', '!self', '!actor'].includes(audience) ? audience.slice(1)
+        : audience.startsWith('!actor:') ? 'actor among ' + mentions(audience.slice(7)) : mentions(audience);
       return '/' + mode + ' @' + character + ' to ' + recipients + ' | ' + body;
     }
 
@@ -65,9 +79,13 @@ window.__ModuleLoader__.load({
       if (values.mode === 'generate' && !generators.length) values.mode = 'perform';
       const eligible = values.mode === 'generate' ? generators : cast;
       if (!eligible.some(actor => actor.token === values.character)) values.character = eligible[0]?.token;
-      if (values.audience !== 'actor' || values.mode === 'perform') {
-        const recipients = cast.filter(actor => actor.token !== values.character);
-        if (!recipients.some(actor => actor.token === values.audience)) values.audience = recipients[0]?.token;
+      const delegated = values.audience === '!actor' || values.audience?.startsWith('!actor:');
+      if (!values.audience || (delegated && values.mode === 'perform')) values.audience = '!all';
+      else if (!['!all', '!self', '!actor'].includes(values.audience)) {
+        const selected = (delegated ? values.audience.slice(7) : values.audience).split(',');
+        const recipients = cast.filter(actor => actor.token !== values.character && selected.includes(actor.token));
+        const group = recipients.map(actor => actor.token).join(',');
+        values.audience = group ? (delegated ? '!actor:' : '') + group : '!self';
       }
       return values;
     }
@@ -149,22 +167,35 @@ window.__ModuleLoader__.load({
         const route = supportedRoute(values, cast);
         if (route.character && route.audience) inputActions.setDraft(formatDraft(route));
       }
-      function select(label, value, options, field) {
+      function select(label, value, options, onChange) {
+        const labels = { '!all': 'Everyone', '!self': 'Only self', '!actor': 'Actor chooses' };
+        const optionLabel = option => label === 'Audience limit' && option === '!all' ? 'No limit'
+          : (Object.hasOwn(labels, option) ? labels[option] : undefined) ?? option.split(',').map(token => cast.find(actor => actor.token === token)?.name ?? token).join(' + ');
         return h('label', { style: { display: 'inline-flex', gap: 4, alignItems: 'center' } }, label, ' ',
           h('select', { 'aria-label': label, value: value ?? '', disabled: busy || opening,
-            onChange: event => update({ [field]: event.target.value }) },
+            onChange: event => onChange(event.target.value) },
             h('option', { value: '', disabled: true }, 'Choose'),
-            options.map(option => h('option', { value: option, key: option }, option === 'actor' ? 'Actor chooses' : cast.find(actor => actor.token === option)?.name ?? option))));
+            options.map(option => h('option', { value: option, key: option }, optionLabel(option)))));
       }
 
       const unsent = Boolean((command?.body ?? draft).trim());
       const available = command?.mode === 'generate' ? cast.filter(actor => actor.canGenerate) : cast;
       const recipients = cast.filter(actor => actor.token !== command?.character).map(actor => actor.token);
+      const groups = recipients.length <= 4
+        ? recipients.flatMap((first, index) => recipients.slice(index + 1).map(second => first + ',' + second))
+        : [];
+      const audience = command?.audience?.startsWith('!actor:') ? '!actor' : command?.audience;
+      const limit = command?.audience?.startsWith('!actor:') ? command.audience.slice(7) : '!all';
+      const fixed = ['!all', '!self', ...recipients, ...groups];
+      const limits = ['!all', ...recipients, ...groups];
+      if (audience && audience !== '!actor' && !fixed.includes(audience)) fixed.push(audience);
+      if (!limits.includes(limit)) limits.push(limit);
       return h('div', { 'aria-label': 'Doxvelt routing', style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '0 8px 8px', width: '100%', margin: '0 auto',
         maxWidth: 'var(--dsh-composer-card-max-width, 712px)', boxSizing: 'border-box' } },
-        select('Action', command?.mode, cast.some(actor => actor.canGenerate) ? modes : ['perform'], 'mode'),
-        select('Character', command?.character, available.map(actor => actor.token), 'character'),
-        select('Audience', command?.audience, command?.mode === 'generate' ? [...recipients, 'actor'] : recipients, 'audience'),
+        select('Action', command?.mode, cast.some(actor => actor.canGenerate) ? modes : ['perform'], mode => update({ mode })),
+        select(command?.mode === 'generate' ? 'Actor' : 'Character', command?.character, available.map(actor => actor.token), character => update({ character })),
+        select('Audience', audience, command?.mode === 'generate' ? [...fixed, '!actor'] : fixed, audience => update({ audience })),
+        audience === '!actor' && select('Audience limit', limit, limits, value => update({ audience: value === '!all' ? '!actor' : '!actor:' + value })),
         h('select', {
           'aria-label': 'Saved episode',
           value: saved.opened?.simulationId ?? '',
@@ -324,7 +355,8 @@ window.__ModuleLoader__.load({
       async function save(action) {
         setBusy(true);
         setError('');
-        const routing = { character: form.character, audience: form.audience, whisper: form.whisper };
+        const routing = { character: form.character, audience: form.audience, whisper: form.whisper,
+          ...(form.audience === null && form.audienceLimit?.length ? { audienceLimit: form.audienceLimit } : {}) };
         const result = await submit(sessionId, { ...identity, version: form.version, expectedHead: form.expectedHead, requestId: requestId.current,
           ...(action === 'correct' ? { mode: 'history-correct', body: form.body }
             : action === 'next' ? { mode: 'history-edit-next', attempt, ...routing,
@@ -353,23 +385,31 @@ window.__ModuleLoader__.load({
           options.map(actor => h('option', { key: actor.token, value: actor.token }, actor.name))));
       }
 
-      function audienceSelect(label, character, audience, disabled, canDelegate, onChange) {
+      function audienceSelect(label, character, audience, disabled, onChange, onLimit) {
+        const selected = audience ?? form.audienceLimit ?? [];
         return h('fieldset', { disabled, 'aria-label': label },
           h('legend', null, label),
-          canDelegate && h('label', null, h('input', { type: 'checkbox', checked: audience === null,
-            onChange: event => onChange(event.target.checked ? null : []) }), ' Actor chooses'),
+          onLimit && h('label', null, h('input', { type: 'checkbox', checked: audience === null,
+            onChange: event => onChange(event.target.checked ? null : selected) }), ' Actor chooses'),
           ...form.cast.filter(item => item.token !== character).map(item => h('label', { key: item.token, style: { marginLeft: 8 } },
-            h('input', { type: 'checkbox', disabled: audience === null, checked: audience?.includes(item.token) ?? false,
-              onChange: event => onChange(event.target.checked ? [...audience, item.token] : audience.filter(value => value !== item.token)) }),
-            ' ', item.name)));
+            h('input', { type: 'checkbox', checked: selected.includes(item.token),
+              onChange: event => {
+                const recipients = event.target.checked ? [...selected, item.token] : selected.filter(value => value !== item.token);
+                (audience === null ? onLimit : onChange)(recipients);
+              } }),
+            ' ', item.name)),
+          audience === null && h('small', { style: { display: 'block' } },
+            selected.length ? 'The actor can choose among the checked characters.' : 'No limit. Check characters to limit the choice.'));
       }
 
       function generationFields(prefix) {
         const locked = busy || retry === 'check';
         return [
           characterSelect(prefix + ' actor', form.character, form.eligible, locked,
-            character => update({ character, audience: form.audience?.filter(item => item !== character) ?? null })),
-          audienceSelect(prefix + ' audience', form.character, form.audience, locked, true, audience => update({ audience })),
+            character => update({ character, audience: form.audience?.filter(item => item !== character) ?? null,
+              audienceLimit: form.audienceLimit?.filter(item => item !== character) })),
+          audienceSelect(prefix + ' audience', form.character, form.audience, locked,
+            audience => update({ audience, audienceLimit: undefined }), audienceLimit => update({ audienceLimit })),
           h('label', null, prefix + ' stage whisper', h('textarea', { style: { display: 'block', width: '100%' },
             'aria-label': prefix + ' stage whisper', value: form.whisper, disabled: locked, onChange: event => update({ whisper: event.target.value }) })),
         ];
@@ -395,7 +435,7 @@ window.__ModuleLoader__.load({
               disabled: editLocked, onChange: event => update({ body: event.target.value }) })),
             characterSelect('Speaking character', form.speaker, form.cast, editLocked,
               speaker => update({ speaker, editedAudience: form.editedAudience.filter(item => item !== speaker) })),
-            audienceSelect('Edited audience', form.speaker, form.editedAudience, editLocked, false,
+            audienceSelect('Edited audience', form.speaker, form.editedAudience, editLocked,
               editedAudience => update({ editedAudience })),
             form.eligible.length > 0 && h('details', { open: retry ? true : undefined },
               h('summary', null, 'Next turn direction'),
@@ -494,7 +534,7 @@ window.__ModuleLoader__.load({
         async matchEnter(session, line, _signal, envelope) {
           const result = match(session, line);
           if (!result) return undefined;
-          if (envelope.attachments) throw new Error('The fixture accepts text only.');
+          if (envelope.attachments) throw new Error('Doxvelt turns use text only.');
           return { claim: result };
         },
         async matchClaim(session, token) { return match(session, token); },

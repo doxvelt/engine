@@ -23,7 +23,23 @@ The follow-up kept the stock composer and transcript on DSH Web `0.2.2-rc.1`. Af
 
 **Open saved episode** lists saved Doxvelt simulations and opens the current episode on the saved branch. The test started *The last crossing* through the real Doxvelt local API, wrote one turn to SQLite before launching DSH, then restarted the local API and opened the episode in a fresh DSH profile with an empty transcript. DSH projected the saved row, returned the caret to the composer, and appended two Perform turns to the same Doxvelt branch. The API verified all three turns in order and the same private audience. The picker stays disabled while the composer contains an unsent draft.
 
-The saved-episode path exercises the current open episode on a saved branch. Generate uses the real Doxvelt draft and acceptance flow with a scripted runtime in the browser test. A model response that contradicts a fixed audience leaves the turn uncommitted and the direction editable. The DSH sidebar keeps its stock session naming. The episode transcript picker and revision actions are described below. Live model verification remains open. DSH continues to label the underlying sidebar entry **New Session**.
+The saved-episode path exercises the current open episode on a saved branch. Generate uses the real Doxvelt draft and acceptance flow with a scripted runtime in the browser test. A model response that contradicts a fixed audience leaves the turn uncommitted and the direction editable. The DSH sidebar keeps its stock **New Session** label. The episode transcript picker and revision actions are described below.
+
+**Audience** defaults to **Everyone** for a new session. You can select one
+or several characters, or choose **Only self**. In Generate mode, **Actor
+chooses** delegates delivery and **Audience limit** can constrain that
+choice. The same settings work in the saved-turn editor.
+
+```text
+/perform @Corin to all | The ferry is ready.
+/perform @Corin to @Nell, @Mara | Look at this letter.
+/generate @Nell to actor among @Corin, @Mara | Answer discreetly.
+```
+
+Notation and controls update each other. The browser test checks that Doxvelt
+rejects an actor's out-of-bounds audience and keeps the direction in the
+composer for retry. It also plays a four-character scene where the two-person
+audience excludes a character, then checks that character's model input.
 
 ## Reverie episode memory
 
@@ -97,12 +113,16 @@ node scripts/dsh-stage.mjs --dsh "<scratch>/node_modules/@deepseek-ai/dsh/lib/bi
 Choose **Open saved episode**, then **The last crossing**. The launcher seeds
 the example on first run and keeps story data, memories, and the DSH profile
 under `.doxvelt/stage`. Use `--data <directory>` for a separate playthrough.
-Use `--no-open` to print the local browser link.
+Use `--database <existing SQLite file>` to open a saved Engine database in
+DSH. The picker resumes the last selected story path. Use
+`--story <source directory> --scenario <id>` to add an authored scenario
+from Markdown. Keep the same `--data` directory to reuse the local memory
+catalog and DSH profile. Use `--no-open` to print the local browser link.
 
 The launcher browser test exercised independent Nell, Mara, and reflection
 routes against a local OpenAI-compatible endpoint with scripted responses. It
 verified the configured model IDs, private prompt boundaries, and native memory
-formation. Live model quality and provider-specific behavior remain unverified.
+formation. It also restarts the launcher with a fresh DSH profile and reopens a saved path. Live model quality and provider-specific behavior remain unverified.
 
 ## Reproduce
 

@@ -202,6 +202,7 @@ try {
   await page.getByRole('button', { name: 'Edit turn 1' }).click();
   await page.getByRole('textbox', { name: 'Correct performance' }).fill('Mara, the sealed letter is only for Nell.');
   await page.getByRole('button', { name: 'Save correction' }).click();
+  await page.getByRole('textbox', { name: 'Correct performance' }).waitFor({ state: 'hidden' });
   await rows.nth(0).getByText('Mara, the sealed letter is only for Nell.', { exact: false }).waitFor();
   assert.deepEqual((await readFixture()).turns.slice(1), played.turns.slice(1));
   assert.match(await editor.innerText(), /Unsent continuation/);
@@ -227,7 +228,7 @@ try {
   await rows.nth(4).waitFor();
   await waitForDraft(page, '/generate @Mara to @Nell |');
   assert.equal(await page.getByLabel('Action', { exact: true }).inputValue(), 'generate');
-  assert.equal(await page.getByLabel('Character', { exact: true }).inputValue(), 'Mara');
+  assert.equal(await page.getByLabel('Actor', { exact: true }).inputValue(), 'Mara');
   assert.equal(await audience.inputValue(), 'Nell');
   assert.equal(await editor.evaluate(element => element === document.activeElement), true);
   await page.keyboard.insertText('Try the spare rope.');

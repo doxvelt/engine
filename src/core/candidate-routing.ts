@@ -35,7 +35,8 @@ export function completeWhisperForDraft(draft: ActorTurnDraftRecord): string | n
 export function routingInput(routing: DraftRouting): DraftRoutingInput {
   const { version, initialAudience, correction, correctedAudience, preservedText, sourceDraftId } = routing;
   return structuredClone({ version, initialAudience, correction, correctedAudience, preservedText, sourceDraftId,
-    ...((version === 2 || version === 3 || version === 4) ? { completeWhisper: routing.completeWhisper! } : {}) });
+    ...((version === 2 || version === 3 || version === 4) ? { completeWhisper: routing.completeWhisper! } : {}),
+    ...(routing.audienceLimit ? { audienceLimit: routing.audienceLimit } : {}) });
 }
 
 /** V1/v2 preserve roster observation; v3/v4 use only legitimate recorded knowledge. */
@@ -74,9 +75,18 @@ export function projectRoutingContext(
   const actors = revision.compiled.entities.filter(canOwnTurn);
   const supported = new Set(actors.map(actor => actor.id));
   const initialAudience = (input.version === 2 || input.version === 3 || input.version === 4) && input.correctedAudience !== null ? null : input.initialAudience;
-  const explicit = new Set([...(initialAudience || []), ...(input.correctedAudience || [])]);
+  const explicit = new Set([...(initialAudience || []), ...(input.correctedAudience || []), ...(input.audienceLimit ?? [])]);
   const direction = (input.version === 2 || input.version === 3 || input.version === 4) ? input.completeWhisper! : [...whispers.map(item => item.text), input.correction].join("\n");
-  for (const match of direction.matchAll(/@([a-zA-Z0-9_-]+)/g)) explicit.add(match[1]!);
+  for (const match of direction.matchAll(/@([a-zA-Z0-9_-]+)/g)) {
+    const handle = match[1]!;
+    if (supported.has(handle) || (input.version !== 3 && input.version !== 4)) explicit.add(handle);
+    else {
+      const token = handle.toLowerCase();
+      const matches = actors.filter(actor => actor.id.toLowerCase() === token ||
+        (actor.visibility === "public" && actor.name.toLowerCase() === token));
+      explicit.add(matches.length === 1 ? matches[0]!.id : handle);
+    }
+  }
   // Names provide identity references, never delivery. Only unambiguous public names.
   for (const actor of actors) {
     const labels = [actor.id];
@@ -95,7 +105,9 @@ export function projectRoutingContext(
         actors.filter(other => other.name === actor.name).length === 1 && containsLabel(visible, actor.name)))
       available.add(actor.id);
   }
-  const availableRecipientIds = [...available].sort();
+  const availableRecipientIds = (input.audienceLimit
+    ? [...new Set([command.payload.actorId, ...input.audienceLimit])]
+    : [...available]).sort();
   // A selected public identity or an already visible public name may carry its
   // label. A known handle never authorizes resolving a hidden name.
   const references = availableRecipientIds.map(id => {
@@ -130,6 +142,7 @@ export function projectRoutingContext(
     `Tentative initial recipients: ${JSON.stringify(initialAudience)}. null means no initial selection.\n` +
     (input.version === 1 ? `Director correction: ${JSON.stringify(input.correction)}\n` : "") +
     `Authoritative corrected recipients: ${JSON.stringify(input.correctedAudience)}. If supplied, use exactly these recipients (plus yourself).\n` +
+    (input.audienceLimit ? "The director limits your choice to the listed recipient identities. Choose any subset and include yourself.\n" : "") +
     `Names and @ references in private direction describe intent; do not automatically include every mentioned person.\n` +
     `Return ONLY JSON with exactly two fields: "text" (the performance) and "audience" (an array of available recipient IDs). No actor changes, tools, markdown fences or commentary. Include yourself. Propose recipients from the available identities; never default to everybody.\n`;
   const portable = canonicalDraftContext({ ...context, promptPreview: prompt,
@@ -137,7 +150,8 @@ export function projectRoutingContext(
     ...(episodeRecall === undefined ? {} : { episodeRecall }),
     routingDirection: { ...((input.version === 2 || input.version === 3 || input.version === 4)
       ? { version: input.version, completeWhisper: input.completeWhisper, initialAudience, correctedAudience: input.correctedAudience }
-      : input), references, observationPolicy: policy } });
+      : input), ...(input.audienceLimit ? { audienceLimit: input.audienceLimit } : {}),
+      references, observationPolicy: policy } });
   return { context: portable, prompt, contextHash: sha256(stableStringify(portable)),
     promptHash: sha256(prompt), availableRecipientIds };
 }

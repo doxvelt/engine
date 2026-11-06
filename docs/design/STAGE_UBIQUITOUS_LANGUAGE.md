@@ -14,6 +14,7 @@ These are the terms for Stage play and memory. The existing engine glossary also
 | **Performance** | The words, actions, or narration contributed for a character. |
 | **Turn** | One committed performance for one character, with its performer and audience recorded. A turn appends to the current episode. |
 | **Audience** | The other characters who receive a particular performance. The speaking character has its own perception of its contribution. A character named in the text need not be part of the audience. |
+| **Audience limit** | The set of other characters an actor may choose from when the player delegates delivery. A reference to someone in the whisper leaves the limit in force. |
 | **Stage whisper** | Private direction for the actor generating a turn. The recorded complete whisper can be reopened and replaced for regeneration. Only the resulting performance is delivered to its audience. |
 | **Perception** | A character's experience of a played event or received performance. Hearing a claim gives the character a perception of the claim being made. Its truth is a separate question. |
 | **Stage** | The play surface for reading the episode, composing turns, editing history, and inspecting memory. |
