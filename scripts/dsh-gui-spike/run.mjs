@@ -332,6 +332,30 @@ try {
     await page.locator('[data-doxvelt-turn]').getByText('I have the lantern.', { exact: true }).waitFor();
     assert.equal(await page.locator('[data-doxvelt-turn]').count(), 1);
     results.push('Stock DSH forms inspectable native memories and uses them in a later fictional episode');
+
+    const source = await engineRequest(engineUrl, savedRoute + '/stage');
+    const original = source.transcript[0];
+    const { operation } = await engineRequest(engineUrl, savedRoute + '/alternatives', {
+      sourceBranchId: saved.branchId, expectedHead: source.branch.headCommitId,
+      sourceCommitId: original.commitId, messageVersionId: original.messageVersionId,
+      logicalMessageId: original.logicalMessageId, actorId: original.actorId, commandId: 'alternative-audience',
+      action: 'manual', audience: ['mara'], manualText: 'Mara, I left the sealed letter at the inn.',
+    });
+    assert.equal(operation.status, 'saved');
+    await page.reload();
+    await closeSignIn(page);
+    const pathPicker = page.getByLabel('Story path', { exact: true });
+    await pathPicker.selectOption(operation.outcome.branchId);
+    await page.locator('[data-doxvelt-turn]').getByText('Mara, I left the sealed letter at the inn.', { exact: false }).waitFor();
+    await page.getByText('Memories are out of date for', { exact: false }).waitFor();
+    assert.equal(await pathPicker.inputValue(), operation.outcome.branchId);
+    await pathPicker.selectOption(saved.branchId);
+    await page.locator('[data-doxvelt-turn]').getByText('I have the lantern.', { exact: true }).waitFor();
+    assert.equal(await page.getByText('Memories are out of date for', { exact: false }).count(), 0);
+    await page.getByRole('button', { name: 'Episode memory', exact: true }).click();
+    await page.getByLabel('Memory episode').selectOption({ index: 0 });
+    await page.getByText('I still remember the sealed letter agreement.', { exact: true }).first().waitFor();
+    results.push('Stock DSH switches saved paths, shows memory drift and restores the original memory version');
   }
   console.log(JSON.stringify({ results, evidence: root }, null, 2));
 } catch (error) {

@@ -35,6 +35,27 @@ function stageRoute({ simulationId, branchId }) {
   return '/simulations/' + encodeURIComponent(simulationId) + '/stage?branchId=' + encodeURIComponent(branchId);
 }
 
+function simulationRoute(simulationId) {
+  return '/simulations/' + encodeURIComponent(simulationId);
+}
+
+async function savedBranches(origin, selection) {
+  const endpoint = simulationRoute(selection.simulationId) + '/branches?branchId=' + encodeURIComponent(selection.branchId);
+  const { branches } = await engineRequest(origin, endpoint);
+  return branches.map((branch, index) => ({
+    id: branch.id,
+    label: branch.origin.kind === 'root' ? 'Original' : (branch.name || 'Path') + ' (' + (index + 1) + ')',
+  }));
+}
+
+function mention(actor) {
+  return actor.name.toLowerCase() === actor.id.toLowerCase() ? actor.name : actor.id;
+}
+
+function castFor(stage) {
+  return stage.actors.map(actor => ({ token: mention(actor), name: actor.name, canGenerate: Boolean(stage.generationActorIds?.includes(actor.id)) }));
+}
+
 function displayRows(stage) {
   const names = new Map(stage.actors.map(actor => [actor.id, actor.name]));
   return stage.transcript.filter(turn => turn.episodeId === null).map(turn => ({
@@ -63,22 +84,31 @@ function failure(error, status) {
 export async function savedEpisodeRequest(origin, session, command, signal) {
   if (command.mode === 'saved') {
     const { simulations } = await engineRequest(origin, '/simulations');
-    return Response.json({ simulations, opened: episodeState(session).opened ?? null });
+    const opened = episodeState(session).opened;
+    if (!opened) return Response.json({ simulations, opened: null, branches: [] });
+    const [stage, branches] = await Promise.all([
+      engineRequest(origin, stageRoute(opened)), savedBranches(origin, opened),
+    ]);
+    return Response.json({ simulations, opened: { ...opened, cast: castFor(stage) }, branches });
   }
 
   if (command.mode === 'open-saved') {
     const { simulations } = await engineRequest(origin, '/simulations');
     const selected = simulations.find(item => item.simulationId === command.simulationId);
     if (!selected) return failure('That saved episode is unavailable.', 404);
-    const stage = await engineRequest(origin, stageRoute(selected));
+    const branches = await savedBranches(origin, selected);
+    const branchId = command.branchId ?? selected.branchId;
+    if (!branches.some(branch => branch.id === branchId)) return failure('That saved path is unavailable.', 404);
+    const selection = { simulationId: selected.simulationId, branchId };
+    const stage = await engineRequest(origin, stageRoute(selection));
     const { opened, rows } = episodeState(session);
-    if ((!opened && rows.size) || (opened && (opened.simulationId !== selected.simulationId || opened.branchId !== selected.branchId))) {
+    if ((!opened && rows.size) || (opened && (opened.simulationId !== selected.simulationId || opened.branchId !== branchId))) {
       return failure('Start a new DSH session to open another episode.', 409);
     }
-    const next = { simulationId: selected.simulationId, branchId: selected.branchId, title: stage.scenarioName };
-    if (!opened) session.append(openedEpisode, next);
+    const next = { ...selection, title: stage.scenarioName };
+    if (JSON.stringify(opened) !== JSON.stringify(next)) session.append(openedEpisode, next);
     if (!syncRows(session, rows, displayRows(stage))) return failure('Open this episode in a fresh DSH session to see the changed history.', 409);
-    return Response.json({ opened: next });
+    return Response.json({ opened: { ...next, cast: castFor(stage) }, branches });
   }
 
   const { opened, ended } = episodeState(session);
@@ -89,8 +119,8 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
   if (!generating && command.mode !== 'perform') return failure('Choose Perform or Generate.', 400);
 
   const stage = await engineRequest(origin, stageRoute(opened));
-  const actor = stage.actors.find(item => item.name === command.character);
-  const audience = stage.actors.find(item => item.name === command.audience);
+  const actor = stage.actors.find(item => mention(item) === command.character);
+  const audience = stage.actors.find(item => mention(item) === command.audience);
   const delegateAudience = generating && command.audience === 'actor';
   const text = typeof command.body === 'string' ? command.body.trim() : '';
   if (!actor || (!delegateAudience && (!audience || audience.id === actor.id)) || (!generating && !text)) {
@@ -100,7 +130,7 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
     return failure('Open this episode in a fresh DSH session to see the changed history.', 409);
   }
 
-  const simulation = '/simulations/' + encodeURIComponent(opened.simulationId);
+  const simulation = simulationRoute(opened.simulationId);
   const basis = { branchId: opened.branchId, expectedHead: stage.branch.headCommitId, commandId: randomUUID(),
     actorId: actor.id, stageWhisperIds: [] };
   if (generating) {
@@ -127,7 +157,7 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
 }
 
 async function episodeMemoryRequest(origin, session, opened, ended, command, signal) {
-  const simulation = '/simulations/' + encodeURIComponent(opened.simulationId);
+  const simulation = simulationRoute(opened.simulationId);
   const endpoint = simulation + '/episode-memory';
   const read = async () => {
     try { return await engineRequest(origin, endpoint + '?branchId=' + encodeURIComponent(opened.branchId), undefined, signal); }

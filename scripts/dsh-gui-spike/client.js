@@ -3,7 +3,9 @@ window.__ModuleLoader__.load({
   factory(require) {
     const { createElement: h, useEffect, useRef, useState } = require('react');
     const { Button, Modal } = require('@deepseek-ai/dsh-client-ui-primitives');
-    const cast = ['Corin', 'Nell', 'Mara'];
+    const fixtureCast = ['Corin', 'Nell', 'Mara'].map(token => ({ token, name: token, canGenerate: token !== 'Corin' }));
+    const casts = new Map();
+    const castFor = sessionId => casts.get(sessionId) ?? fixtureCast;
     const modes = ['perform', 'generate'];
     const kind = 'doxvelt-performance';
     const defaultRoute = { mode: 'perform', character: 'Corin', audience: 'Nell' };
@@ -18,6 +20,7 @@ window.__ModuleLoader__.load({
           body: JSON.stringify({ sessionId, ...command }),
         });
         const result = await response.json();
+        if (response.ok && result.opened?.cast) casts.set(sessionId, result.opened.cast);
         if (response.ok && ['perform', 'generate', 'correct'].includes(command.mode)) void sceneListeners.get(sessionId)?.();
         return response.ok ? { kind: 'success', result } : { kind: 'error', text: result.error };
       } catch {
@@ -25,10 +28,10 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function parseDraft(draft) {
-      const match = /^\/(perform|generate)\s+@(\w+)\s+to\s+(@\w+|actor)\s*\|\s*([\s\S]*)$/i.exec(draft.trimStart());
+    function parseDraft(draft, cast) {
+      const match = /^\/(perform|generate)\s+@([\w-]+)\s+to\s+(@[\w-]+|actor)\s*\|\s*([\s\S]*)$/i.exec(draft.trimStart());
       if (!match) return undefined;
-      const resolve = name => cast.find(character => character.toLowerCase() === name.toLowerCase());
+      const resolve = name => cast.find(actor => actor.token.toLowerCase() === name.toLowerCase())?.token;
       return {
         mode: match[1].toLowerCase(),
         character: resolve(match[2]),
@@ -42,7 +45,7 @@ window.__ModuleLoader__.load({
         name: mode,
         token: '/' + mode + ' ',
         submit(args) {
-          const command = parseDraft('/' + mode + ' ' + args);
+          const command = parseDraft('/' + mode + ' ' + args, castFor(session.sessionId));
           if (!command?.character || !command.audience) {
             return Promise.resolve({ kind: 'error', text: 'Use /perform @Corin to @Nell | your performance.' });
           }
@@ -56,13 +59,26 @@ window.__ModuleLoader__.load({
       return '/' + mode + ' @' + character + ' to ' + recipients + ' | ' + body;
     }
 
-    function Routing({ sessionId, useSession, useInput, inputActions, focusComposer, openNextEpisode }) {
+    function supportedRoute(values, cast) {
+      const generators = cast.filter(actor => actor.canGenerate);
+      if (values.mode === 'generate' && !generators.length) values.mode = 'perform';
+      const eligible = values.mode === 'generate' ? generators : cast;
+      if (!eligible.some(actor => actor.token === values.character)) values.character = eligible[0]?.token;
+      if (values.audience !== 'actor' || values.mode === 'perform') {
+        const recipients = cast.filter(actor => actor.token !== values.character);
+        if (!recipients.some(actor => actor.token === values.audience)) values.audience = recipients[0]?.token;
+      }
+      return values;
+    }
+
+    function Routing({ sessionId, useSession, useInput, inputActions, focusComposer, openEpisodeSession }) {
       const draft = useInput(state => state.draft);
       const phase = useInput(state => state.phase);
       const openState = useSession(state => state.openState);
-      const command = parseDraft(draft);
+      const cast = castFor(sessionId);
+      const command = parseDraft(draft, cast);
       const busy = phase === 'submitting' || phase === 'sending' || phase === 'adjudicating';
-      const [saved, setSaved] = useState({ simulations: [], opened: null });
+      const [saved, setSaved] = useState({ simulations: [], opened: null, branches: [] });
       const [opening, setOpening] = useState(false);
       const [error, setError] = useState('');
 
@@ -83,17 +99,20 @@ window.__ModuleLoader__.load({
           // Let the stock composer restore focus after its submit transaction first.
           const selection = inputActions.captureInsertion();
           const frame = requestAnimationFrame(() => {
-            inputActions.insertText(formatDraft(routes.get(sessionId) ?? defaultRoute), selection);
+            const route = supportedRoute({ ...(routes.get(sessionId) ?? defaultRoute) }, cast);
+            if (route.character && route.audience) inputActions.insertText(formatDraft(route), selection);
           });
           return () => cancelAnimationFrame(frame);
         }
       }, [draft, busy, openState, sessionId, inputActions]);
 
       useEffect(() => {
-        if (!saved.opened || !command || command.body.trim()) return;
+        if (!saved.opened || (command?.body ?? (/^\/(perform|generate)\b[^|]*\|\s*$/i.test(draft) ? '' : draft)).trim()) return;
         // Opening history can remount the stock editor. Place its caret after the route in the new view.
         const span = { ...inputActions.captureInsertion(), start: 0, end: draft.length };
-        const next = formatDraft(command.mode === 'perform' ? command : defaultRoute);
+        const route = supportedRoute({ ...(routes.get(sessionId) ?? defaultRoute), ...command }, cast);
+        if (!route.character || !route.audience) return;
+        const next = formatDraft(route);
         const frame = requestAnimationFrame(() => {
           if (inputActions.insertText(next, span) && document.activeElement === document.body) focusComposer();
         });
@@ -104,32 +123,42 @@ window.__ModuleLoader__.load({
         setOpening(true);
         setError('');
         const outcome = await submit(sessionId, { mode: 'open-saved', simulationId });
-        if (outcome.kind === 'success') setSaved(previous => ({ ...previous, opened: outcome.result.opened }));
+        if (outcome.kind === 'success') setSaved(previous => ({ ...previous, ...outcome.result }));
         else setError(outcome.text);
         setOpening(false);
       }
 
+      async function switchPath(branchId) {
+        setOpening(true);
+        setError('');
+        try {
+          await openEpisodeSession({ simulationId: saved.opened.simulationId, branchId });
+        } catch (error) {
+          setError(error.message);
+        } finally {
+          setOpening(false);
+        }
+      }
+
       function update(change) {
         const values = { ...defaultRoute, body: draft, ...command, ...change };
-        if (values.mode === 'generate' && values.character === 'Corin') values.character = 'Nell';
-        if (values.mode === 'perform' && values.audience === 'actor') values.audience = 'Nell';
-        if (values.character === values.audience) {
-          values.audience = cast.find(character => character !== values.character);
-        }
-        inputActions.setDraft(formatDraft(values));
+        const route = supportedRoute(values, cast);
+        if (route.character && route.audience) inputActions.setDraft(formatDraft(route));
       }
       function select(label, value, options, field) {
         return h('label', { style: { display: 'inline-flex', gap: 4, alignItems: 'center' } }, label, ' ',
           h('select', { 'aria-label': label, value: value ?? '', disabled: busy || opening,
             onChange: event => update({ [field]: event.target.value }) },
             h('option', { value: '', disabled: true }, 'Choose'),
-            options.map(option => h('option', { value: option, key: option }, option === 'actor' ? 'Actor chooses' : option))));
+            options.map(option => h('option', { value: option, key: option }, option === 'actor' ? 'Actor chooses' : cast.find(actor => actor.token === option)?.name ?? option))));
       }
 
+      const available = command?.mode === 'generate' ? cast.filter(actor => actor.canGenerate) : cast;
+      const recipients = cast.filter(actor => actor.token !== command?.character).map(actor => actor.token);
       return h('div', { 'aria-label': 'Doxvelt routing', style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
-        select('Action', command?.mode, modes, 'mode'),
-        select('Character', command?.character, command?.mode === 'generate' ? cast.slice(1) : cast, 'character'),
-        select('Audience', command?.audience, command?.mode === 'generate' ? [...cast, 'actor'] : cast, 'audience'),
+        select('Action', command?.mode, cast.some(actor => actor.canGenerate) ? modes : ['perform'], 'mode'),
+        select('Character', command?.character, available.map(actor => actor.token), 'character'),
+        select('Audience', command?.audience, command?.mode === 'generate' ? [...recipients, 'actor'] : recipients, 'audience'),
         h('select', {
           'aria-label': 'Saved episode',
           value: saved.opened?.simulationId ?? '',
@@ -138,8 +167,14 @@ window.__ModuleLoader__.load({
         },
           h('option', { value: '', disabled: true }, opening ? 'Opening episode…' : 'Open saved episode'),
           saved.simulations.map(item => h('option', { value: item.simulationId, key: item.simulationId }, item.scenarioName ?? item.simulationId))),
+        saved.opened && saved.branches.length > 1 && h('label', null, 'Story path ',
+          h('select', {
+            'aria-label': 'Story path', value: saved.opened.branchId,
+            disabled: busy || opening || Boolean((command?.body ?? draft).trim()),
+            onChange: event => { void switchPath(event.target.value); },
+          }, saved.branches.map(branch => h('option', { value: branch.id, key: branch.id }, branch.label)))),
         error && h('span', { role: 'alert' }, error),
-        saved.opened && h(MemoryControls, { sessionId, busy, openNextEpisode: () => openNextEpisode(saved.opened.simulationId), unsent: Boolean(command?.body.trim()) }));
+        saved.opened && h(MemoryControls, { sessionId, busy, openNextEpisode: () => openEpisodeSession(saved.opened), unsent: Boolean(command?.body.trim()) }));
     }
 
     function MemoryControls({ sessionId, busy, openNextEpisode, unsent }) {
@@ -262,8 +297,9 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       ctx.effect(() => ctx.inputTriggers.registerSource({
         trigger: '@', name: 'Doxvelt characters', order: -10,
-        async candidates(_session, { query }) {
-          return cast.filter(name => name.toLowerCase().startsWith(query.toLowerCase())).map(name => ({ name, description: 'Doxvelt character' }));
+        async candidates(session, { query }) {
+          return castFor(session.sessionId).filter(actor => [actor.token, actor.name].some(value => value.toLowerCase().startsWith(query.toLowerCase())))
+            .map(actor => ({ name: actor.token, description: actor.token === actor.name ? "Doxvelt character" : actor.name }));
         },
         onPick: ({ candidate }) => ({ text: '@' + candidate.name + ' ' }),
       }));
@@ -312,12 +348,13 @@ window.__ModuleLoader__.load({
           const binding = ctx.sessions.binding(sessionId);
           if (binding) ctx.conversation.input.for(binding.ctx).focus();
         },
-        async openNextEpisode(simulationId) {
+        async openEpisodeSession(selection) {
           const workspaceId = ctx.workspaces.list.getSnapshot().items.find(item => item.sessionIds.includes(sessionId))?.workspaceId;
           const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd;
           const next = await ctx.sessions.create(workspaceId ? { workspaceId } : { cwd });
-          const result = await submit(next, { mode: 'open-saved', simulationId });
+          const result = await submit(next, { mode: 'open-saved', ...selection });
           if (result.kind !== 'success') throw new Error(result.text);
+          routes.set(next, routes.get(sessionId) ?? defaultRoute);
           ctx.uiWorkspace.openSession(next);
         } }),
       }, Routing));

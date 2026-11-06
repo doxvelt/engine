@@ -33,7 +33,54 @@ Doxvelt fingerprints the perceived source revision and keeps each publication bo
 
 The browser test uses the pinned DSH Web build, the real Doxvelt API and native Reverie executable, and scripted inference. It exercises cancelling an in-progress reflection and verifies that the provider receives cancellation, the episode remains unmemorized, and an explicit retry publishes inspectable memories. It then opens a later episode, generates a turn using those memories, and checks that the earlier raw dialogue is absent from that prompt. The API tests also verify that a prequel, an excluded character, and a sibling path receive only eligible memories, and that returning to a compatible path restores its earlier publication.
 
-The prototype currently uses calendar dates, local memory storage separate from portable simulation archives, and a single date per episode slot. Reopening and generating from a saved episode uses Doxvelt's real history. Branch selection and historical edit actions on that saved history still need a browser flow.
+**Story path** opens the selected path in a fresh DSH conversation. The browser test created an alternate through the engine API, selected it in DSH, and saw an out-of-date memory notice. Returning to **Original** restored its transcript and the matching memory publication. Historical edit actions and reopening closed transcripts still need a browser flow. The prototype uses one fictional date per episode slot and keeps the local memory catalog separate from portable simulation archives.
+
+## Play with your models
+
+Install the Doxvelt dependencies with `bun install --frozen-lockfile`. Install the
+pinned DSH build from the command below and build or obtain a native Reverie
+executable that supports protocol 1. Save a model configuration outside version
+control.
+
+```json
+{
+  "actors": {
+    "nell": {
+      "baseUrl": "http://127.0.0.1:1234/v1",
+      "modelId": "nell-model"
+    },
+    "mara": {
+      "baseUrl": "https://provider.example/v1",
+      "modelId": "mara-model",
+      "apiKeyEnv": "MARA_MODEL_KEY"
+    }
+  },
+  "reflection": {
+    "baseUrl": "http://127.0.0.1:1234/v1",
+    "modelId": "reflection-model"
+  }
+}
+```
+
+Use the actor IDs in the story and the model IDs advertised by your endpoints.
+The launcher uses OpenAI-compatible chat completions. Set any named credential
+environment variables before starting. An optional `defaultActor` supplies
+generation for characters without a specific route and serves as the default
+reflection model when you omit `reflection`. You can perform as any character.
+
+```text
+node scripts/dsh-stage.mjs --dsh "<scratch>/node_modules/@deepseek-ai/dsh/lib/bin.js" --reverie "<Reverie executable>" --models "<model config.json>"
+```
+
+Choose **Open saved episode**, then **The last crossing**. The launcher seeds
+the example on first run and keeps story data, memories, and the DSH profile
+under `.doxvelt/stage`. Use `--data <directory>` for a separate playthrough.
+Use `--no-open` to print the local browser link.
+
+The launcher browser test exercised independent Nell, Mara, and reflection
+routes against a local OpenAI-compatible endpoint with scripted responses. It
+verified the configured model IDs, private prompt boundaries, and native memory
+formation. Live model quality and provider-specific behavior remain unverified.
 
 ## Reproduce
 
@@ -42,6 +89,7 @@ Use Node 24.9 or newer and an installed Chromium browser. Install the pinned tes
 ```text
 npm install --prefix <scratch> --ignore-scripts --no-audit --no-fund --save-exact @deepseek-ai/dsh@0.2.2-rc.1 playwright-core@1.65.0
 node scripts/dsh-gui-spike/run.mjs <scratch> "<Chromium executable>"
+node scripts/dsh-gui-spike/launch-test.mjs <scratch> "<Chromium executable>" "<Reverie executable>"
 ```
 
 ## Smallest setup

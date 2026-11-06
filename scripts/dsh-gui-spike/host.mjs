@@ -12,9 +12,11 @@ const actors = {
 };
 
 export async function apply(ctx) {
-  const workspace = join(process.env.DOXVELT_SPIKE_ROOT, 'ferry-stage');
-  const source = join(process.env.DOXVELT_SPIKE_ROOT, 'fixture.json');
-  const fixture = JSON.parse(readFileSync(source, 'utf8'));
+  const fixtureRoot = process.env.DOXVELT_SPIKE_ROOT;
+  const workspace = process.env.DOXVELT_STAGE_WORKSPACE ?? join(fixtureRoot, 'ferry-stage');
+  const origin = process.env.DOXVELT_STAGE_ENGINE ?? process.env.DOXVELT_SPIKE_ENGINE;
+  const source = fixtureRoot ? join(fixtureRoot, 'fixture.json') : null;
+  const fixture = source ? JSON.parse(readFileSync(source, 'utf8')) : null;
   await ctx.workspaceRegistry.create(workspace);
 
   // An ordinary DSH prompt is never allowed to reach a model in this profile.
@@ -26,14 +28,16 @@ export async function apply(ctx) {
     async fetch(request) {
       const command = await request.json();
       const session = ctx.sessions.get(command.sessionId);
-      if (!session) return Response.json({ error: 'Open the ferry scene first.' }, { status: 409 });
+      if (!session) return Response.json({ error: 'Open a story first.' }, { status: 409 });
 
       try {
-        const saved = await savedEpisodeRequest(process.env.DOXVELT_SPIKE_ENGINE, session, command, request.signal);
+        const saved = await savedEpisodeRequest(origin, session, command, request.signal);
         if (saved) return saved;
       } catch (error) {
         return Response.json({ error: error.status ? error.message : 'Doxvelt could not open or update the episode. Try again.' }, { status: 502 });
       }
+
+      if (!fixture) return Response.json({ error: 'Choose Open saved episode to begin playing.' }, { status: 409 });
 
       const body = typeof command.body === 'string' ? command.body.trim() : '';
       if (command.mode === 'inspect') {

@@ -8,6 +8,7 @@ export type StageProjection = {
   transcript: TranscriptTurn[];
   audience: { actorId: string; status: string }[];
   actors: StageActor[];
+  generationActorIds?: string[];
 };
 export type StageDraft = Pick<ActorTurnDraftRecord,
   "id" | "branchId" | "basisHeadCommitId" | "actorId" | "audience" |

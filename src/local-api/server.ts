@@ -65,6 +65,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
 export type LocalApiOptions = {
   dbPath?: string;
   actorTurnRuntime?: ActorTurnRuntime;
+  actorTurnRuntimes?: ReadonlyMap<string, ActorTurnRuntime>;
   episodeMemory?: EpisodeMemory;
   allowedOrigins?: readonly string[];
 };
@@ -97,7 +98,7 @@ export async function handleLocalApiRequest(
   if (method === "GET" && url.pathname === "/health")
     return send(response, 200, { ok: true });
   if (method === "GET" && url.pathname === "/runtime")
-    return send(response, 200, runtimeStatus(options.actorTurnRuntime));
+    return send(response, 200, runtimeStatus(options.actorTurnRuntime ?? options.actorTurnRuntimes?.values().next().value));
   if (parts[0] === "source")
     return sourceRoute(method, parts, url, request, response);
   if (method === "POST" && parts[0] === "packages") {
@@ -191,12 +192,14 @@ export async function handleLocalApiRequest(
       const projection = projectBranch(store, query(url, simulation));
       const revision = content(store, ownerScope, simulationId);
       const scenario = revision.compiled.scenarios.find(item => item.id === simulation.scenarioId);
+      const actors = revision.compiled.entities.filter(canOwnTurn);
       const result: StageProjection = {
         scenarioName: scenario?.name || simulation.scenarioId || "Stage",
         branch: projection.branch,
         transcript: projection.transcript,
         audience: projection.audience,
-        actors: revision.compiled.entities.filter(canOwnTurn).map(actor => ({
+        generationActorIds: actors.filter(actor => runtimeFor(options, actor.id)).map(actor => actor.id),
+        actors: actors.map(actor => ({
           id: actor.id, kind: actor.kind,
           name: actor.visibility === "public" ? actor.name : actor.id,
         })),
@@ -360,7 +363,7 @@ export async function handleLocalApiRequest(
       }
       if (method === "POST" && parts.length === 3) {
         const body = await bodyOf(request);
-        const result = await createSavedAlternative(store, options.actorTurnRuntime, { ...body, ownerScope, simulationId } as Parameters<typeof createSavedAlternative>[2]);
+        const result = await createSavedAlternative(store, runtimeFor(options, required(body, "actorId")), { ...body, ownerScope, simulationId } as Parameters<typeof createSavedAlternative>[2]);
         return send(response, 200, { operation: stageAlternativeDetail(result.operation, store), replayed: result.replayed });
       }
       if (parts[3]) {
@@ -375,7 +378,7 @@ export async function handleLocalApiRequest(
         if (method === "POST" && parts[4] === "retry" && parts.length === 5) {
           const body = await bodyOf(request);
           if (Object.keys(body).some(k => k !== "commandId")) throw new HttpError(400, "Historical retry accepts only commandId.");
-          const result = await createSavedAlternative(store, options.actorTurnRuntime, { ...operation.request,
+          const result = await createSavedAlternative(store, runtimeFor(options, operation.request.actorId), { ...operation.request,
             commandId: required(body, "commandId"), retryOf: operation.id });
           return send(response, 200, { operation: stageAlternativeDetail(result.operation, store), replayed: result.replayed });
         }
@@ -393,7 +396,9 @@ export async function handleLocalApiRequest(
       rejectRuntimeSelection(body);
       if (body.draftingPolicy !== undefined && body.draftingPolicy !== ROUTING_POLICY && body.draftingPolicy !== ACTOR_KNOWLEDGE_POLICY)
         throw new HttpError(400, "Unsupported drafting policy.");
-      if (!options.actorTurnRuntime)
+      const actorId = required(body, "actorId");
+      const actorRuntime = runtimeFor(options, actorId);
+      if (!actorRuntime)
         throw new HttpError(503, "No local actor-turn runtime is configured.");
       const knowledge = body.draftingPolicy === ACTOR_KNOWLEDGE_POLICY;
       const routed = knowledge || body.draftingPolicy === ROUTING_POLICY;
@@ -418,14 +423,13 @@ export async function handleLocalApiRequest(
               .audience.filter((item) => item.status === "active")
               .map((item) => item.actorId)
           : strings(body, "audience");
-      const actorId = required(body, "actorId");
-      const operation = new AbortController();
-      response.once("close", () => operation.abort());
-      const episodeRecall = knowledge && options.episodeMemory
+      const operation = knowledge && options.episodeMemory ? new AbortController() : undefined;
+      if (operation) response.once("close", () => operation.abort());
+      const episodeRecall = operation && options.episodeMemory
         ? await options.episodeMemory.recall(store, { ...base, head: base.expectedHead }, actorId,
           typeof body.completeWhisper === "string" ? body.completeWhisper : "", operation.signal)
         : undefined;
-      const result = await generateActorTurnDraft(store, options.actorTurnRuntime, {
+      const result = await generateActorTurnDraft(store, actorRuntime, {
         ...base,
         payload: {
           actorId,
@@ -440,7 +444,7 @@ export async function handleLocalApiRequest(
             preservedText: null, sourceDraftId: null } } : {}),
           skillDigests: [],
         },
-      }, { signal: operation.signal, ...(episodeRecall === undefined ? {} : { episodeRecall }) });
+      }, { ...(operation ? { signal: operation.signal } : {}), ...(episodeRecall === undefined ? {} : { episodeRecall }) });
       return send(response, 200, { ...result, draft: stageDraft(result.draft) });
     }
     if (method === "GET" && parts[2] === "drafts" && parts.length === 3) {
@@ -471,9 +475,10 @@ export async function handleLocalApiRequest(
       if (typeof correction !== "string") throw new HttpError(400, "correction must be text.");
       if (body.preservedText !== undefined && typeof body.preservedText !== "string")
         throw new HttpError(400, "preservedText must be text.");
-      if (body.preservedText === undefined && !options.actorTurnRuntime)
+      const actorRuntime = runtimeFor(options, original.actorId);
+      if (body.preservedText === undefined && !actorRuntime)
         throw new HttpError(503, "No local actor-turn runtime is configured.");
-      const result = await generateActorTurnDraft(store, options.actorTurnRuntime || directorOnlyRuntime, {
+      const result = await generateActorTurnDraft(store, actorRuntime || directorOnlyRuntime, {
         ownerScope, simulationId, branchId: original.branchId, expectedHead: original.basisHeadCommitId,
         commandId: required(body, "commandId"), payload: {
           actorId: original.actorId, audience: audience ?? original.routing.initialAudience ?? [], stageWhisperIds: original.stageWhispers.map(item => item.id),
@@ -492,8 +497,9 @@ export async function handleLocalApiRequest(
         throw new HttpError(400, "Retry accepts only a commandId; routing is captured by the original draft.");
       const original = store.getActorTurnDraft(ownerScope, simulationId, parts[3]);
       if (!original) throw new HttpError(404, "Draft not found.");
-      if (!options.actorTurnRuntime && original.routing?.preservedText == null) throw new HttpError(503, "No local actor-turn runtime is configured.");
-      const result = await generateActorTurnDraft(store, options.actorTurnRuntime || directorOnlyRuntime, {
+      const actorRuntime = runtimeFor(options, original.actorId);
+      if (!actorRuntime && original.routing?.preservedText == null) throw new HttpError(503, "No local actor-turn runtime is configured.");
+      const result = await generateActorTurnDraft(store, actorRuntime || directorOnlyRuntime, {
         ownerScope, simulationId, branchId: original.branchId,
         expectedHead: original.basisHeadCommitId, commandId: required(body, "commandId"),
         payload: {
@@ -1022,6 +1028,10 @@ function rejectRuntimeSelection(body: Record<string, unknown>): void {
     if (Object.hasOwn(body, key))
       throw new HttpError(400, `${key} is deployment-owned and must not be supplied.`);
   }
+}
+
+function runtimeFor(options: LocalApiOptions, actorId: string) {
+  return options.actorTurnRuntimes?.get(actorId) ?? options.actorTurnRuntime;
 }
 
 function runtimeStatus(runtime: ActorTurnRuntime | undefined) {

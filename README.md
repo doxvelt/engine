@@ -6,6 +6,12 @@ You author a simulation as plain Markdown dossiers and scenario files. Doxvelt c
 
 The useful trick: every actor receives subjective context. A character can believe something false, miss a private conversation, remember a stale affiliation secret, or form a first impression from another actor's projected surface.
 
+## DSH play prototype
+
+The DSH play prototype runs *The last crossing* in the stock DeepSeek Harness
+composer and transcript. It uses your actor model settings and the standalone
+Reverie engine. See [launch instructions](docs/spikes/DSH_GUI_SPIKE.md#play-with-your-models).
+
 ## Quick Start
 
 Requirements:
