@@ -34,7 +34,7 @@ Show drift near **Memorize** in the source episode and in later episodes on that
 
 ## Product and repository boundary
 
-Doxvelt owns the episode, turn and audience rules, the selected story path, and the eligibility of memory. Reverie supplies the design for subjective reflection, selective recall, impressions, and fictional chronology. Preserve those behaviors behind a Doxvelt-owned boundary and decide how much of Reverie's Rust implementation to reuse after the GUI decision.
+Doxvelt owns the episode, turn and audience rules, the selected story path, and the eligibility of memory. Reverie remains an independent dependency. Its native engine supplies subjective reflection, selective recall, impressions, and fictional chronology through protocol 1. Doxvelt supplies the character's perceived episode source, the model used for reflection, and the eligible story revisions. A configured executable lets Doxvelt reuse the engine while Reverie retains its own release cycle and can serve other hosts. Integration tests target the native build from Reverie commit `518cb3e911e0fb5a056d7862179c2cae5b6d7c05`. [Reverie architecture](https://github.com/memrok-com/reverie/blob/518cb3e911e0fb5a056d7862179c2cae5b6d7c05/docs/architecture.md)
 
 Reuse a maintained GUI for editing, navigation, transcript rendering, accessibility, and settings wherever its extension points fit. Product code should concentrate on play, revision, perception, and memory. DeepSeek Harness (DSH) is the first host to test. Pi served as a shortcut to inference and is a replaceable runtime adapter. The target play experience replaces Reverie's Pi front end and Doxvelt's Nuxt Stage. The host and runtime choices can be evaluated independently.
 

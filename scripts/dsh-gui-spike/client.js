@@ -117,14 +117,14 @@ window.__ModuleLoader__.load({
       }
       function select(label, value, options, field) {
         return h('label', { style: { display: 'inline-flex', gap: 4, alignItems: 'center' } }, label, ' ',
-          h('select', { 'aria-label': label, value: value ?? '', disabled: busy || opening || (field === 'mode' && saved.opened && value === 'perform'),
+          h('select', { 'aria-label': label, value: value ?? '', disabled: busy || opening,
             onChange: event => update({ [field]: event.target.value }) },
             h('option', { value: '', disabled: true }, 'Choose'),
             options.map(option => h('option', { value: option, key: option }, option === 'actor' ? 'Actor chooses' : option))));
       }
 
       return h('div', { 'aria-label': 'Doxvelt routing', style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
-        select('Action', command?.mode, saved.opened ? ['perform'] : modes, 'mode'),
+        select('Action', command?.mode, modes, 'mode'),
         select('Character', command?.character, command?.mode === 'generate' ? cast.slice(1) : cast, 'character'),
         select('Audience', command?.audience, command?.mode === 'generate' ? [...cast, 'actor'] : cast, 'audience'),
         h('select', {

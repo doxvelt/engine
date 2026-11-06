@@ -46,7 +46,7 @@ export type ReviseStageDraftBody = {
 
 export type GenerateStageDraftBody = {
   commandId: string; branchId: string; expectedHead: string; actorId: string;
-  audience: string[] | null; stageWhisperIds: string[];
+  audience: string[] | null; stageWhisperIds: string[]; fixedAudience?: boolean;
   draftingPolicy: typeof import("../core/types.ts").ACTOR_KNOWLEDGE_POLICY;
   completeWhisper: string;
 };

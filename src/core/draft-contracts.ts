@@ -480,7 +480,9 @@ export function validateRoutingInput(value: unknown): asserts value is DraftRout
     throw invalid("Invalid director correction.");
   if (input.sourceDraftId !== null) requiredSafeIdentifier(input.sourceDraftId, "Source draft");
   if (input.preservedText !== null) assertRuntimeText(input.preservedText, "Preserved text");
-  if (input.version !== 4 && input.sourceDraftId === null && (input.correctedAudience !== null || input.preservedText !== null || input.correction !== ""))
+  const freshFixedAudience = input.version === 3 && input.initialAudience === null && input.correctedAudience !== null;
+  if (input.version !== 4 && input.sourceDraftId === null &&
+      ((!freshFixedAudience && input.correctedAudience !== null) || input.preservedText !== null || input.correction !== ""))
     throw invalid("Corrections require a source candidate.");
   if (input.version === 4 && (input.sourceDraftId !== null || input.initialAudience !== null || input.preservedText !== null))
     throw invalid("Historical routing requires a fresh complete input and explicit or unspecified audience.");

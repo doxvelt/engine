@@ -76,24 +76,43 @@ export async function savedEpisodeRequest(origin, session, command) {
 
   const { opened } = episodeState(session);
   if (!opened) return undefined;
-  if (command.mode !== 'perform') return failure('Use Perform to continue this saved episode in the spike.', 400);
+  const generating = command.mode === 'generate';
+  if (!generating && command.mode !== 'perform') return failure('Choose Perform or Generate.', 400);
 
   const stage = await engineRequest(origin, stageRoute(opened));
   const actor = stage.actors.find(item => item.name === command.character);
   const audience = stage.actors.find(item => item.name === command.audience);
+  const delegateAudience = generating && command.audience === 'actor';
   const text = typeof command.body === 'string' ? command.body.trim() : '';
-  if (!actor || !audience || audience.id === actor.id || !text) return failure('Choose a performer and audience and enter a performance.', 400);
+  if (!actor || (!delegateAudience && (!audience || audience.id === actor.id)) || (!generating && !text)) {
+    return failure('Choose a valid performer and audience, and enter a performance for Perform.', 400);
+  }
   if (!syncRows(session, episodeState(session).rows, displayRows(stage))) {
     return failure('Open this episode in a fresh DSH session to see the changed history.', 409);
   }
 
-  const route = '/simulations/' + encodeURIComponent(opened.simulationId) + '/turns';
-  const { turn } = await engineRequest(origin, route, {
-    branchId: opened.branchId, expectedHead: stage.branch.headCommitId, commandId: randomUUID(),
-    actorId: actor.id, audience: [audience.id], manualText: text, stageWhisperIds: [],
-    knowledgePolicy: 'actor-knowledge-v1',
-  });
-  const [row] = displayRows({ ...stage, transcript: [turn] });
-  session.append(playedTurn, row);
+  const simulation = '/simulations/' + encodeURIComponent(opened.simulationId);
+  const basis = { branchId: opened.branchId, expectedHead: stage.branch.headCommitId, commandId: randomUUID(),
+    actorId: actor.id, stageWhisperIds: [] };
+  if (generating) {
+    const { draft } = await engineRequest(origin, simulation + '/drafts', {
+      ...basis, draftingPolicy: 'actor-knowledge-v1', completeWhisper: text,
+      audience: delegateAudience ? null : [audience.id], fixedAudience: !delegateAudience,
+    });
+    if (draft.status !== 'ready') return failure('Generation did not produce a valid turn. The direction is still in the composer.', 422);
+    await engineRequest(origin, simulation + '/drafts/' + encodeURIComponent(draft.id) + '/accept', {
+      commandId: basis.commandId + '-accept',
+    });
+    const updated = await engineRequest(origin, stageRoute(opened));
+    if (!syncRows(session, episodeState(session).rows, displayRows(updated))) {
+      return failure('The turn was saved. Reopen the episode to see the updated transcript.', 409);
+    }
+  } else {
+    const { turn } = await engineRequest(origin, simulation + '/turns', {
+      ...basis, audience: [audience.id], manualText: text, knowledgePolicy: 'actor-knowledge-v1',
+    });
+    const [row] = displayRows({ ...stage, transcript: [turn] });
+    session.append(playedTurn, row);
+  }
   return Response.json({ ok: true });
 }

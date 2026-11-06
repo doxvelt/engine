@@ -31,7 +31,18 @@ let engine;
 let host;
 
 async function startEngine() {
-  engine = createLocalApiServer({ dbPath });
+  engine = createLocalApiServer({ dbPath, actorTurnRuntime: {
+    identity: { id: 'dsh-browser-fixture', version: '1' },
+    async *runActorTurn(request) {
+      const direction = request.context.routingDirection;
+      assert.equal(request.actorId, 'nell');
+      assert.match(request.prompt, /sealed letter/);
+      const wrongAudience = direction.completeWhisper === 'Route to the wrong character, Mara.';
+      if (wrongAudience) assert.ok(direction.references.some(reference => reference.id === 'mara'));
+      const audience = wrongAudience ? ['nell', 'mara'] : ['nell', 'corin'];
+      yield { type: 'completed', text: JSON.stringify({ text: 'I have the lantern.', audience }), stopReason: 'stop' };
+    },
+  } });
   engine.listen(0, '127.0.0.1');
   await once(engine, 'listening');
   return 'http://127.0.0.1:' + engine.address().port;
@@ -247,6 +258,20 @@ try {
   await waitForDraft(page, '/perform @Corin to @Nell |');
   await page.screenshot({ path: path.join(root, 'saved-episode.png'), animations: 'disabled' });
   results.push('A fresh DSH profile reopens the SQLite episode after the local API restarts and appends two manual turns');
+
+  await restoredEditor.fill('/generate @Nell to @Corin | Route to the wrong character, Mara.');
+  await restoredEditor.press('Enter');
+  await page.getByText('Generation did not produce a valid turn. The direction is still in the composer.', { exact: true }).waitFor();
+  assert.match(await restoredEditor.innerText(), /Route to the wrong character/);
+  assert.equal((await engineRequest(engineUrl, savedRoute + '/stage')).transcript.length, 3);
+  await restoredEditor.fill('/generate @Nell to @Corin | Acknowledge Corin.');
+  await restoredEditor.press('Enter');
+  await restoredRows.getByText('I have the lantern.', { exact: true }).waitFor();
+  const committed = (await engineRequest(engineUrl, savedRoute + '/stage')).transcript.at(-1);
+  assert.equal(committed.actorId, 'nell');
+  assert.deepEqual(committed.audience.sort(), ['corin', 'nell']);
+  assert.equal(committed.text, 'I have the lantern.');
+  results.push('DSH generates and commits a real Doxvelt turn, and rejects a conflicting audience');
   console.log(JSON.stringify({ results, evidence: root }, null, 2));
 } catch (error) {
   if (page) {

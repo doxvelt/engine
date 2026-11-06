@@ -23,7 +23,7 @@ The follow-up kept the stock composer and transcript on DSH Web `0.2.2-rc.1`. Af
 
 **Open saved episode** lists saved Doxvelt simulations and opens the current episode on the saved branch. The test started *The last crossing* through the real Doxvelt local API, wrote one turn to SQLite before launching DSH, then restarted the local API and opened the episode in a fresh DSH profile with an empty transcript. DSH projected the saved row, returned the caret to the composer, and appended two Perform turns to the same Doxvelt branch. The API verified all three turns in order and the same private audience. The picker stays disabled while the composer contains an unsent draft.
 
-The saved-episode path exercises the current open episode on a saved branch and supports manual continuation. Scripted Generate and the historical edit fixture remain separate checks. Named episode navigation through the DSH sidebar, closed episode selection, live generation on a saved branch, and Reverie memory remain open integration work. DSH continues to label the underlying sidebar entry **New Session**.
+The saved-episode path exercises the current open episode on a saved branch. Generate uses the real Doxvelt draft and acceptance flow with a scripted runtime in the browser test. A model response that contradicts a fixed audience leaves the turn uncommitted and the direction editable. Named episode navigation through the DSH sidebar, closed episode selection, live model verification, historical edits on a saved branch, and Reverie recall during play remain open integration work. DSH continues to label the underlying sidebar entry **New Session**.
 
 ## Reproduce
 

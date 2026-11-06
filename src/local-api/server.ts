@@ -395,6 +395,11 @@ export async function handleLocalApiRequest(
         throw new HttpError(503, "No local actor-turn runtime is configured.");
       const knowledge = body.draftingPolicy === ACTOR_KNOWLEDGE_POLICY;
       const routed = knowledge || body.draftingPolicy === ROUTING_POLICY;
+      if (body.fixedAudience !== undefined && typeof body.fixedAudience !== "boolean")
+        throw new HttpError(400, "fixedAudience must be a boolean.");
+      const fixedAudience = body.fixedAudience === true;
+      if (fixedAudience && (!knowledge || !Array.isArray(body.audience)))
+        throw new HttpError(400, "A fixed audience requires an explicit audience and actor knowledge policy.");
       if (knowledge && typeof body.completeWhisper !== "string")
         throw new HttpError(400, "New actor knowledge policy requires completeWhisper.");
       const base = envelope(body, ownerScope, simulationId);
@@ -422,7 +427,7 @@ export async function handleLocalApiRequest(
           outputSchema: routed ? { id: "audience-proposal", digest: "v1" } : { id: "screenplay", digest: "schema-v1" },
           ...(routed ? { routing: { version: knowledge ? 3 as const : 1 as const,
             ...(knowledge ? { completeWhisper: body.completeWhisper as string } : {}),
-            initialAudience: body.audience == null ? null : audience, correction: "", correctedAudience: null,
+            initialAudience: fixedAudience || body.audience == null ? null : audience, correction: "", correctedAudience: fixedAudience ? audience : null,
             preservedText: null, sourceDraftId: null } } : {}),
           skillDigests: [],
         },
