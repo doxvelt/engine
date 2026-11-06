@@ -2,6 +2,30 @@
 
 Can an out-of-tree Doxvelt plugin use the stock DeepSeek Harness (DSH) editor and transcript for ordinary play? The decisive check is whether choosing the next actor, setting an audience, and switching between manual and generated turns feels like playing one scene in one conversation. Doxvelt owns the episode history. DSH hosts the interaction.
 
+## Result
+
+**Keep the stock composer and transcript for the next prototype.** The fixture passed in DSH Web `0.2.2-rc.1` at source revision `66491b05`, in Chrome on Windows at 1280 × 850. The out-of-tree plugin added completion and submission sources, three routing controls, and one turn renderer. It used the stock editor, keyboard dispatch, Send button, chat flow, and scrolling.
+
+- Keyboard completion inserted Nell. Changing the audience control rewrote the inline notation, and changing the notation updated the control. Enter committed Corin's performance to Nell only, even though the prose mentioned Mara.
+- Send generated Nell's performance and Enter generated Mara's, in the same DSH conversation and profile. The fixture received both selected configurations, and Mara's scripted context excluded the private exchange. The whisper stayed out of played turns and could be reopened from the historical editor.
+- A body correction updated the first row at its original position, preserved subsequent turns, and kept the unsent continuation. Cancelling an edit left the played rows alone.
+- A scripted failure kept the composer input available. Retry added one turn, and browser reload restored the four committed rows without duplicates.
+
+**Submission limit.** The stock editor lets a plugin claim a leading slash command. The fixture uses `/perform` and `/generate`, and the controls insert that notation on behalf of the player. Plain prose follows DSH's own prompt path. Test whether keeping the play mode selected and supplying its command automatically is a comfortable fit for ordinary play before considering a composer replacement. [Pinned composer submission logic](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.1/packages/client/ui-conversation/src/client/input/machine.ts)
+
+**History limit.** The fixture file owns the played state. DSH stores display receipts with stable row IDs and replays them on browser reload. Its sidebar still labels the scene **New Session** because the fixture emits no DSH agent turns. The next slice needs a way to discover and reopen a Doxvelt episode, and a check that it can rebuild the projection from Doxvelt after a host restart. Stock sign-in and coding controls also remain visible in this Web profile. [Pinned session list logic](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.1/packages/api/session-controller/src/list.ts)
+
+The fixture exercised GUI behavior with scripted generation and history. Live Doxvelt storage, alternate continuations, model providers, and memory require separate integration checks.
+
+## Reproduce
+
+Use Node 24.9 or newer and an installed Chromium browser. Install the pinned test tools into a scratch directory, then run the fixture from the repository. The runner creates a fresh DSH home and workspace, prints the checks, and saves a screenshot and redacted host log in the run directory.
+
+```text
+npm install --prefix <scratch> --ignore-scripts --no-audit --no-fund --save-exact @deepseek-ai/dsh@0.2.2-rc.1 playwright-core@1.65.0
+node scripts/dsh-gui-spike/run.mjs <scratch> "<Chromium executable>"
+```
+
 ## Smallest setup
 
 Use a pinned DSH Web build and one isolated profile. Keep a single conversation open for the entire run. Mount a small Host plugin and a browser contribution, with Doxvelt represented by a fixture that accepts turn commands and returns transcript rows with stable IDs. Use three characters from *The Last Crossing* and two scripted actor configurations. Add a short controllable delay and a forced failure to the generator. This tests the UI boundary without provider credentials, model variability, or real stories.

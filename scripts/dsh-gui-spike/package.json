@@ -1,0 +1,13 @@
+{
+  "name": "@doxvelt/dsh-gui-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./host.mjs",
+    "./client": "./client.js"
+  },
+  "dsh": {
+    "client": { "platform": "web" }
+  }
+}
