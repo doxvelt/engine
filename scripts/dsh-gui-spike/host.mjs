@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { playedTurn, resolvePlayAudience, savedEpisodeRequest } from './saved-episode.mjs';
+import { appendPlayedTurn, resolvePlayAudience, savedEpisodeRequest } from './saved-episode.mjs';
 
 export const inject = ['connection', 'sessions', 'workspaceRegistry'];
 
@@ -31,8 +31,12 @@ export async function apply(ctx) {
       if (!session) return Response.json({ error: 'Open a story first.' }, { status: 409 });
 
       try {
+        const previousSeq = session.seq;
         const saved = await savedEpisodeRequest(origin, session, command, request.signal);
-        if (saved) return saved;
+        if (saved) {
+          if (session.seq !== previousSeq) await ctx.sessions.flush(session);
+          return saved;
+        }
       } catch (error) {
         return Response.json({ error: error.status ? error.message : 'Doxvelt could not open or update the episode. Try again.' }, { status: 502 });
       }
@@ -50,7 +54,8 @@ export async function apply(ctx) {
         const turn = { ...fixture.turns[index], body };
         fixture.turns[index] = turn;
         writeFileSync(source, JSON.stringify(fixture, null, 2));
-        session.append(playedTurn, turn);
+        appendPlayedTurn(session, turn);
+        await ctx.sessions.flush(session);
         return Response.json({ ok: true });
       }
 
@@ -88,7 +93,8 @@ export async function apply(ctx) {
       if (actor) fixture.whispers[turn.id] = body;
       writeFileSync(source, JSON.stringify(fixture, null, 2));
       // DSH gets a display receipt. The fixture file owns the played state.
-      session.append(playedTurn, turn);
+      appendPlayedTurn(session, turn);
+      await ctx.sessions.flush(session);
       return Response.json({ ok: true });
     },
   });

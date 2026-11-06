@@ -1,5 +1,5 @@
 import { decodeAlternativeCommand, assertSupportedHistoricalEffects, originatingInput, resolveHistoricalSelection } from "./saved-alternatives.ts";
-import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
+import { ACTOR_KNOWLEDGE_POLICY, DEFAULT_ACTOR_PROFILE } from "./types.ts";
 import { branchBodyCorrections } from "./body-revisions.ts";
 import { turnCorrectionEvent } from "./turn-correction.ts";
 import { createHash } from "node:crypto";
@@ -2327,7 +2327,7 @@ function validateSavedAlternative(archive: SimulationArchive, item: SimulationAr
     for (const id of routing.availableRecipientIds) requireArchiveActor(archive, r.commandId, id);
     if (routing.originalDraftId !== receipt.draftId || routing.originalGenerationCommandId !== receipt.generationCommandId ||
       routing.initialAudience !== null || routing.correction !== "" ||
-      !equalSaved(receipt.runtimeProfile, { id: "local-character", version: "v1" }) ||
+      !equalSaved(receipt.runtimeProfile, r.actorProfile ?? DEFAULT_ACTOR_PROFILE) ||
       !equalSaved(receipt.generatedArtifact.provenance.runtimeProfile, receipt.runtimeProfile) ||
       receipt.skillDigests.length ||
       archive.commandResults.some(other => other.commandId === receipt.generationCommandId ||

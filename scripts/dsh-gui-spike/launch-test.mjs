@@ -35,6 +35,8 @@ let limitAttempts = 0;
 const performances = {
   'nell-route': { text: 'I will guard the key.', audience: ['nell', 'corin'] },
   'mara-route': { text: 'The far bank is quiet.', audience: ['mara', 'corin'] },
+  'nell-careful-route': { text: 'I will count the lights before we leave.', audience: ['nell', 'corin'] },
+  'nell-updated-route': { text: 'I counted a light on the far bank.', audience: ['nell', 'corin'] },
 };
 const provider = createServer(async (request, response) => {
   try {
@@ -101,9 +103,13 @@ async function stopLauncher() {
 try {
   const baseUrl = 'http://127.0.0.1:' + provider.address().port + '/v1';
   const route = modelId => ({ modelId, baseUrl });
-  await writeFile(config, JSON.stringify({
-    actors: { nell: route('nell-route'), mara: route('mara-route') }, reflection: route('memory-route'),
-  }));
+  const modelSettings = {
+    actors: { nell: [
+      { id: 'default', label: 'Quick', ...route('nell-route') },
+      { id: 'careful', label: 'Careful', ...route('nell-careful-route') },
+    ], mara: route('mara-route') }, reflection: route('memory-route'),
+  };
+  await writeFile(config, JSON.stringify(modelSettings));
 
   async function launch(args = [], data = scratch) {
     launcherLog = '';
@@ -124,16 +130,32 @@ try {
     });
   }
 
-  async function openEpisode(url) {
+  async function openEpisode(url, firstRun = true) {
     const page = await browser.newPage({ viewport: { width: 1280, height: 850 }, locale: 'en-US' });
     page.setDefaultTimeout(12_000);
     await page.goto(url);
-    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    if (firstRun) await page.getByRole('button', { name: 'Continue', exact: true }).click();
     const signIn = page.getByRole('dialog', { name: 'Get started' });
-    await signIn.getByRole('button', { name: 'Close', exact: true }).click();
+    try { await signIn.getByRole('button', { name: 'Close', exact: true }).click({ timeout: 3_000 }); }
+    catch (error) { if (firstRun || error.name !== 'TimeoutError' || await signIn.isVisible()) throw error; }
     const picker = page.getByLabel('Saved episode', { exact: true });
-    await picker.getByRole('option', { name: 'The last crossing' }).waitFor({ state: 'attached' });
-    await picker.selectOption({ label: 'The last crossing' });
+    try {
+      const workspace = page.getByRole('button', { name: 'Choose workspace', exact: true });
+      if (!firstRun) {
+        await picker.or(workspace).first().waitFor();
+        if (await workspace.isVisible()) {
+          await workspace.click();
+          await page.getByRole('menuitem', { name: 'stage', exact: true }).click();
+        }
+      }
+      await picker.getByRole('option', { name: 'The last crossing' }).waitFor({ state: 'attached' });
+      if (await picker.isEnabled()) await picker.selectOption({ label: 'The last crossing' });
+      else assert.equal(await picker.locator('option:checked').textContent(), 'The last crossing');
+    } catch (error) {
+      await page.screenshot({ path: path.join(scratch, 'open-episode-failure.png') }).catch(() => {});
+      console.error((await page.locator('body').innerText()).slice(0, 1500));
+      throw error;
+    }
     await page.getByRole('button', { name: 'Episode memory', exact: true }).waitFor();
     return page;
   }
@@ -291,6 +313,24 @@ try {
   assert.equal(limitAttempts, 3);
   assert.deepEqual(providerErrors, []);
 
+  const careful = performances['nell-careful-route'].text;
+  const picker = page.getByLabel('Actor', { exact: true });
+  await picker.selectOption({ label: 'Nell · Careful' });
+  await page.getByLabel('Audience', { exact: true }).selectOption('Corin');
+  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/generate @Nell#careful to @Corin |');
+  await play(page, '/generate @Nell#careful to @Corin | Count the lights.', careful);
+  assert.equal(calls.at(-1).model, 'nell-careful-route');
+  assert.match(JSON.stringify(calls.at(-1).messages), /far bank is still in sight/);
+  assert.equal(await picker.inputValue(), 'Nell#careful');
+  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/generate @Nell#careful to @Corin |');
+  await turns.filter({ hasText: limitedRevision }).getByRole('button', { name: 'Edit turn', exact: true }).click();
+  await page.getByText('Next turn direction', { exact: true }).click();
+  assert.equal(await page.getByLabel('Next actor', { exact: true }).inputValue(), 'Nell#careful');
+  await page.getByRole('button', { name: 'Close turn editor' }).click();
+  await turns.filter({ hasText: careful }).getByRole('button', { name: 'Regenerate this turn' }).click();
+  assert.equal(await page.getByLabel('Revision actor').inputValue(), 'Nell#careful');
+  await page.getByRole('button', { name: 'Close turn editor' }).click();
+
   const revised = await openBranchStore(path.join(scratch, 'doxvelt.sqlite')).open();
   try {
     const [story] = revised.listSimulations('local');
@@ -309,6 +349,10 @@ try {
       item.canonicalInput.payload.request.audienceLimit);
     assert.deepEqual(historicalLimit.canonicalInput.payload.request.audienceLimit, ['corin']);
     assert.deepEqual(historicalLimit.canonicalInput.payload.generated.audience, ['nell', 'corin']);
+    const carefulReceipt = archive.commandResults.find(item => item.canonicalInput.kind === 'accept_draft' &&
+      item.canonicalInput.payload.runtimeProfile.id === 'actor-careful');
+    assert.equal(carefulReceipt.canonicalInput.payload.actorId, 'nell');
+    assert.equal(carefulReceipt.canonicalInput.payload.generatedArtifact.provenance.modelId, 'nell-careful-route');
   } finally {
     revised.close();
   }
@@ -316,12 +360,23 @@ try {
   await page.close();
   await stopLauncher();
   const database = path.join(scratch, 'doxvelt.sqlite');
+  modelSettings.actors.nell[1].modelId = 'nell-updated-route';
+  await writeFile(config, JSON.stringify(modelSettings));
   const reopened = await openEpisode(await launch(['--database', database], path.join(scratch, 'fresh-dsh')));
   const restoredTurns = reopened.locator('[data-doxvelt-turn]');
   await restoredTurns.getByText(limitedRevision, { exact: true }).waitFor();
   assert.equal(await reopened.getByLabel('Story path').inputValue(), playedPath);
   assert.equal(await restoredTurns.getByText(groupLine, { exact: true }).count(), 1);
   assert.match(await restoredTurns.last().innerText(), /Nell → Corin/);
+  await restoredTurns.filter({ hasText: careful }).getByRole('button', { name: 'Regenerate this turn' }).click();
+  await reopened.getByText('The original actor configuration is unavailable.', { exact: false }).waitFor();
+  const revisionActor = reopened.getByLabel('Revision actor');
+  assert.equal(await revisionActor.inputValue(), '');
+  assert.equal(await reopened.getByRole('button', { name: 'Generate and open new path' }).isDisabled(), true);
+  await revisionActor.selectOption('Nell#careful');
+  await reopened.getByRole('button', { name: 'Generate and open new path' }).click();
+  await restoredTurns.getByText(performances['nell-updated-route'].text, { exact: true }).waitFor();
+  assert.equal(calls.at(-1).model, 'nell-updated-route');
   await reopened.close();
   await stopLauncher();
 
@@ -342,6 +397,7 @@ try {
   await authoredComposer.press('Enter');
   await authoredTurns.getByText(sharedAside, { exact: true }).waitFor();
   assert.match(await authoredTurns.first().innerText(), /Corin → Joss, Nell/);
+  await openedSource.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/perform @Corin to @Joss, @Nell |');
   await play(openedSource, '/generate @Mara to @Corin | Check the far bank.', performances['mara-route'].text);
   assert.doesNotMatch(JSON.stringify(calls.at(-1).messages), /violet parcel/);
   const sourceStore = await openBranchStore(path.join(authored, 'doxvelt.sqlite')).open();
@@ -352,7 +408,17 @@ try {
   } finally {
     sourceStore.close();
   }
-  console.log('Passed launcher routes, native reflection, saved-turn editing, fixed and bounded audiences, and reopening a saved database and authored story.');
+  await openedSource.close();
+  await stopLauncher();
+
+  const restoredMemories = await openEpisode(await launch(['--database', database]), false);
+  const reflectionCalls = calls.filter(call => call.model === 'memory-route').length;
+  await restoredMemories.getByLabel('Story path').selectOption({ label: 'Original' });
+  await restoredMemories.locator('[data-doxvelt-turn]').getByText(privateLine, { exact: true }).waitFor();
+  await restoredMemories.getByRole('button', { name: 'Episode memory', exact: true }).click();
+  await restoredMemories.getByText(recall, { exact: true }).first().waitFor();
+  assert.equal(calls.filter(call => call.model === 'memory-route').length, reflectionCalls);
+  console.log('Passed launcher routes, exact actor configuration history, saved-turn editing, audiences, and restart of saved stories and native memories.');
 } catch (error) {
   if (providerErrors.length) console.error(providerErrors);
   console.error(launcherLog.replace(/http:\/\/127\.0\.0\.1:\d+\/[^\s]+/g, '[local launch link]'));

@@ -1,5 +1,5 @@
 export { ACTOR_KNOWLEDGE_POLICY } from "../core/types.ts";
-import type { ActorTurnDraftRecord, BranchRecord, TranscriptTurn } from "../core/types.ts";
+import type { ActorTurnDraftRecord, BranchRecord, RuntimeProfileRef, TranscriptTurn } from "../core/types.ts";
 
 export type StageActor = { id: string; name: string; kind: string };
 export type StageProjection = {
@@ -9,6 +9,7 @@ export type StageProjection = {
   audience: { actorId: string; status: string }[];
   actors: StageActor[];
   generationActorIds?: string[];
+  actorConfigurations?: { characterId: string; key: string; label: string; profile: RuntimeProfileRef }[];
   episodes?: { id: string; label: string }[];
 };
 export type StageDraft = Pick<ActorTurnDraftRecord,

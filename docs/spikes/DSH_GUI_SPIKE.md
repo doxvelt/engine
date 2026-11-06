@@ -21,7 +21,7 @@ The initial fixture exercised GUI behavior with scripted generation and history.
 
 The follow-up kept the stock composer and transcript on DSH Web `0.2.2-rc.1`. After a successful submission, the plugin restores the selected action, character, and audience as a routing prefix. The stock editor accepts typing after that prefix without a click or reselecting a control. The browser run checked consecutive scripted Generate turns and consecutive Perform turns, using both Enter and Send. The prefix stays visible. The stock composer still routes a draft with the prefix removed through ordinary DSH prompting.
 
-**Open saved episode** lists saved Doxvelt simulations and opens the current episode on the saved branch. The test started *The last crossing* through the real Doxvelt local API, wrote one turn to SQLite before launching DSH, then restarted the local API and opened the episode in a fresh DSH profile with an empty transcript. DSH projected the saved row, returned the caret to the composer, and appended two Perform turns to the same Doxvelt branch. The API verified all three turns in order and the same private audience. The picker stays disabled while the composer contains an unsent draft.
+**Open saved episode** lists saved Doxvelt simulations and opens the current episode on the saved branch. The test started *The last crossing* through the real Doxvelt local API, wrote one turn to SQLite before launching DSH, then restarted the local API and opened the episode in a fresh DSH profile with an empty transcript. DSH projected the saved row, returned the caret to the composer, and appended two Perform turns to the same Doxvelt branch. The API verified all three turns in order and the same private audience. The picker stays disabled while the composer contains an unsent draft. Doxvelt projects turns through DSH's durable command results. These display records stay outside the model's message history, and Doxvelt keeps the authoritative transcript.
 
 The saved-episode path exercises the current open episode on a saved branch. Generate uses the real Doxvelt draft and acceptance flow with a scripted runtime in the browser test. A model response that contradicts a fixed audience leaves the turn uncommitted and the direction editable. The DSH sidebar keeps its stock **New Session** label. The episode transcript picker and revision actions are described below.
 
@@ -58,9 +58,9 @@ position. It keeps the later performances, character, audience, and unsent
 composer draft. The correction changes the episode revision, so a previously
 memorized episode shows a drift notice until the player memorizes that path.
 
-**Save & generate next turn** opens a new continuation. The old next character
-is preselected when that character has a configured model. Otherwise the first
-configured actor is offered and can be changed. The action can also change the
+**Save & generate next turn** opens a new continuation. The editor preselects the old next
+actor when its configuration is available. When the old turn was player-authored,
+it offers a configured actor for that character if possible. The action can also change the
 edited turn's speaker or audience. If generation fails after the edit saves,
 the editor offers retry or lets the player open the saved path.
 
@@ -106,23 +106,45 @@ environment variables before starting. An optional `defaultActor` supplies
 generation for characters without a specific route and serves as the default
 reflection model when you omit `reflection`. You can perform as any character.
 
+For multiple actors playing the same character, make that character's entry
+an array. Each configuration has a short lowercase `id` and an optional
+display `label`.
+
+```json
+{
+  "actors": {
+    "nell": [
+      { "id": "default", "label": "Quick", "baseUrl": "http://127.0.0.1:1234/v1", "modelId": "nell-quick" },
+      { "id": "careful", "label": "Careful", "baseUrl": "http://127.0.0.1:1234/v1", "modelId": "nell-careful" }
+    ]
+  },
+  "reflection": { "baseUrl": "http://127.0.0.1:1234/v1", "modelId": "reflection-model" }
+}
+```
+
+Select **Nell · Careful** in **Actor**, or type
+`/generate @Nell#careful to @Corin | Take your time.` A bare `@Nell`
+uses her default configuration or the first named entry when there is no
+default. The saved turn records the configuration. The history editor restores
+it when available and asks you to choose when its model or endpoint changed.
+
 ```text
 node scripts/dsh-stage.mjs --dsh "<scratch>/node_modules/@deepseek-ai/dsh/lib/bin.js" --reverie "<Reverie executable>" --models "<model config.json>"
 ```
 
-Choose **Open saved episode**, then **The last crossing**. The launcher seeds
+If DSH asks for a workspace, choose **stage**. Then choose **Open saved episode** and **The last crossing**. The launcher seeds
 the example on first run and keeps story data, memories, and the DSH profile
 under `.doxvelt/stage`. Use `--data <directory>` for a separate playthrough.
 Use `--database <existing SQLite file>` to open a saved Engine database in
 DSH. The picker resumes the last selected story path. Use
 `--story <source directory> --scenario <id>` to add an authored scenario
 from Markdown. Keep the same `--data` directory to reuse the local memory
-catalog and DSH profile. Use `--no-open` to print the local browser link.
+catalog and DSH profile. This version opens a fresh DSH profile when launched over an earlier spike data directory, and reads the existing Doxvelt database and memory catalog there. Use `--no-open` to print the local browser link.
 
 The launcher browser test exercised independent Nell, Mara, and reflection
 routes against a local OpenAI-compatible endpoint with scripted responses. It
 verified the configured model IDs, private prompt boundaries, and native memory
-formation. It also restarts the launcher with a fresh DSH profile and reopens a saved path. Live model quality and provider-specific behavior remain unverified.
+formation. It also restarts the launcher with a fresh DSH profile and reopens a saved path, then restarts with the original data directory and verifies that the existing memory can be inspected without another reflection call. Live model quality and provider-specific behavior remain unverified.
 
 ## Reproduce
 

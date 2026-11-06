@@ -29,13 +29,27 @@ window.__ModuleLoader__.load({
       }
     }
 
+    function actorChoices(cast, mode) {
+      return cast.flatMap(character => {
+        const { token, name, canGenerate, configurations = [] } = character;
+        if (mode !== 'generate' || (canGenerate && !configurations.length)) return [{ token, character: token, name }];
+        if (!canGenerate) return [];
+        return configurations.map(({ key, label, profile }) => ({
+          token: key === 'default' ? token : token + '#' + key,
+          character: token, name: name + ' · ' + label, configuration: key, profile,
+        }));
+      });
+    }
+
     function parseDraft(draft, cast) {
-      const match = /^\/(perform|generate)\s+@([\w-]+)\s+to\s+([^|]+)\|\s*([\s\S]*)$/i.exec(draft.trimStart());
+      const match = /^\/(perform|generate)\s+@([\w-]+)(?:#([a-z0-9-]+))?\s+to\s+([^|]+)\|\s*([\s\S]*)$/i.exec(draft.trimStart());
       if (!match) return undefined;
       const resolve = name => cast.find(actor => actor.token.toLowerCase() === name.toLowerCase())?.token;
       const mode = match[1].toLowerCase();
       const character = resolve(match[2]);
-      const direction = match[3].trim();
+      const key = match[3]?.toLowerCase();
+      const actor = actorChoices(cast, mode).find(choice => choice.character === character && (!key || choice.configuration === key));
+      const direction = match[4].trim();
       const delegate = /^actor(?:\s+among\s+(.+))?$/i.exec(direction);
       let audience;
       if (/^(all|self)$/i.test(direction)) audience = '!' + direction.toLowerCase();
@@ -50,7 +64,7 @@ window.__ModuleLoader__.load({
           audience = delegate ? '!actor:' + list : list;
         }
       }
-      return { mode, character, audience, body: match[4] };
+      return { mode, character, actor: actor?.token, actorConfiguration: actor?.configuration, audience, body: match[5] };
     }
 
     function claim(session, mode) {
@@ -59,26 +73,28 @@ window.__ModuleLoader__.load({
         token: '/' + mode + ' ',
         submit(args) {
           const command = parseDraft('/' + mode + ' ' + args, castFor(session.sessionId));
-          if (!command?.character || !command.audience) {
-            return Promise.resolve({ kind: 'error', text: 'Choose recipients with the Audience control, or use to all, to @Nell, @Mara, or to actor before |.' });
+          if (!command?.actor || !command.audience) {
+            return Promise.resolve({ kind: 'error', text: 'Choose a valid actor and audience. You can use to all, to @Nell, @Mara, or to actor before |.' });
           }
           return submit(session.sessionId, command);
         },
       };
     }
 
-    function formatDraft({ mode, character, audience, body = '' }) {
+    function formatDraft({ mode, character, actor, audience, body = '' }) {
       const mentions = value => value.split(',').map(token => '@' + token).join(', ');
       const recipients = ['!all', '!self', '!actor'].includes(audience) ? audience.slice(1)
         : audience.startsWith('!actor:') ? 'actor among ' + mentions(audience.slice(7)) : mentions(audience);
-      return '/' + mode + ' @' + character + ' to ' + recipients + ' | ' + body;
+      return '/' + mode + ' @' + (mode === 'generate' ? actor : character) + ' to ' + recipients + ' | ' + body;
     }
 
     function supportedRoute(values, cast) {
-      const generators = cast.filter(actor => actor.canGenerate);
-      if (values.mode === 'generate' && !generators.length) values.mode = 'perform';
-      const eligible = values.mode === 'generate' ? generators : cast;
-      if (!eligible.some(actor => actor.token === values.character)) values.character = eligible[0]?.token;
+      if (values.mode === 'generate' && !cast.some(actor => actor.canGenerate)) values.mode = 'perform';
+      const eligible = actorChoices(cast, values.mode);
+      const selected = eligible.find(item => item.character === values.character && item.token === values.actor)
+        ?? eligible.find(item => item.character === values.character) ?? eligible[0];
+      values.character = selected?.character;
+      values.actor = selected?.token;
       const delegated = values.audience === '!actor' || values.audience?.startsWith('!actor:');
       if (!values.audience || (delegated && values.mode === 'perform')) values.audience = '!all';
       else if (!['!all', '!self', '!actor'].includes(values.audience)) {
@@ -111,9 +127,9 @@ window.__ModuleLoader__.load({
       }, [openState, sessionId]);
 
       useEffect(() => {
-        if (command?.character && command.audience) {
-          const { mode, character, audience } = command;
-          routes.set(sessionId, { mode, character, audience });
+        if (command?.actor && command.audience) {
+          const { mode, character, actor, audience } = command;
+          routes.set(sessionId, { mode, character, actor, audience });
         } else if (!draft && !busy && openState === 'open') {
           // Let the stock composer restore focus after its submit transaction first.
           const selection = inputActions.captureInsertion();
@@ -126,7 +142,7 @@ window.__ModuleLoader__.load({
           });
           return () => cancelAnimationFrame(frame);
         }
-      }, [draft, busy, openState, sessionId, inputActions]);
+      }, [draft, busy, openState, sessionId, inputActions, cast]);
 
       useEffect(() => {
         if (!saved.opened || (command?.body ?? (/^\/(perform|generate)\b[^|]*\|\s*$/i.test(draft) ? '' : draft)).trim()) return;
@@ -167,7 +183,7 @@ window.__ModuleLoader__.load({
         const route = supportedRoute(values, cast);
         if (route.character && route.audience) inputActions.setDraft(formatDraft(route));
       }
-      function select(label, value, options, onChange) {
+      function select(label, value, options, onChange, displayName) {
         const labels = { '!all': 'Everyone', '!self': 'Only self', '!actor': 'Actor chooses' };
         const optionLabel = option => label === 'Audience limit' && option === '!all' ? 'No limit'
           : (Object.hasOwn(labels, option) ? labels[option] : undefined) ?? option.split(',').map(token => cast.find(actor => actor.token === token)?.name ?? token).join(' + ');
@@ -175,11 +191,11 @@ window.__ModuleLoader__.load({
           h('select', { 'aria-label': label, value: value ?? '', disabled: busy || opening,
             onChange: event => onChange(event.target.value) },
             h('option', { value: '', disabled: true }, 'Choose'),
-            options.map(option => h('option', { value: option, key: option }, optionLabel(option)))));
+            options.map(option => h('option', { value: option, key: option }, displayName?.(option) ?? optionLabel(option)))));
       }
 
       const unsent = Boolean((command?.body ?? draft).trim());
-      const available = command?.mode === 'generate' ? cast.filter(actor => actor.canGenerate) : cast;
+      const available = actorChoices(cast, command?.mode);
       const recipients = cast.filter(actor => actor.token !== command?.character).map(actor => actor.token);
       const groups = recipients.length <= 4
         ? recipients.flatMap((first, index) => recipients.slice(index + 1).map(second => first + ',' + second))
@@ -193,7 +209,9 @@ window.__ModuleLoader__.load({
       return h('div', { 'aria-label': 'Doxvelt routing', style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '0 8px 8px', width: '100%', margin: '0 auto',
         maxWidth: 'var(--dsh-composer-card-max-width, 712px)', boxSizing: 'border-box' } },
         select('Action', command?.mode, cast.some(actor => actor.canGenerate) ? modes : ['perform'], mode => update({ mode })),
-        select(command?.mode === 'generate' ? 'Actor' : 'Character', command?.character, available.map(actor => actor.token), character => update({ character })),
+        select(command?.mode === 'generate' ? 'Actor' : 'Character', command?.actor, available.map(item => item.token), actor => {
+          update({ actor, character: available.find(item => item.token === actor).character });
+        }, token => available.find(item => item.token === token)?.name),
         select('Audience', audience, command?.mode === 'generate' ? [...fixed, '!actor'] : fixed, audience => update({ audience })),
         audience === '!actor' && select('Audience limit', limit, limits, value => update({ audience: value === '!all' ? '!actor' : '!actor:' + value })),
         h('select', {
@@ -327,12 +345,17 @@ window.__ModuleLoader__.load({
         setBusy(true);
         const result = await submit(sessionId, { mode: 'history-origin', ...identity });
         if (result.kind === 'success') {
-          const { cast, actor, audience, whisper, version, body, expectedHead, next } = result.result;
-          const eligible = cast.filter(item => item.canGenerate);
+          const { cast, actor, actorProfile, audience, whisper, version, body, expectedHead, next } = result.result;
+          const eligible = actorChoices(cast, 'generate');
           const preferred = action === 'generate' ? actor : next?.actor;
-          const character = eligible.some(item => item.token === preferred) ? preferred : eligible[0]?.token ?? '';
+          const recorded = action === 'generate' ? actorProfile : next?.actorProfile;
+          const selected = recorded
+            ? eligible.find(item => item.character === preferred && item.profile?.id === recorded.id && item.profile?.version === recorded.version)
+            : eligible.find(item => item.character === preferred) ?? eligible[0];
+          const character = selected?.character ?? preferred ?? '';
           const recipients = action === 'generate' ? audience : next?.audience ?? null;
           setForm({ eligible, cast, speaker: actor, editedAudience: audience, originalActor: actor, originalAudience: audience,
+            actor: selected?.token ?? '', actorConfiguration: selected?.configuration, unavailable: Boolean(recorded && !selected),
             character, audience: recipients?.filter(item => item !== character) ?? null,
             whisper: action === 'generate' ? whisper : next?.whisper ?? '', version, body, expectedHead });
         } else setError(result.text);
@@ -355,7 +378,7 @@ window.__ModuleLoader__.load({
       async function save(action) {
         setBusy(true);
         setError('');
-        const routing = { character: form.character, audience: form.audience, whisper: form.whisper,
+        const routing = { character: form.character, actorConfiguration: form.actorConfiguration, audience: form.audience, whisper: form.whisper,
           ...(form.audience === null && form.audienceLimit?.length ? { audienceLimit: form.audienceLimit } : {}) };
         const result = await submit(sessionId, { ...identity, version: form.version, expectedHead: form.expectedHead, requestId: requestId.current,
           ...(action === 'correct' ? { mode: 'history-correct', body: form.body }
@@ -382,6 +405,7 @@ window.__ModuleLoader__.load({
       function characterSelect(label, character, options, disabled, onChange) {
         return h('label', null, label + ' ', h('select', { 'aria-label': label, value: character, disabled,
           onChange: event => onChange(event.target.value) },
+          !character && h('option', { value: '', disabled: true }, 'Choose an actor'),
           options.map(actor => h('option', { key: actor.token, value: actor.token }, actor.name))));
       }
 
@@ -405,9 +429,13 @@ window.__ModuleLoader__.load({
       function generationFields(prefix) {
         const locked = busy || retry === 'check';
         return [
-          characterSelect(prefix + ' actor', form.character, form.eligible, locked,
-            character => update({ character, audience: form.audience?.filter(item => item !== character) ?? null,
-              audienceLimit: form.audienceLimit?.filter(item => item !== character) })),
+          characterSelect(prefix + ' actor', form.actor, form.eligible, locked, actor => {
+            const { character, configuration } = form.eligible.find(item => item.token === actor);
+            update({ actor, character, actorConfiguration: configuration, unavailable: false,
+              audience: form.audience?.filter(item => item !== character) ?? null,
+              audienceLimit: form.audienceLimit?.filter(item => item !== character) });
+          }),
+          form.unavailable && h('p', { role: 'status' }, 'The original actor configuration is unavailable. Choose an actor to generate.'),
           audienceSelect(prefix + ' audience', form.character, form.audience, locked,
             audience => update({ audience, audienceLimit: undefined }), audienceLimit => update({ audienceLimit })),
           h('label', null, prefix + ' stage whisper', h('textarea', { style: { display: 'block', width: '100%' },
@@ -437,20 +465,20 @@ window.__ModuleLoader__.load({
               speaker => update({ speaker, editedAudience: form.editedAudience.filter(item => item !== speaker) })),
             audienceSelect('Edited audience', form.speaker, form.editedAudience, editLocked,
               editedAudience => update({ editedAudience })),
-            form.eligible.length > 0 && h('details', { open: retry ? true : undefined },
+            form.eligible.length > 0 && h('details', { open: retry || form.unavailable ? true : undefined },
               h('summary', null, 'Next turn direction'),
               h('div', { style: { display: 'grid', gap: 8, marginTop: 8 } }, ...generationFields('Next'))),
             h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
               h(Button, { type: 'submit', variant: routingChanged ? 'outline' : 'primary', disabled: editLocked || !validText || routingChanged || form.body.trim() === turn.body }, 'Save correction'),
-              h(Button, { type: 'button', variant: routingChanged ? 'primary' : 'outline', disabled: busy || !validText || !form.character,
+              h(Button, { type: 'button', variant: routingChanged ? 'primary' : 'outline', disabled: busy || !validText || !form.actor,
                 onClick: () => { void save('next'); } }, retry === 'next' ? 'Retry next turn'
                 : retry === 'check' ? 'Check next turn' : 'Save & generate next turn'))),
           form && !savedPath && mode === 'generate' && h('form', {
-            onSubmit: event => { event.preventDefault(); if (!busy && form.character) void save('generate'); },
+            onSubmit: event => { event.preventDefault(); if (!busy && form.actor) void save('generate'); },
             style: { display: 'grid', gap: 8 },
           },
             ...generationFields('Revision'),
-            h(Button, { type: 'submit', variant: 'primary', disabled: busy || !form.character }, 'Generate and open new path')),
+            h(Button, { type: 'submit', variant: 'primary', disabled: busy || !form.actor }, 'Generate and open new path')),
           savedPath && h(Button, { disabled: busy, onClick: () => { void openPath(savedPath); } }, 'Open saved path'),
           busy && h('p', { role: 'status' }, form ? 'Saving the revised path…' : 'Loading the turn…'),
           error && h('p', { role: 'alert' }, error)));
@@ -491,6 +519,11 @@ window.__ModuleLoader__.load({
               'aria-label': 'Edit turn ' + turn.id,
               onClick: () => { setBody(turn.body); setError(''); setWhisper(null); setEditing(true); },
             }, 'Edit')));
+    }
+
+    function projectedTurn(event) {
+      if (event.type !== 'command/done' || !event.data.commandId.startsWith('doxvelt:played-turn:')) return null;
+      return JSON.parse(event.data.text);
     }
 
     function apply(ctx) {
@@ -542,9 +575,13 @@ window.__ModuleLoader__.load({
 
       ctx.effect(() => ctx.uiConversation.events.register({
         kind, target: 'chat',
-        match: event => event.type === 'doxvelt/played-turn' ? { id: event.data.id, role: 'start', exclusive: true } : null,
-        start: (_context, match) => match.event.data,
-        update: (_context, match) => match.event.data,
+        match(event) {
+          if (!['command/run', 'command/done'].includes(event.type) || !event.data.commandId.startsWith('doxvelt:')) return null;
+          const row = projectedTurn(event);
+          return { id: row?.id ?? event.data.commandId, role: 'start', exclusive: true };
+        },
+        start: (_context, match) => projectedTurn(match.event),
+        update: (_context, match) => projectedTurn(match.event),
         buildViewNode(context) {
           if (!context.state) return null;
           return {

@@ -507,6 +507,8 @@ export type ActorContext = {
   promptPreview: string;
 };
 
+export const DEFAULT_ACTOR_PROFILE = Object.freeze({ id: "local-character", version: "v1" });
+
 export type RuntimeProfileRef = {
   id: string;
   version: string;

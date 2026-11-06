@@ -38,9 +38,33 @@ async function launch(config) {
   ]);
   const models = JSON.parse(await readFile(config.models, "utf8"));
   const defaultRoute = models.defaultActor ? resolveRoute(models.defaultActor, "defaultActor") : undefined;
-  const actors = new Map(Object.entries(models.actors ?? {}).map(([id, route]) =>
-    [id, createLocalOpenAICompatibleRuntime(resolveRoute(route, "actors." + id))]));
-  if (!defaultRoute && !actors.size) throw new Error("Configure defaultActor or at least one actor model.");
+  const actorConfigurations = Object.entries(models.actors ?? {}).flatMap(([characterId, entry]) => {
+    const choices = Array.isArray(entry) ? entry : [entry];
+    if (!choices.length) throw new Error("Configure at least one model for " + characterId + ".");
+    const configurations = choices.map(choice => {
+      const key = choice?.id ?? (Array.isArray(entry) ? null : "default");
+      if (typeof key !== "string" || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(key))
+        throw new Error("Actor configurations for " + characterId + " need a short lowercase id.");
+      return actorConfiguration(characterId, key, choice?.label, resolveRoute(choice, "actors." + characterId + "." + key));
+    });
+    if (new Set(configurations.map(configuration => configuration.key)).size !== configurations.length)
+      throw new Error("Actor configuration ids must be unique for " + characterId + ".");
+    return configurations.sort((left, right) => Number(right.key === 'default') - Number(left.key === 'default'));
+  });
+  if (defaultRoute) actorConfigurations.push(actorConfiguration(null, "default", models.defaultActor.label, defaultRoute));
+  if (!actorConfigurations.length) throw new Error("Configure defaultActor or at least one actor model.");
+
+  function actorConfiguration(characterId, key, label, route) {
+    if (label !== undefined && (typeof label !== "string" || !label.trim() || label.trim().length > 80))
+      throw new Error("An actor configuration label must be 1 to 80 characters.");
+    const runtime = createLocalOpenAICompatibleRuntime(route);
+    return {
+      characterId, key, label: label?.trim() ?? runtime.identity.modelId ?? key, runtime,
+      profile: { id: "actor-" + key, version: hashIdentity(JSON.stringify([
+        normalizeLocalOpenAICompatibleBaseUrl(route.baseUrl), route.modelId.trim(),
+      ])) },
+    };
+  }
   const reflection = models.reflection ? resolveRoute(models.reflection, "reflection") : defaultRoute;
   if (!reflection) throw new Error("Configure the reflection model when defaultActor is absent.");
   const reflectionModel = createOpenAICompatible({
@@ -78,8 +102,7 @@ async function launch(config) {
   });
   const engine = createLocalApiServer({
     dbPath, episodeMemory: memory,
-    ...(defaultRoute ? { actorTurnRuntime: createLocalOpenAICompatibleRuntime(defaultRoute) } : {}),
-    actorTurnRuntimes: actors,
+    actorConfigurations,
   });
   try {
     engine.listen(0, "127.0.0.1");
@@ -92,7 +115,7 @@ async function launch(config) {
     const child = spawn(process.execPath, [dsh, "web", "--patch", overlay, "--port", "0",
       ...(config["no-open"] ? ["--no-open"] : [])], {
       cwd: workspace, windowsHide: true, stdio: "inherit",
-      env: { ...inherited, DSH_HOME: path.join(root, "dsh-home"),
+      env: { ...inherited, DSH_HOME: path.join(root, "dsh-home-v2"),
         DOXVELT_STAGE_WORKSPACE: workspace, DOXVELT_STAGE_ENGINE: origin },
     });
     const stop = () => child.kill();
