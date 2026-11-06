@@ -1,21 +1,24 @@
 window.__ModuleLoader__.load({
   id: '@doxvelt/dsh-gui-spike',
   factory(require) {
-    const { createElement: h, useEffect, useState } = require('react');
+    const { createElement: h, useEffect, useRef, useState } = require('react');
+    const { Button, Modal } = require('@deepseek-ai/dsh-client-ui-primitives');
     const cast = ['Corin', 'Nell', 'Mara'];
     const modes = ['perform', 'generate'];
     const kind = 'doxvelt-performance';
     const defaultRoute = { mode: 'perform', character: 'Corin', audience: 'Nell' };
     const routes = new Map();
+    const sceneListeners = new Map();
 
-    async function submit(sessionId, command) {
+    async function submit(sessionId, command, signal) {
       try {
         const response = await fetch('/api/doxvelt-fixture', {
-          method: 'POST',
+          method: 'POST', signal,
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ sessionId, ...command }),
         });
         const result = await response.json();
+        if (response.ok && ['perform', 'generate', 'correct'].includes(command.mode)) void sceneListeners.get(sessionId)?.();
         return response.ok ? { kind: 'success', result } : { kind: 'error', text: result.error };
       } catch {
         return { kind: 'error', text: 'The scene could not save. Try again.' };
@@ -53,7 +56,7 @@ window.__ModuleLoader__.load({
       return '/' + mode + ' @' + character + ' to ' + recipients + ' | ' + body;
     }
 
-    function Routing({ sessionId, useSession, useInput, inputActions, focusComposer }) {
+    function Routing({ sessionId, useSession, useInput, inputActions, focusComposer, openNextEpisode }) {
       const draft = useInput(state => state.draft);
       const phase = useInput(state => state.phase);
       const openState = useSession(state => state.openState);
@@ -135,7 +138,88 @@ window.__ModuleLoader__.load({
         },
           h('option', { value: '', disabled: true }, opening ? 'Opening episode…' : 'Open saved episode'),
           saved.simulations.map(item => h('option', { value: item.simulationId, key: item.simulationId }, item.scenarioName ?? item.simulationId))),
-        error && h('span', { role: 'alert' }, error));
+        error && h('span', { role: 'alert' }, error),
+        saved.opened && h(MemoryControls, { sessionId, busy, openNextEpisode: () => openNextEpisode(saved.opened.simulationId), unsent: Boolean(command?.body.trim()) }));
+    }
+
+    function MemoryControls({ sessionId, busy, openNextEpisode, unsent }) {
+      const [state, setState] = useState(null);
+      const [open, setOpen] = useState(false);
+      const [selected, setSelected] = useState('');
+      const [dateDraft, setDateDraft] = useState(null);
+      const [notice, setNotice] = useState('');
+      const [action, setAction] = useState('');
+      const operation = useRef(null);
+      useEffect(() => {
+        let mounted = true;
+        async function refresh() {
+          const outcome = await submit(sessionId, { mode: 'memory-status' });
+          if (mounted && outcome.kind === 'success' && outcome.result.episodes) setState(outcome.result);
+        }
+        sceneListeners.set(sessionId, refresh);
+        void refresh();
+        return () => {
+          mounted = false;
+          if (sceneListeners.get(sessionId) === refresh) sceneListeners.delete(sessionId);
+          operation.current?.abort();
+        };
+      }, [sessionId]);
+      if (!state) return null;
+      const current = state.episodes.at(-1);
+      const episode = state.episodes.find(item => item.slot === selected) ?? current;
+      const date = dateDraft ?? episode.date ?? '';
+      const drifted = state.episodes.filter(item => item.status === 'drifted' &&
+        (item.slot === current.slot || (item.date && current.date && item.date < current.date)));
+      const locked = busy || Boolean(action) || state.ended;
+      async function perform(mode, values) {
+        const controller = new AbortController();
+        operation.current = controller;
+        setAction(mode);
+        setNotice('');
+        const outcome = await submit(sessionId, { mode, slot: episode.slot, ...values }, controller.signal);
+        if (controller.signal.aborted) setNotice('Memorization cancelled.');
+        else if (outcome.kind === 'success') {
+          setState(outcome.result);
+          setDateDraft(null);
+          if (mode === 'memory-memorize') setNotice(outcome.result.status === 'published' ? 'Memories saved.' : 'Memories are already current.');
+          if (mode === 'memory-next') await openNext();
+        } else setNotice(outcome.text);
+        operation.current = null;
+        setAction('');
+      }
+      async function openNext() {
+        try { await openNextEpisode(); }
+        catch { setNotice('Episode ended. Open next episode to retry.'); }
+      }
+      return h('div', { style: { flexBasis: '100%' } },
+        h(Button, { size: 'sm', variant: 'outline', onClick: () => setOpen(true) }, 'Episode memory'),
+        drifted.length > 0 && h('span', { role: 'status', style: { marginLeft: 8 } },
+          'Memories are out of date for ' + drifted.map(item => item.label).join(', ') + '.'),
+        h(Modal, { title: 'Episode memory', closeLabel: 'Close episode memory', open,
+          onClose: () => { if (!action) setOpen(false); } },
+          h('div', { style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 } },
+            h('label', null, 'Episode ', h('select', { 'aria-label': 'Memory episode', value: episode.slot,
+              disabled: Boolean(action), onChange: event => { setSelected(event.target.value); setDateDraft(null); } },
+              state.episodes.map(item => h('option', { key: item.slot, value: item.slot }, item.label)))),
+            h('label', null, 'Fictional date ', h('input', { 'aria-label': 'Fictional date', type: 'date',
+              value: date, disabled: locked, onChange: event => setDateDraft(event.target.value) })),
+            h(Button, { size: 'sm', variant: 'outline', disabled: locked || !date || date === episode.date,
+              onClick: () => { void perform('memory-date', { date }); } }, 'Set date')),
+          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 } },
+            h(Button, { variant: 'primary', disabled: locked || !episode.date || !episode.canMemorize,
+              onClick: () => { void perform('memory-memorize', {}); } }, episode.status === 'unmemorized' ? 'Memorize' : 'Memorize again'),
+            action === 'memory-memorize' && h(Button, { variant: 'outline',
+              onClick: () => operation.current?.abort() }, 'Cancel memorization'),
+            h(Button, { variant: 'outline', disabled: locked || unsent || !current.canMemorize,
+              onClick: () => { void perform('memory-next', { label: current.label }); } }, 'End and open next episode'),
+            state.ended && h(Button, { variant: 'outline', onClick: () => { void openNext(); } }, 'Open next episode')),
+          action === 'memory-memorize' && h('p', { role: 'status' }, 'Forming memories…'),
+          notice && h('p', { role: 'status' }, notice),
+          h('div', { style: { maxHeight: 220, overflowY: 'auto', marginTop: 12 } },
+            ...episode.memories.map(character => h('section', { key: character.characterId },
+              h('strong', null, character.characterId),
+              h('ul', null, ...character.memories.map((entry, index) => h('li', { key: index }, entry.gist)),
+                ...character.impressions.map((entry, index) => h('li', { key: 'impression-' + index }, entry.text))))))));
     }
 
     function Turn({ node, sessionId }) {
@@ -227,10 +311,18 @@ window.__ModuleLoader__.load({
         inject: sessionId => ({ focusComposer() {
           const binding = ctx.sessions.binding(sessionId);
           if (binding) ctx.conversation.input.for(binding.ctx).focus();
+        },
+        async openNextEpisode(simulationId) {
+          const workspaceId = ctx.workspaces.list.getSnapshot().items.find(item => item.sessionIds.includes(sessionId))?.workspaceId;
+          const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd;
+          const next = await ctx.sessions.create(workspaceId ? { workspaceId } : { cwd });
+          const result = await submit(next, { mode: 'open-saved', simulationId });
+          if (result.kind !== 'success') throw new Error(result.text);
+          ctx.uiWorkspace.openSession(next);
         } }),
       }, Routing));
     }
 
-    return { inject: ['inputTriggers', 'uiConversation', 'slots', 'sessions', 'conversation'], apply };
+    return { inject: ['inputTriggers', 'uiConversation', 'slots', 'sessions', 'conversation', 'workspaces', 'uiWorkspace'], apply };
   },
 });

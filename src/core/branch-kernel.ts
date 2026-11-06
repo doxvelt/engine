@@ -768,6 +768,7 @@ export function inspectActorContext(
     audience?: string[];
     stageWhispers?: StageWhisperRecord[];
     turns?: TranscriptTurn[];
+    includeLongTermMemories?: boolean;
   },
 ): ActorContext {
   const projection = projectBranch(repository, query);
@@ -814,7 +815,7 @@ export function inspectActorContext(
     beliefs: projection.beliefs,
     accessLinks: projection.accessLinks,
     surfaces: revision.compiled.surfaces,
-    longTermMemories: projection.longTermMemories.filter(
+    longTermMemories: query.includeLongTermMemories === false ? [] : projection.longTermMemories.filter(
       (item) => item.actorId === actor.id,
     ),
     observedEntityIds,

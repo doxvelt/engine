@@ -1,4 +1,4 @@
-import { parseAudienceProposal, prepareRouting, preservedArtifact, projectRoutingContext, routingInput } from "./candidate-routing.ts";
+import { capturedEpisodeRecall, parseAudienceProposal, prepareRouting, preservedArtifact, projectRoutingContext, routingInput, type EpisodeRecall } from "./candidate-routing.ts";
 export { acceptActorTurnDraft } from "./draft-acceptance.ts";
 
 import { createHash } from "node:crypto";
@@ -50,6 +50,7 @@ export type GenerateActorTurnDraftOptions = {
   signal?: AbortSignal;
   /** Trusted repository identity whose frozen input must be repeated. */
   retryDraftId?: string;
+  episodeRecall?: EpisodeRecall;
 };
 
 type DraftLifecycleRepository = SimulationRepository & ActorTurnDraftRepository;
@@ -144,8 +145,9 @@ export function generateActorTurnDraft(
     stageWhispers: whispers,
   });
   const routing = normalized.payload.routing ? prepareRouting(repository, normalized, []) : undefined;
+  const episodeRecall = captured ? capturedEpisodeRecall(captured.context) : options.episodeRecall;
   const routed = routing ? projectRoutingContext(repository, normalized, whispers,
-    routing.preservedText === null && (!captured || (captured.context && typeof captured.context === "object" && "correctionSource" in captured.context)) ? routing.source : null) : null;
+    routing.preservedText === null && (!captured || (captured.context && typeof captured.context === "object" && "correctionSource" in captured.context)) ? routing.source : null, episodeRecall) : null;
   if (routing && routed) routing.availableRecipientIds = routed.availableRecipientIds;
   const portableContext = routed ? routed.context : canonicalDraftContext(context);
   const prompt = routed ? routed.prompt : context!.promptPreview;

@@ -23,11 +23,21 @@ The follow-up kept the stock composer and transcript on DSH Web `0.2.2-rc.1`. Af
 
 **Open saved episode** lists saved Doxvelt simulations and opens the current episode on the saved branch. The test started *The last crossing* through the real Doxvelt local API, wrote one turn to SQLite before launching DSH, then restarted the local API and opened the episode in a fresh DSH profile with an empty transcript. DSH projected the saved row, returned the caret to the composer, and appended two Perform turns to the same Doxvelt branch. The API verified all three turns in order and the same private audience. The picker stays disabled while the composer contains an unsent draft.
 
-The saved-episode path exercises the current open episode on a saved branch. Generate uses the real Doxvelt draft and acceptance flow with a scripted runtime in the browser test. A model response that contradicts a fixed audience leaves the turn uncommitted and the direction editable. Named episode navigation through the DSH sidebar, closed episode selection, live model verification, historical edits on a saved branch, and Reverie recall during play remain open integration work. DSH continues to label the underlying sidebar entry **New Session**.
+The saved-episode path exercises the current open episode on a saved branch. Generate uses the real Doxvelt draft and acceptance flow with a scripted runtime in the browser test. A model response that contradicts a fixed audience leaves the turn uncommitted and the direction editable. Named episode navigation through the DSH sidebar, closed episode selection, live model verification, and historical edits on a saved branch remain open integration work. DSH continues to label the underlying sidebar entry **New Session**.
+
+## Reverie episode memory
+
+With the native executable configured, **Episode memory** opens a DSH dialog for dating, memorizing, and inspecting the selected episode. **End and open next episode** preserves the completed transcript and opens a fresh DSH conversation for the next episode on the same Doxvelt story path. It leaves memory formation as a separate player action.
+
+Doxvelt fingerprints the perceived source revision and keeps each publication bound to the fictional date and earlier publications supplied during reflection. The catalog selects matching versions in fictional order on the current path. A memory-powered turn receives its current episode's perceived transcript and eligible earlier recollections. The independent Reverie engine forms and ranks the memories in its native databases. Doxvelt's local memory catalog records the version and its dependencies.
+
+The browser test uses the pinned DSH Web build, the real Doxvelt API and native Reverie executable, and scripted inference. It exercises cancelling an in-progress reflection and verifies that the provider receives cancellation, the episode remains unmemorized, and an explicit retry publishes inspectable memories. It then opens a later episode, generates a turn using those memories, and checks that the earlier raw dialogue is absent from that prompt. The API tests also verify that a prequel, an excluded character, and a sibling path receive only eligible memories, and that returning to a compatible path restores its earlier publication.
+
+The prototype currently uses calendar dates, local memory storage separate from portable simulation archives, and a single date per episode slot. Reopening and generating from a saved episode uses Doxvelt's real history. Branch selection and historical edit actions on that saved history still need a browser flow.
 
 ## Reproduce
 
-Use Node 24.9 or newer and an installed Chromium browser. Install the pinned test tools into a scratch directory, then run the fixture from the repository. The runner creates an isolated Doxvelt SQLite database and two fresh DSH homes, prints the checks, and saves screenshots and redacted host logs in the run directory.
+Use Node 24.9 or newer and an installed Chromium browser. Install the pinned test tools into a scratch directory, then run the fixture from the repository. The runner creates an isolated Doxvelt SQLite database and two fresh DSH homes, prints the checks, and saves screenshots and redacted host logs in the run directory. Set DOXVELT_REVERIE_EXECUTABLE to the independent native executable to include the memory checks.
 
 ```text
 npm install --prefix <scratch> --ignore-scripts --no-audit --no-fund --save-exact @deepseek-ai/dsh@0.2.2-rc.1 playwright-core@1.65.0

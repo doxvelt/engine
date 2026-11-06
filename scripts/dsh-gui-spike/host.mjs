@@ -29,10 +29,10 @@ export async function apply(ctx) {
       if (!session) return Response.json({ error: 'Open the ferry scene first.' }, { status: 409 });
 
       try {
-        const saved = await savedEpisodeRequest(process.env.DOXVELT_SPIKE_ENGINE, session, command);
+        const saved = await savedEpisodeRequest(process.env.DOXVELT_SPIKE_ENGINE, session, command, request.signal);
         if (saved) return saved;
-      } catch {
-        return Response.json({ error: 'Doxvelt could not open or update the episode. Try again.' }, { status: 502 });
+      } catch (error) {
+        return Response.json({ error: error.status ? error.message : 'Doxvelt could not open or update the episode. Try again.' }, { status: 502 });
       }
 
       const body = typeof command.body === 'string' ? command.body.trim() : '';

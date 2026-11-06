@@ -3,25 +3,32 @@ import { randomUUID } from 'node:crypto';
 export const playedTurn = 'doxvelt/played-turn';
 const openedEpisode = 'doxvelt/episode-opened';
 
-export async function engineRequest(origin, route, body) {
-  const response = await fetch(new URL(route, origin), body === undefined ? undefined : {
-    method: 'POST',
+export async function engineRequest(origin, route, body, signal) {
+  const response = await fetch(new URL(route, origin), body === undefined ? { signal } : {
+    method: 'POST', signal,
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error('Doxvelt request failed (' + response.status + ').');
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    const error = new Error(payload?.error || 'Doxvelt request failed (' + response.status + ').');
+    error.status = response.status;
+    throw error;
+  }
   return response.json();
 }
 
 function episodeState(session) {
   const rows = new Map();
   let opened;
+  let ended = false;
   for (let index = 0; index < session.seq; index++) {
     const event = session.eventAt(index);
     if (event.type === openedEpisode) opened = event.data;
+    if (event.type === "doxvelt/episode-ended") ended = true;
     if (event.type === playedTurn) rows.set(event.data.id, event.data);
   }
-  return { opened, rows };
+  return { opened, rows, ended };
 }
 
 function stageRoute({ simulationId, branchId }) {
@@ -53,7 +60,7 @@ function failure(error, status) {
   return Response.json({ error }, { status });
 }
 
-export async function savedEpisodeRequest(origin, session, command) {
+export async function savedEpisodeRequest(origin, session, command, signal) {
   if (command.mode === 'saved') {
     const { simulations } = await engineRequest(origin, '/simulations');
     return Response.json({ simulations, opened: episodeState(session).opened ?? null });
@@ -74,8 +81,10 @@ export async function savedEpisodeRequest(origin, session, command) {
     return Response.json({ opened: next });
   }
 
-  const { opened } = episodeState(session);
+  const { opened, ended } = episodeState(session);
   if (!opened) return undefined;
+  if (command.mode.startsWith('memory-')) return episodeMemoryRequest(origin, session, opened, ended, command, signal);
+  if (ended) return failure('This episode ended. Open a new DSH session to play the next episode.', 409);
   const generating = command.mode === 'generate';
   if (!generating && command.mode !== 'perform') return failure('Choose Perform or Generate.', 400);
 
@@ -115,4 +124,30 @@ export async function savedEpisodeRequest(origin, session, command) {
     session.append(playedTurn, row);
   }
   return Response.json({ ok: true });
+}
+
+async function episodeMemoryRequest(origin, session, opened, ended, command, signal) {
+  const simulation = '/simulations/' + encodeURIComponent(opened.simulationId);
+  const endpoint = simulation + '/episode-memory';
+  const read = async () => {
+    try { return await engineRequest(origin, endpoint + '?branchId=' + encodeURIComponent(opened.branchId), undefined, signal); }
+    catch (error) { if (error.status === 404) return null; throw error; }
+  };
+  if (command.mode === 'memory-status') return Response.json({ ...await read(), ended });
+  if (ended) return failure('Open the current episode to change its memory or date.', 409);
+  const stage = await engineRequest(origin, stageRoute(opened), undefined, signal);
+  const basis = { branchId: opened.branchId, expectedHead: stage.branch.headCommitId, commandId: randomUUID() };
+  if (command.mode === 'memory-next') {
+    await engineRequest(origin, simulation + '/episodes/request-closure', { ...basis, label: command.label || null }, signal);
+    session.append('doxvelt/episode-ended', { head: stage.branch.headCommitId });
+    return Response.json({ ...await read(), ended: true });
+  }
+  const slot = command.slot;
+  if (command.mode === 'memory-date')
+    return Response.json(await engineRequest(origin, endpoint + '/date', { ...basis, slot, date: command.date }, signal));
+  if (command.mode === 'memory-memorize') {
+    const result = await engineRequest(origin, endpoint + '/memorize', { ...basis, slot }, signal);
+    return Response.json({ ...await read(), status: result.status });
+  }
+  return failure('Unknown episode memory action.', 400);
 }

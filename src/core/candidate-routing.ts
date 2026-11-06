@@ -6,6 +6,18 @@ import { artifactDigest, assertRuntimeText, canonicalDraftContext, sha256, valid
 import { DomainValidationError, type ActorTurnDraftRepository, type GenerateActorTurnDraftCommand, type SimulationRepository } from "./ports.ts";
 import type { ActorTurnDraftArtifact, ActorTurnDraftRecord, DraftRouting, DraftRoutingInput, StageWhisperRecord } from "./types.ts";
 
+export type EpisodeRecall = { publicationId: string; label: string; text: string }[];
+
+export function capturedEpisodeRecall(context: unknown): EpisodeRecall | undefined {
+  if (!context || typeof context !== "object" || !("episodeRecall" in context)) return undefined;
+  const recall = context.episodeRecall;
+  if (!Array.isArray(recall) || recall.some(item => !item || typeof item !== "object" ||
+    typeof item.publicationId !== "string" || typeof item.label !== "string" || typeof item.text !== "string")) {
+    throw new DomainValidationError("Draft memory context is invalid.");
+  }
+  return recall;
+}
+
 export const ROUTING_POLICY = "audience-proposal-v1";
 
 export function finalDraftAudience(draft: ActorTurnDraftRecord): string[] {
@@ -32,6 +44,7 @@ export function projectRoutingContext(
   command: GenerateActorTurnDraftCommand,
   whispers: StageWhisperRecord[],
   source: DraftRouting["source"] = null,
+  episodeRecall?: EpisodeRecall,
 ) {
   const input = command.payload.routing!;
   validateRoutingInput(input);
@@ -41,11 +54,14 @@ export function projectRoutingContext(
   const active = projection.audience.filter(item => item.status === "active").map(item => item.actorId);
   const observed = (input.version === 3 || input.version === 4) ? [] : active.includes(command.payload.actorId) ? active : [];
   const baseContext = inspectActorContext(repository, { ...query, actorId: command.payload.actorId,
-    audience: observed, stageWhispers: (input.version === 2 || input.version === 3 || input.version === 4) ? [] : whispers });
+    audience: observed, stageWhispers: (input.version === 2 || input.version === 3 || input.version === 4) ? [] : whispers,
+    ...(episodeRecall === undefined ? {} : { includeLongTermMemories: false,
+      turns: projection.transcript.filter(turn => turn.episodeId === null && turn.audience.includes(command.payload.actorId)) }),
+  });
   // The legacy projector already supplies received speech, accessible beliefs,
   // retained impressions and long-term memories. V3 also supplies all active
   // episode memories and superseded belief provenance; no retrieval or ranking.
-  const episodeMemories = projection.episodeMemories.filter(item => item.actorId === command.payload.actorId);
+  const episodeMemories = episodeRecall !== undefined ? [] : projection.episodeMemories.filter(item => item.actorId === command.payload.actorId);
   const superseded = baseContext.subjective.beliefResolution.superseded;
   const context = (input.version === 3 || input.version === 4) ? { ...baseContext,
     subjective: { ...baseContext.subjective, episodeMemories },
@@ -105,7 +121,10 @@ export function projectRoutingContext(
     ? observationPrompt.replace("# Private Stage Whispers\nNone.", () => `# Private Stage Whispers\n${input.completeWhisper ? input.completeWhisper : "None."}`)
     : observationPrompt;
   const policy = (input.version === 3 || input.version === 4) ? ACTOR_KNOWLEDGE_POLICY : ROUTING_POLICY;
-  const prompt = `${completePrompt}${sourcePrompt}\n\n# Draft contract (${policy})\n` +
+  const recallPrompt = episodeRecall?.length
+    ? "\n\n# Subjective memories from earlier fictional episodes\nUse these fallible recollections as background. They do not establish canonical fact.\n" + JSON.stringify(episodeRecall)
+    : "";
+  const prompt = `${completePrompt}${recallPrompt}${sourcePrompt}\n\n# Draft contract (${policy})\n` +
     `You are only ${command.payload.actorId}. Private direction is not spoken text or canonical truth.\n` +
     `Available recipient identity references (no additional knowledge): ${JSON.stringify(references)}\n` +
     `Tentative initial recipients: ${JSON.stringify(initialAudience)}. null means no initial selection.\n` +
@@ -115,6 +134,7 @@ export function projectRoutingContext(
     `Return ONLY JSON with exactly two fields: "text" (the performance) and "audience" (an array of available recipient IDs). No actor changes, tools, markdown fences or commentary. Include yourself. Propose recipients from the available identities; never default to everybody.\n`;
   const portable = canonicalDraftContext({ ...context, promptPreview: prompt,
     ...(correctionSource ? { correctionSource } : {}),
+    ...(episodeRecall === undefined ? {} : { episodeRecall }),
     routingDirection: { ...((input.version === 2 || input.version === 3 || input.version === 4)
       ? { version: input.version, completeWhisper: input.completeWhisper, initialAudience, correctedAudience: input.correctedAudience }
       : input), references, observationPolicy: policy } });

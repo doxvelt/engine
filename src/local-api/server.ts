@@ -44,6 +44,7 @@ import {
   writeSourceText,
 } from "../core/source.ts";
 import type { ActorTurnRuntime } from "../agent-runtime/contracts.ts";
+import type { EpisodeMemory } from "../memory/episodes.ts";
 import {
   openBranchStore,
   type SqliteSimulationRepository,
@@ -64,6 +65,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
 export type LocalApiOptions = {
   dbPath?: string;
   actorTurnRuntime?: ActorTurnRuntime;
+  episodeMemory?: EpisodeMemory;
   allowedOrigins?: readonly string[];
 };
 export function createLocalApiServer(options: LocalApiOptions = {}) {
@@ -416,10 +418,17 @@ export async function handleLocalApiRequest(
               .audience.filter((item) => item.status === "active")
               .map((item) => item.actorId)
           : strings(body, "audience");
+      const actorId = required(body, "actorId");
+      const operation = new AbortController();
+      response.once("close", () => operation.abort());
+      const episodeRecall = knowledge && options.episodeMemory
+        ? await options.episodeMemory.recall(store, { ...base, head: base.expectedHead }, actorId,
+          typeof body.completeWhisper === "string" ? body.completeWhisper : "", operation.signal)
+        : undefined;
       const result = await generateActorTurnDraft(store, options.actorTurnRuntime, {
         ...base,
         payload: {
-          actorId: required(body, "actorId"),
+          actorId,
           audience,
           stageWhisperIds: strings(body, "stageWhisperIds"),
           runtimeProfile: { id: "local-character", version: "v1" },
@@ -431,7 +440,7 @@ export async function handleLocalApiRequest(
             preservedText: null, sourceDraftId: null } } : {}),
           skillDigests: [],
         },
-      });
+      }, { signal: operation.signal, ...(episodeRecall === undefined ? {} : { episodeRecall }) });
       return send(response, 200, { ...result, draft: stageDraft(result.draft) });
     }
     if (method === "GET" && parts[2] === "drafts" && parts.length === 3) {
@@ -663,6 +672,21 @@ export async function handleLocalApiRequest(
           name: optional(body, "name") || null,
         }),
       );
+    }
+    if (parts[2] === "episode-memory" && options.episodeMemory) {
+      const memory = options.episodeMemory;
+      if (method === "GET" && parts.length === 3)
+        return send(response, 200, { episodes: memory.inspect(store, query(url, simulation)) });
+      if (method === "POST" && (parts[3] === "date" || parts[3] === "memorize") && parts.length === 4) {
+        const body = await bodyOf(request);
+        const base = envelope(body, ownerScope, simulationId);
+        assertExpectedBranchHead(store, base);
+        const slot = required(body, "slot");
+        if (parts[3] === "date") return send(response, 200, { episodes: memory.setDate(store, base, slot, required(body, "date")) });
+        const operation = new AbortController();
+        response.once("close", () => operation.abort());
+        return send(response, 200, await memory.memorize(store, base, slot, operation.signal));
+      }
     }
     if (method === "POST" && parts[2] === "episodes" && parts[3] === "close") {
       const body = await bodyOf(request);

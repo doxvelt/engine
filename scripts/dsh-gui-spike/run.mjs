@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createLocalApiServer } from '../../src/local-api/server.ts';
 import { engineRequest } from './saved-episode.mjs';
+import { EpisodeMemory } from '../../src/memory/episodes.ts';
 
 const [dependencies, executablePath] = process.argv.slice(2);
 if (!dependencies || !executablePath) {
@@ -27,16 +29,38 @@ await writeFile(overlay, JSON.stringify([{ insert: [{ id: 'doxvelt-fixture', nam
 const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
   /^(path|systemroot|comspec|pathext|temp|tmp|windir|localappdata|userprofile)$/i.test(key)));
 const dbPath = path.join(root, 'doxvelt.sqlite');
+const reverieExecutable = process.env.DOXVELT_REVERIE_EXECUTABLE;
 let engine;
+let memory;
+let reflecting = false;
+let holdReflection = false;
+let reflectionCancelled = false;
 let host;
 
 async function startEngine() {
-  engine = createLocalApiServer({ dbPath, actorTurnRuntime: {
+  if (reverieExecutable) memory = new EpisodeMemory({
+    directory: path.join(root, 'memory'), executable: reverieExecutable, modelKey: 'browser-fixture',
+    async reflect(request, signal) {
+      if (holdReflection) {
+        reflecting = true;
+        try { await delay(10_000, undefined, { signal }); }
+        catch (error) { reflectionCancelled = signal.aborted; throw error; }
+      }
+      assert.match(JSON.stringify(request.input), /sealed letter/);
+      return JSON.stringify({ memories: [{ gist: 'I still remember the sealed letter agreement.',
+        feeling: 'Trusted', detail: '', salience: 0.9, confidence: 0.8, cues: ['sealed letter'], sourceMessageIds: ['m1'] }], impressions: [] });
+    },
+  });
+  engine = createLocalApiServer({ dbPath, ...(memory ? { episodeMemory: memory } : {}), actorTurnRuntime: {
     identity: { id: 'dsh-browser-fixture', version: '1' },
     async *runActorTurn(request) {
       const direction = request.context.routingDirection;
       assert.equal(request.actorId, 'nell');
       assert.match(request.prompt, /sealed letter/);
+      if (direction.completeWhisper === 'Remember the sealed letter.') {
+        assert.match(request.prompt, /I still remember the sealed letter agreement/);
+        assert.doesNotMatch(request.prompt, /I left the sealed letter by the mooring post/);
+      }
       const wrongAudience = direction.completeWhisper === 'Route to the wrong character, Mara.';
       if (wrongAudience) assert.ok(direction.references.some(reference => reference.id === 'mara'));
       const audience = wrongAudience ? ['nell', 'mara'] : ['nell', 'corin'];
@@ -54,6 +78,8 @@ async function closeEngine() {
   engine.close();
   await stopped;
   engine = undefined;
+  memory?.close();
+  memory = undefined;
 }
 
 function startHost(name, engineUrl) {
@@ -148,16 +174,19 @@ try {
   assert.equal(await audience.inputValue(), 'Nell');
   await editor.press('Enter');
   await rows.nth(0).waitFor();
+  await waitForDraft(page, '/perform @Corin to @Nell |');
   assert.equal((await readFixture()).turns[0].audience, 'Nell');
   results.push('Keyboard completion, bidirectional routing, and manual Enter');
 
   await editor.fill('/generate @Nell to actor | PRIVATE: Be discreet.');
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await rows.nth(1).waitFor();
+  await waitForDraft(page, '/generate @Nell to actor |');
   assert.match(await rows.nth(1).innerText(), /Nell → Corin/);
   await editor.fill('/generate @Mara to @Nell | Watch the weather.');
   await editor.press('Enter');
   await rows.nth(2).waitFor();
+  await waitForDraft(page, '/generate @Mara to @Nell |');
   const played = await readFixture();
   assert.deepEqual(played.calls.map(call => call.configuration), ['fixture-a', 'fixture-b']);
   assert.deepEqual(played.calls.map(call => call.perceived), [['1'], []]);
@@ -272,6 +301,38 @@ try {
   assert.deepEqual(committed.audience.sort(), ['corin', 'nell']);
   assert.equal(committed.text, 'I have the lantern.');
   results.push('DSH generates and commits a real Doxvelt turn, and rejects a conflicting audience');
+  if (memory) {
+    await page.getByText('Episode memory', { exact: true }).click();
+    await page.getByLabel('Fictional date').fill('2000-03-01');
+    await page.getByRole('button', { name: 'Set date', exact: true }).click();
+    holdReflection = true;
+    await page.getByRole('button', { name: 'Memorize', exact: true }).click();
+    for (let i = 0; i < 60 && !reflecting; i++) await delay(50);
+    assert.ok(reflecting, 'The cancellation test reached the reflection provider.');
+    await page.getByRole('button', { name: 'Cancel memorization', exact: true }).click();
+    await page.getByText('Memorization cancelled.', { exact: true }).waitFor();
+    for (let i = 0; i < 60 && !reflectionCancelled; i++) await delay(50);
+    assert.ok(reflectionCancelled, 'The provider received cancellation.');
+    assert.equal((await engineRequest(engineUrl, savedRoute + '/episode-memory')).episodes[0].status, 'unmemorized');
+    holdReflection = false;
+    await page.getByRole('button', { name: 'Memorize', exact: true }).click();
+    await page.getByText('Memories saved.', { exact: true }).waitFor();
+    await page.getByText('I still remember the sealed letter agreement.', { exact: true }).first().waitFor();
+    await page.screenshot({ path: path.join(root, 'episode-memory.png'), animations: 'disabled' });
+    await waitForDraft(page, '/generate @Nell to @Corin |');
+    await page.getByRole('button', { name: 'End and open next episode', exact: true }).click();
+    await page.locator('[data-doxvelt-turn]').first().waitFor({ state: 'hidden' });
+    await page.getByText('Episode memory', { exact: true }).click();
+    await page.getByLabel('Fictional date').fill('2001-03-01');
+    await page.getByRole('button', { name: 'Set date', exact: true }).click();
+    await page.getByRole('button', { name: 'Close episode memory' }).click();
+    const sequelEditor = page.locator('[contenteditable="true"]').first();
+    await sequelEditor.fill('/generate @Nell to @Corin | Remember the sealed letter.');
+    await sequelEditor.press('Enter');
+    await page.locator('[data-doxvelt-turn]').getByText('I have the lantern.', { exact: true }).waitFor();
+    assert.equal(await page.locator('[data-doxvelt-turn]').count(), 1);
+    results.push('Stock DSH forms inspectable native memories and uses them in a later fictional episode');
+  }
   console.log(JSON.stringify({ results, evidence: root }, null, 2));
 } catch (error) {
   if (page) {
