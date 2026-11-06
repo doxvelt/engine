@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { playedTurn, savedEpisodeRequest } from './saved-episode.mjs';
 
 export const inject = ['connection', 'sessions', 'workspaceRegistry'];
 
@@ -9,7 +10,6 @@ const actors = {
   Nell: { configuration: 'fixture-a', text: 'I will keep the letter safe.', audience: 'Corin' },
   Mara: { configuration: 'fixture-b', text: 'The wind is picking up.', audience: 'Nell' },
 };
-const eventType = 'doxvelt/played-turn';
 
 export async function apply(ctx) {
   const workspace = join(process.env.DOXVELT_SPIKE_ROOT, 'ferry-stage');
@@ -28,6 +28,13 @@ export async function apply(ctx) {
       const session = ctx.sessions.get(command.sessionId);
       if (!session) return Response.json({ error: 'Open the ferry scene first.' }, { status: 409 });
 
+      try {
+        const saved = await savedEpisodeRequest(process.env.DOXVELT_SPIKE_ENGINE, session, command);
+        if (saved) return saved;
+      } catch {
+        return Response.json({ error: 'Doxvelt could not open or update the episode. Try again.' }, { status: 502 });
+      }
+
       const body = typeof command.body === 'string' ? command.body.trim() : '';
       if (command.mode === 'inspect') {
         const whisper = fixture.whispers[command.id];
@@ -39,7 +46,7 @@ export async function apply(ctx) {
         const turn = { ...fixture.turns[index], body };
         fixture.turns[index] = turn;
         writeFileSync(source, JSON.stringify(fixture, null, 2));
-        session.append(eventType, turn);
+        session.append(playedTurn, turn);
         return Response.json({ ok: true });
       }
 
@@ -77,7 +84,7 @@ export async function apply(ctx) {
       if (actor) fixture.whispers[turn.id] = body;
       writeFileSync(source, JSON.stringify(fixture, null, 2));
       // DSH gets a display receipt. The fixture file owns the played state.
-      session.append(eventType, turn);
+      session.append(playedTurn, turn);
       return Response.json({ ok: true });
     },
   });

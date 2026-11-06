@@ -11,15 +11,23 @@ Can an out-of-tree Doxvelt plugin use the stock DeepSeek Harness (DSH) editor an
 - A body correction updated the first row at its original position, preserved subsequent turns, and kept the unsent continuation. Cancelling an edit left the played rows alone.
 - A scripted failure kept the composer input available. Retry added one turn, and browser reload restored the four committed rows without duplicates.
 
-**Submission limit.** The stock editor lets a plugin claim a leading slash command. The fixture uses `/perform` and `/generate`, and the controls insert that notation on behalf of the player. Plain prose follows DSH's own prompt path. Test whether keeping the play mode selected and supplying its command automatically is a comfortable fit for ordinary play before considering a composer replacement. [Pinned composer submission logic](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.1/packages/client/ui-conversation/src/client/input/machine.ts)
+**Submission limit.** The stock editor lets a plugin claim a leading slash command. The fixture uses `/perform` and `/generate`, and the controls insert that notation on behalf of the player. Plain prose follows DSH's own prompt path. The follow-up below tests supplying the command automatically between turns. [Pinned composer submission logic](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.1/packages/client/ui-conversation/src/client/input/machine.ts)
 
-**History limit.** The fixture file owns the played state. DSH stores display receipts with stable row IDs and replays them on browser reload. Its sidebar still labels the scene **New Session** because the fixture emits no DSH agent turns. The next slice needs a way to discover and reopen a Doxvelt episode, and a check that it can rebuild the projection from Doxvelt after a host restart. Stock sign-in and coding controls also remain visible in this Web profile. [Pinned session list logic](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.1/packages/api/session-controller/src/list.ts)
+**History limit.** The fixture file owns the played state. DSH stores display receipts with stable row IDs and replays them on browser reload. Its sidebar still labels the scene **New Session** because the fixture emits no DSH agent turns. The follow-up below adds a saved episode picker and rebuilds the transcript from Doxvelt after the local API restarts. Stock sign-in and coding controls also remain visible in this Web profile. [Pinned session list logic](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.1/packages/api/session-controller/src/list.ts)
 
-The fixture exercised GUI behavior with scripted generation and history. Live Doxvelt storage, alternate continuations, model providers, and memory require separate integration checks.
+The initial fixture exercised GUI behavior with scripted generation and history. The follow-up below connects saved episodes to Doxvelt storage.
+
+## Sticky routing and saved episodes
+
+The follow-up kept the stock composer and transcript on DSH Web `0.2.2-rc.1`. After a successful submission, the plugin restores the selected action, character, and audience as a routing prefix. The stock editor accepts typing after that prefix without a click or reselecting a control. The browser run checked consecutive scripted Generate turns and consecutive Perform turns, using both Enter and Send. The prefix stays visible. The stock composer still routes a draft with the prefix removed through ordinary DSH prompting.
+
+**Open saved episode** lists saved Doxvelt simulations and opens the current episode on the saved branch. The test started *The last crossing* through the real Doxvelt local API, wrote one turn to SQLite before launching DSH, then restarted the local API and opened the episode in a fresh DSH profile with an empty transcript. DSH projected the saved row, returned the caret to the composer, and appended two Perform turns to the same Doxvelt branch. The API verified all three turns in order and the same private audience. The picker stays disabled while the composer contains an unsent draft.
+
+The saved-episode path exercises the current open episode on a saved branch and supports manual continuation. Scripted Generate and the historical edit fixture remain separate checks. Named episode navigation through the DSH sidebar, closed episode selection, live generation on a saved branch, and Reverie memory remain open integration work. DSH continues to label the underlying sidebar entry **New Session**.
 
 ## Reproduce
 
-Use Node 24.9 or newer and an installed Chromium browser. Install the pinned test tools into a scratch directory, then run the fixture from the repository. The runner creates a fresh DSH home and workspace, prints the checks, and saves a screenshot and redacted host log in the run directory.
+Use Node 24.9 or newer and an installed Chromium browser. Install the pinned test tools into a scratch directory, then run the fixture from the repository. The runner creates an isolated Doxvelt SQLite database and two fresh DSH homes, prints the checks, and saves screenshots and redacted host logs in the run directory.
 
 ```text
 npm install --prefix <scratch> --ignore-scripts --no-audit --no-fund --save-exact @deepseek-ai/dsh@0.2.2-rc.1 playwright-core@1.65.0

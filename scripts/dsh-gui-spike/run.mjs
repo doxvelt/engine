@@ -4,6 +4,8 @@ import { once } from 'node:events';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createLocalApiServer } from '../../src/local-api/server.ts';
+import { engineRequest } from './saved-episode.mjs';
 
 const [dependencies, executablePath] = process.argv.slice(2);
 if (!dependencies || !executablePath) {
@@ -24,25 +26,51 @@ await writeFile(overlay, JSON.stringify([{ insert: [{ id: 'doxvelt-fixture', nam
 
 const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
   /^(path|systemroot|comspec|pathext|temp|tmp|windir|localappdata|userprofile)$/i.test(key)));
-const host = spawn(process.execPath, [cli, 'web', '--patch', overlay, '--no-open', '--port', '0'], {
-  cwd: workspace,
-  windowsHide: true,
-  env: { ...inherited, DSH_HOME: path.join(root, 'harness-home'), DOXVELT_SPIKE_ROOT: root },
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
-const hostDone = once(host, 'close');
-let log = '';
-const launch = new Promise((resolve, reject) => {
-  const timer = setTimeout(() => reject(new Error('DSH startup timed out')), 30_000);
-  host.on('error', reject);
-  host.on('close', code => { clearTimeout(timer); reject(new Error('DSH exited with code ' + code)); });
-  host.stdout.on('data', bytes => {
-    log += bytes;
-    const url = /dsh web:\s+(http:\/\/127\.0\.0\.1:\d+\/[^\s]+)/.exec(log)?.[1];
-    if (url) { clearTimeout(timer); resolve(url); }
+const dbPath = path.join(root, 'doxvelt.sqlite');
+let engine;
+let host;
+
+async function startEngine() {
+  engine = createLocalApiServer({ dbPath });
+  engine.listen(0, '127.0.0.1');
+  await once(engine, 'listening');
+  return 'http://127.0.0.1:' + engine.address().port;
+}
+
+async function closeEngine() {
+  if (!engine) return;
+  const stopped = once(engine, 'close');
+  engine.close();
+  await stopped;
+  engine = undefined;
+}
+
+function startHost(name, engineUrl) {
+  const child = spawn(process.execPath, [cli, 'web', '--patch', overlay, '--no-open', '--port', '0'], {
+    cwd: workspace,
+    windowsHide: true,
+    env: { ...inherited, DSH_HOME: path.join(root, name), DOXVELT_SPIKE_ROOT: root, DOXVELT_SPIKE_ENGINE: engineUrl },
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
-  host.stderr.on('data', bytes => { log += bytes; });
-});
+  const done = once(child, 'close');
+  let log = '';
+  const url = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('DSH startup timed out')), 30_000);
+    child.on('error', reject);
+    child.on('close', code => { clearTimeout(timer); reject(new Error('DSH exited with code ' + code)); });
+    child.stdout.on('data', bytes => {
+      log += bytes;
+      const launchUrl = /dsh web:\s+(http:\/\/127\.0\.0\.1:\d+\/[^\s]+)/.exec(log)?.[1];
+      if (launchUrl) { clearTimeout(timer); resolve(launchUrl); }
+    });
+    child.stderr.on('data', bytes => { log += bytes; });
+  });
+  return { url, async close() {
+    if (child.exitCode === null && !child.killed) child.kill();
+    await done;
+    await writeFile(path.join(root, name + '.log'), log.replace(/http:\/\/127\.0\.0\.1:\d+\/[^\s]+/g, '[local launch link]'));
+  } };
+}
 
 let browser;
 let page;
@@ -50,22 +78,44 @@ const pageErrors = [];
 const results = [];
 const readFixture = async () => JSON.parse(await readFile(fixture, 'utf8'));
 
-try {
-  const url = await launch;
-  browser = await chromium.launch({ executablePath, headless: true, chromiumSandbox: true });
-  page = await browser.newPage({ viewport: { width: 1280, height: 850 }, locale: 'en-US' });
-  page.setDefaultTimeout(12_000);
-  page.on('pageerror', error => pageErrors.push(String(error)));
-  await page.goto(url);
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+async function closeSignIn(page) {
   const signIn = page.getByRole('dialog', { name: 'Get started' });
-  const closeSignIn = async () => {
-    const close = signIn.getByRole('button', { name: 'Close', exact: true });
-    try { await close.click({ timeout: 3_000 }); }
-    catch (error) { if (error.name !== 'TimeoutError' || await signIn.isVisible()) throw error; }
-    await signIn.waitFor({ state: 'hidden' });
-  };
-  await closeSignIn();
+  const close = signIn.getByRole('button', { name: 'Close', exact: true });
+  try { await close.click({ timeout: 3_000 }); }
+  catch (error) { if (error.name !== 'TimeoutError' || await signIn.isVisible()) throw error; }
+  await signIn.waitFor({ state: 'hidden' });
+}
+
+async function openPage(url) {
+  const tab = await browser.newPage({ viewport: { width: 1280, height: 850 }, locale: 'en-US' });
+  tab.setDefaultTimeout(12_000);
+  tab.on('pageerror', error => pageErrors.push(String(error)));
+  await tab.goto(url);
+  await tab.getByRole('button', { name: 'Continue', exact: true }).click();
+  await closeSignIn(tab);
+  return tab;
+}
+
+async function waitForDraft(page, text) {
+  await page.waitForFunction(expected =>
+    document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === expected, text);
+}
+
+try {
+  let engineUrl = await startEngine();
+  const saved = await engineRequest(engineUrl, '/examples/last-crossing/play', {});
+  const savedRoute = '/simulations/' + saved.simulationId;
+  const initial = await engineRequest(engineUrl, savedRoute + '/stage');
+  const savedLine = 'I left the sealed letter by the mooring post.';
+  await engineRequest(engineUrl, savedRoute + '/turns', {
+    branchId: saved.branchId, expectedHead: initial.branch.headCommitId, commandId: 'before-dsh',
+    actorId: 'corin', audience: ['nell'], manualText: savedLine, stageWhisperIds: [],
+    knowledgePolicy: 'actor-knowledge-v1',
+  });
+  host = startHost('harness-home', engineUrl);
+  const url = await host.url;
+  browser = await chromium.launch({ executablePath, headless: true, chromiumSandbox: true });
+  page = await openPage(url);
   const editor = page.locator('[contenteditable="true"]').first();
   await editor.waitFor();
   const rows = page.locator('[data-doxvelt-turn]');
@@ -128,12 +178,75 @@ try {
   const before = await rows.allInnerTexts();
   await page.reload();
   await rows.nth(3).waitFor();
-  await closeSignIn();
+  await closeSignIn(page);
   assert.deepEqual(await rows.allInnerTexts(), before);
   assert.deepEqual(pageErrors, []);
   results.push('Generation failure preserves the input, retry commits once, reload restores four rows');
   await editor.fill('/generate @Mara to @Nell | Check the steering rope.');
-  await page.screenshot({ path: path.join(root, 'stage.png'), animations: 'disabled' });
+  await editor.press('Enter');
+  await rows.nth(4).waitFor();
+  await waitForDraft(page, '/generate @Mara to @Nell |');
+  assert.equal(await page.getByLabel('Action', { exact: true }).inputValue(), 'generate');
+  assert.equal(await page.getByLabel('Character', { exact: true }).inputValue(), 'Mara');
+  assert.equal(await audience.inputValue(), 'Nell');
+  assert.equal(await editor.evaluate(element => element === document.activeElement), true);
+  await page.keyboard.insertText('Try the spare rope.');
+  assert.match(await editor.innerText(), /to @Nell \|\s+Try the spare rope\./);
+  await page.keyboard.press('Enter');
+  await rows.nth(5).waitFor();
+  assert.deepEqual((await readFixture()).calls.at(-1), {
+    configuration: 'fixture-b', whisper: 'Try the spare rope.', perceived: ['3', '5'],
+  });
+  await waitForDraft(page, '/generate @Mara to @Nell |');
+  await page.screenshot({ path: path.join(root, 'sticky-mode.png'), animations: 'disabled' });
+  results.push('The next generated turn accepts typing and Enter without reselecting the mode, character, or audience');
+
+  await page.close();
+  await host.close();
+  host = undefined;
+  await closeEngine();
+  engineUrl = await startEngine();
+  host = startHost('fresh-harness-home', engineUrl);
+  page = await openPage(await host.url);
+  const restoredRows = page.locator('[data-doxvelt-turn]');
+  const savedPicker = page.getByLabel('Saved episode', { exact: true });
+  assert.equal(await restoredRows.count(), 0);
+  const restoredEditor = page.locator('[contenteditable="true"]').first();
+  await restoredEditor.fill('/perform @Corin to @Nell | Unsent saved-episode draft.');
+  assert.equal(await savedPicker.isDisabled(), true);
+  await restoredEditor.fill('/perform @Corin to @Nell | ');
+  await savedPicker.selectOption(saved.simulationId);
+  await restoredRows.getByText(savedLine).waitFor();
+  assert.equal(await restoredRows.count(), 1);
+  assert.equal(await savedPicker.locator('option:checked').textContent(), 'The last crossing');
+  await waitForDraft(page, '/perform @Corin to @Nell |');
+
+  await page.waitForFunction(() => {
+    const selection = document.getSelection();
+    const editor = document.activeElement;
+    if (!editor?.matches('[contenteditable="true"]') || !selection?.isCollapsed ||
+        !editor.contains(selection.anchorNode)) return false;
+    const tail = selection.getRangeAt(0).cloneRange();
+    tail.setEnd(editor, editor.childNodes.length);
+    return tail.toString() === '';
+  });
+  await page.keyboard.insertText('I will watch the ferry rope.');
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  await restoredRows.nth(1).waitFor();
+  await waitForDraft(page, '/perform @Corin to @Nell |');
+  assert.equal(await restoredEditor.evaluate(element => element === document.activeElement), true);
+  await page.keyboard.insertText('Nell, bring the lantern.');
+  await page.keyboard.press('Enter');
+  await restoredRows.nth(2).waitFor();
+  const durable = await engineRequest(engineUrl, savedRoute + '/stage');
+  assert.deepEqual(durable.transcript.map(turn => turn.text), [
+    savedLine, 'I will watch the ferry rope.', 'Nell, bring the lantern.',
+  ]);
+  assert.ok(durable.transcript.every(turn => turn.actorId === 'corin' && turn.audience.includes('nell') && !turn.audience.includes('mara')));
+  assert.deepEqual(pageErrors, []);
+  await waitForDraft(page, '/perform @Corin to @Nell |');
+  await page.screenshot({ path: path.join(root, 'saved-episode.png'), animations: 'disabled' });
+  results.push('A fresh DSH profile reopens the SQLite episode after the local API restarts and appends two manual turns');
   console.log(JSON.stringify({ results, evidence: root }, null, 2));
 } catch (error) {
   if (page) {
@@ -145,7 +258,6 @@ try {
   throw error;
 } finally {
   if (browser) await browser.close();
-  if (host.exitCode === null && !host.killed) host.kill();
-  await hostDone;
-  await writeFile(path.join(root, 'host.log'), log.replace(/http:\/\/127\.0\.0\.1:\d+\/[^\s]+/g, '[local launch link]'));
+  if (host) await host.close();
+  await closeEngine();
 }

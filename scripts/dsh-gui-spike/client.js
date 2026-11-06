@@ -1,10 +1,12 @@
 window.__ModuleLoader__.load({
   id: '@doxvelt/dsh-gui-spike',
   factory(require) {
-    const { createElement: h, useState } = require('react');
+    const { createElement: h, useEffect, useState } = require('react');
     const cast = ['Corin', 'Nell', 'Mara'];
     const modes = ['perform', 'generate'];
     const kind = 'doxvelt-performance';
+    const defaultRoute = { mode: 'perform', character: 'Corin', audience: 'Nell' };
+    const routes = new Map();
 
     async function submit(sessionId, command) {
       try {
@@ -46,27 +48,94 @@ window.__ModuleLoader__.load({
       };
     }
 
-    function Routing({ useInput, inputActions }) {
+    function formatDraft({ mode, character, audience, body = '' }) {
+      const recipients = audience === 'actor' ? 'actor' : '@' + audience;
+      return '/' + mode + ' @' + character + ' to ' + recipients + ' | ' + body;
+    }
+
+    function Routing({ sessionId, useSession, useInput, inputActions, focusComposer }) {
       const draft = useInput(state => state.draft);
       const phase = useInput(state => state.phase);
+      const openState = useSession(state => state.openState);
       const command = parseDraft(draft);
       const busy = phase === 'submitting' || phase === 'sending' || phase === 'adjudicating';
+      const [saved, setSaved] = useState({ simulations: [], opened: null });
+      const [opening, setOpening] = useState(false);
+      const [error, setError] = useState('');
+
+      useEffect(() => {
+        if (openState !== 'open') return;
+        let current = true;
+        void submit(sessionId, { mode: 'saved' }).then(outcome => {
+          if (current && outcome.kind === 'success') setSaved(outcome.result);
+        });
+        return () => { current = false; };
+      }, [openState, sessionId]);
+
+      useEffect(() => {
+        if (command?.character && command.audience) {
+          const { mode, character, audience } = command;
+          routes.set(sessionId, { mode, character, audience });
+        } else if (!draft && !busy && openState === 'open') {
+          // Let the stock composer restore focus after its submit transaction first.
+          const selection = inputActions.captureInsertion();
+          const frame = requestAnimationFrame(() => {
+            inputActions.insertText(formatDraft(routes.get(sessionId) ?? defaultRoute), selection);
+          });
+          return () => cancelAnimationFrame(frame);
+        }
+      }, [draft, busy, openState, sessionId, inputActions]);
+
+      useEffect(() => {
+        if (!saved.opened || !command || command.body.trim()) return;
+        // Opening history can remount the stock editor. Place its caret after the route in the new view.
+        const span = { ...inputActions.captureInsertion(), start: 0, end: draft.length };
+        const next = formatDraft(command.mode === 'perform' ? command : defaultRoute);
+        const frame = requestAnimationFrame(() => {
+          if (inputActions.insertText(next, span) && document.activeElement === document.body) focusComposer();
+        });
+        return () => cancelAnimationFrame(frame);
+      }, [saved.opened, sessionId, inputActions]);
+
+      async function openSaved(simulationId) {
+        setOpening(true);
+        setError('');
+        const outcome = await submit(sessionId, { mode: 'open-saved', simulationId });
+        if (outcome.kind === 'success') setSaved(previous => ({ ...previous, opened: outcome.result.opened }));
+        else setError(outcome.text);
+        setOpening(false);
+      }
+
       function update(change) {
-        const values = { mode: 'perform', character: 'Corin', audience: 'Nell', body: draft, ...command, ...change };
+        const values = { ...defaultRoute, body: draft, ...command, ...change };
+        if (values.mode === 'generate' && values.character === 'Corin') values.character = 'Nell';
         if (values.mode === 'perform' && values.audience === 'actor') values.audience = 'Nell';
-        const audience = values.audience === 'actor' ? 'actor' : '@' + values.audience;
-        inputActions.setDraft('/' + values.mode + ' @' + values.character + ' to ' + audience + ' | ' + values.body);
+        if (values.character === values.audience) {
+          values.audience = cast.find(character => character !== values.character);
+        }
+        inputActions.setDraft(formatDraft(values));
       }
       function select(label, value, options, field) {
         return h('label', { style: { display: 'inline-flex', gap: 4, alignItems: 'center' } }, label, ' ',
-          h('select', { 'aria-label': label, value: value ?? '', disabled: busy, onChange: event => update({ [field]: event.target.value }) },
+          h('select', { 'aria-label': label, value: value ?? '', disabled: busy || opening || (field === 'mode' && saved.opened && value === 'perform'),
+            onChange: event => update({ [field]: event.target.value }) },
             h('option', { value: '', disabled: true }, 'Choose'),
             options.map(option => h('option', { value: option, key: option }, option === 'actor' ? 'Actor chooses' : option))));
       }
+
       return h('div', { 'aria-label': 'Doxvelt routing', style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
-        select('Action', command?.mode, modes, 'mode'),
-        select('Character', command?.character, cast, 'character'),
-        select('Audience', command?.audience, [...cast, 'actor'], 'audience'));
+        select('Action', command?.mode, saved.opened ? ['perform'] : modes, 'mode'),
+        select('Character', command?.character, command?.mode === 'generate' ? cast.slice(1) : cast, 'character'),
+        select('Audience', command?.audience, command?.mode === 'generate' ? [...cast, 'actor'] : cast, 'audience'),
+        h('select', {
+          'aria-label': 'Saved episode',
+          value: saved.opened?.simulationId ?? '',
+          disabled: busy || opening || Boolean(saved.opened) || Boolean((command?.body ?? draft).trim()),
+          onChange: event => { void openSaved(event.target.value); },
+        },
+          h('option', { value: '', disabled: true }, opening ? 'Opening episode…' : 'Open saved episode'),
+          saved.simulations.map(item => h('option', { value: item.simulationId, key: item.simulationId }, item.scenarioName ?? item.simulationId))),
+        error && h('span', { role: 'alert' }, error));
     }
 
     function Turn({ node, sessionId }) {
@@ -99,7 +168,7 @@ window.__ModuleLoader__.load({
               turn.performer !== 'player' && h('button', { type: 'button', onClick: showWhisper }, 'Show stage whisper'),
               whisper !== null && h('p', null, whisper),
               error && h('p', { role: 'alert' }, error))
-          : h('p', null, turn.body, ' ', h('button', {
+          : h('p', null, turn.body, ' ', !turn.saved && h('button', {
               type: 'button',
               'aria-label': 'Edit turn ' + turn.id,
               onClick: () => { setBody(turn.body); setError(''); setWhisper(null); setEditing(true); },
@@ -155,9 +224,13 @@ window.__ModuleLoader__.load({
       ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({ name: 'conversation.chat.node', key: kind }, Turn));
       ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
         name: 'conversation.input.left', id: 'doxvelt-routing', order: -10,
+        inject: sessionId => ({ focusComposer() {
+          const binding = ctx.sessions.binding(sessionId);
+          if (binding) ctx.conversation.input.for(binding.ctx).focus();
+        } }),
       }, Routing));
     }
 
-    return { inject: ['inputTriggers', 'uiConversation', 'slots'], apply };
+    return { inject: ['inputTriggers', 'uiConversation', 'slots', 'sessions', 'conversation'], apply };
   },
 });
