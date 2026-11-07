@@ -76,8 +76,8 @@ checks that retry generates it once on the existing edited path.
 ## Play with your models
 
 Install the Doxvelt dependencies with `bun install --frozen-lockfile`. Install the
-pinned DSH build from the command below and build or obtain a native Reverie
-executable that supports protocol 1. Save a model configuration outside version
+pinned DSH build from the command below and build or obtain Reverie 0.2.0,
+which supports protocol 1. Save a model configuration outside version
 control.
 
 ```json
@@ -102,7 +102,9 @@ control.
 
 Use the actor IDs in the story and the model IDs advertised by your endpoints.
 The launcher uses OpenAI-compatible chat completions. Actor endpoints must
-support strict JSON-schema output (`response_format: json_schema`). Set any named credential
+support tool calls with JSON-schema arguments. DSH's model service handles these
+calls; the result-reporting declaration grants no executable capability.
+Reflection must return the requested structured JSON. Set any named credential
 environment variables before starting. An optional `defaultActor` supplies
 generation for characters without a specific route and serves as the default
 reflection model when you omit `reflection`. You can perform as any character.
