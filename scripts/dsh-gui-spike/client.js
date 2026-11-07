@@ -106,7 +106,7 @@ window.__ModuleLoader__.load({
       return values;
     }
 
-    function Routing({ sessionId, useSession, useInput, inputActions, focusComposer, openEpisodeSession }) {
+    function Routing({ sessionId, useSession, useInput, inputActions, getInputSnapshot, focusComposer, openEpisodeSession }) {
       const draft = useInput(state => state.draft);
       const phase = useInput(state => state.phase);
       const openState = useSession(state => state.openState);
@@ -116,6 +116,29 @@ window.__ModuleLoader__.load({
       const [saved, setSaved] = useState({ simulations: [], opened: null, branches: [], episodes: [] });
       const [opening, setOpening] = useState(false);
       const [error, setError] = useState('');
+      const restorationFrame = useRef(null);
+
+      function restoreDraft(route, span) {
+        // Lexical can accept two inserts before publishing either revision.
+        // Coalesce route/caret restoration into one write, with carried prose first.
+        if (restorationFrame.current !== null) cancelAnimationFrame(restorationFrame.current);
+        const frame = requestAnimationFrame(() => {
+          restorationFrame.current = null;
+          const latest = getInputSnapshot();
+          if (!latest || latest.draft !== draft || ['submitting', 'sending', 'adjudicating'].includes(latest.phase)) return;
+          const carried = carryDrafts.get(sessionId);
+          const next = carried ?? formatDraft(route);
+          if (inputActions.insertText(next, span)) {
+            if (carried) carryDrafts.delete(sessionId);
+            if (document.activeElement === document.body) focusComposer();
+          }
+        });
+        restorationFrame.current = frame;
+        return () => {
+          cancelAnimationFrame(frame);
+          if (restorationFrame.current === frame) restorationFrame.current = null;
+        };
+      }
 
       useEffect(() => {
         if (openState !== 'open') return;
@@ -133,14 +156,8 @@ window.__ModuleLoader__.load({
         } else if (!draft && !busy && openState === 'open') {
           // Let the stock composer restore focus after its submit transaction first.
           const selection = inputActions.captureInsertion();
-          const frame = requestAnimationFrame(() => {
-            const route = supportedRoute({ ...(routes.get(sessionId) ?? defaultRoute) }, cast);
-            const carried = carryDrafts.get(sessionId);
-            if (carried) {
-              if (inputActions.insertText(carried, selection)) carryDrafts.delete(sessionId);
-            } else if (route.character && route.audience) inputActions.insertText(formatDraft(route), selection);
-          });
-          return () => cancelAnimationFrame(frame);
+          const route = supportedRoute({ ...(routes.get(sessionId) ?? defaultRoute) }, cast);
+          if (route.character && route.audience) return restoreDraft(route, selection);
         }
       }, [draft, busy, openState, sessionId, inputActions, cast]);
 
@@ -150,11 +167,7 @@ window.__ModuleLoader__.load({
         const span = { ...inputActions.captureInsertion(), start: 0, end: draft.length };
         const route = supportedRoute({ ...(routes.get(sessionId) ?? defaultRoute), ...command }, cast);
         if (!route.character || !route.audience) return;
-        const next = formatDraft(route);
-        const frame = requestAnimationFrame(() => {
-          if (inputActions.insertText(next, span) && document.activeElement === document.body) focusComposer();
-        });
-        return () => cancelAnimationFrame(frame);
+        return restoreDraft(route, span);
       }, [saved.opened, sessionId, inputActions]);
 
       async function openSaved(simulationId) {
@@ -598,7 +611,11 @@ window.__ModuleLoader__.load({
           : h(Turn, props)));
       ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
         name: 'conversation.input.dock', id: 'doxvelt-routing', order: -10,
-        inject: sessionId => ({ focusComposer() {
+        inject: sessionId => ({ getInputSnapshot() {
+          const binding = ctx.sessions.binding(sessionId);
+          return binding && ctx.conversation.input.for(binding.ctx).snapshot;
+        },
+        focusComposer() {
           const binding = ctx.sessions.binding(sessionId);
           if (binding) ctx.conversation.input.for(binding.ctx).focus();
         },
