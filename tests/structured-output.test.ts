@@ -15,13 +15,9 @@ import { validateSimulationArchive } from "../src/core/archive-verifier.ts";
 import type { GenerateActorTurnDraftCommand } from "../src/core/ports.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
 
-const expectedFormat = {
-  type: "json_schema",
-  json_schema: {
-    name: "audience_proposal_v1", strict: true,
-    schema: { type: "object", properties: { text: { type: "string" }, audience: { type: "array", items: { type: "string" } } },
-      required: ["text", "audience"], additionalProperties: false },
-  },
+const expectedSchema = {
+  type: "object", properties: { text: { type: "string" }, audience: { type: "array", items: { type: "string" } } },
+  required: ["text", "audience"], additionalProperties: false,
 };
 
 async function fixture(t: test.TestContext) {
@@ -39,13 +35,17 @@ async function fixture(t: test.TestContext) {
     payloads.push(JSON.parse(body));
     if (status !== 200) {
       response.writeHead(status, { "content-type": "application/json" });
-      response.end(JSON.stringify({ error: { message: "response_format json_schema unsupported REJECTED_SECRET_SENTINEL" } }));
+      response.end(JSON.stringify({ error: { message: "tool schema unsupported REJECTED_SECRET_SENTINEL" } }));
       return;
     }
     response.writeHead(200, { "content-type": "text/event-stream" });
+    const structured = payloads.at(-1)!.tools?.some((tool: any) => tool.function.name === "doxvelt_turn");
+    const delta = structured
+      ? { role: "assistant", tool_calls: [{ index: 0, id: "result", type: "function", function: { name: "doxvelt_turn", arguments: output } }] }
+      : { role: "assistant", content: output };
     const chunks = [
-      { id: "fixture", choices: [{ index: 0, delta: { role: "assistant", content: output }, finish_reason: null }] },
-      { id: "fixture", choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 } },
+      { id: "fixture", choices: [{ index: 0, delta, finish_reason: null }] },
+      { id: "fixture", choices: [{ index: 0, delta: {}, finish_reason: structured ? "tool_calls" : "stop" }], usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 } },
     ];
     response.end(chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join("") + "data: [DONE]\n\n");
   });
@@ -70,12 +70,19 @@ async function fixture(t: test.TestContext) {
 }
 
 function assertPayload(payload: Record<string, any>, prompt: string) {
-  assert.deepEqual(payload.response_format, expectedFormat);
-  assert.deepEqual(payload.messages, [{ role: "user", content: [{ type: "text", text: prompt }] }]);
-  assert.ok(payload.tools === undefined || payload.tools.length === 0);
+  assert.equal(payload.response_format, undefined);
+  assert.equal(payload.tools.length, 1);
+  assert.equal(payload.tools[0].function.name, "doxvelt_turn");
+  assert.deepEqual(payload.tools[0].function.parameters, expectedSchema);
+  const messages = payload.messages.filter((message: any) => message.role === "user");
+  assert.equal(messages.length, 1);
+  const content = messages[0].content;
+  assert.equal(typeof content === "string" ? content : content.map((part: any) => part.text).join(""), prompt);
+  assert.equal(payload.messages.length, 2);
+  assert.equal(payload.messages[0].role, "system");
 }
 
-test("production Pi request enforces the exact audience schema, frozen prompt, empty tools and empty whisper", async t => {
+test("production DSH request declares the audience schema with the frozen prompt and empty whisper", async t => {
   const f = await fixture(t);
   const before = f.store.exportSimulation("owner", "sim");
   const command = f.command("valid");

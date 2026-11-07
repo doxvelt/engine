@@ -5,24 +5,23 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createModels, fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
-import { PiActorTurnRuntime } from "../src/agent-runtime/pi.ts";
+import { DshActorTurnRuntime } from "../src/agent-runtime/dsh.ts";
 import { createLocalOpenAICompatibleRuntime, safeRuntimeDiagnostic } from "../src/agent-runtime/local-openai-compatible.ts";
 import type { AgentRuntimeEvent, RunActorTurnRequest } from "../src/agent-runtime/contracts.ts";
 import { createLocalApiServer } from "../src/local-api/server.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
 
-// Real Pi adapter + actual request listener, without network listen permissions.
+// DSH runtime port and actual request listener with an isolated provider failure.
 test("provider auth detail cannot escape status, API replies, durable failure or portable archive", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-inference-failure-"));
   const dbPath = path.join(root, "runtime.sqlite");
   const secret = "TEST_SECRET_SENTINEL";
-  const faux = fauxProvider({ api: "openai-completions", provider: "fixture-provider", models: [{ id: "fixture-model" }] });
-  const models = createModels();
-  models.setProvider(faux.provider);
-  faux.setResponses([fauxAssistantMessage("", { stopReason: "error", errorMessage: `401 Unauthorized ${secret}` })]);
   let diagnostic: string | null = null;
-  const runtime = new PiActorTurnRuntime(models, faux.getModel(), { onFailure: detail => { diagnostic = safeRuntimeDiagnostic(detail); } });
+  const runtime = new DshActorTurnRuntime({
+    async *stream() {
+      yield { type: "finish", reason: { kind: "error", failure: { code: "AUTH", message: "401 Unauthorized " + secret } } };
+    },
+  }, { provider: "fixture-provider", model: "fixture-model", onFailure: detail => { diagnostic = safeRuntimeDiagnostic(detail); } });
   const server = createLocalApiServer({ dbPath, actorTurnRuntime: runtime, runtimeDiagnostic: () => diagnostic });
   t.after(async () => { server.close(); await rm(root, { recursive: true, force: true }); });
   const request = async (route: string, body?: unknown) => {
@@ -62,7 +61,7 @@ test("provider auth detail cannot escape status, API replies, durable failure or
   } finally { store.close(); }
 });
 
-// Exercise the production factory and Pi adapter against deterministic fetch responses.
+// Exercise the production DSH factory against deterministic provider wire responses.
 // Diagnostics are process-local feedback, never the cause of an unrelated later draft.
 test("a new runtime invocation clears earlier provider diagnostics, including non-provider failures", async t => {
   const runtime = createLocalOpenAICompatibleRuntime({ baseUrl: "http://inference.invalid/v1", modelId: "fixture-model" });

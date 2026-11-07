@@ -48,12 +48,14 @@ const provider = createServer(async (request, response) => {
     calls.push(input);
     const model = input.model;
     const usage = { prompt_tokens: 40, completion_tokens: 20, total_tokens: 60 };
-    if (input.stream) {
+    assert.equal(input.stream, true);
+    assert.match(request.headers['user-agent'], /deepseek/i);
+    if (model !== 'memory-route') {
       assert.ok(performances[model]);
-      assert.deepEqual(input.response_format, {
-        type: 'json_schema',
-        json_schema: { name: 'audience_proposal_v1', strict: true, schema: AUDIENCE_PROPOSAL_JSON_SCHEMA },
-      });
+      assert.equal(input.response_format, undefined);
+      assert.equal(input.tools.length, 1);
+      assert.equal(input.tools[0].function.name, 'doxvelt_turn');
+      assert.deepEqual(input.tools[0].function.parameters, AUDIENCE_PROPOSAL_JSON_SCHEMA);
       const send = (delta, finish_reason) => {
         response.write('data: ' + JSON.stringify({ id: 'turn', object: 'chat.completion.chunk', model,
           choices: [{ index: 0, delta, finish_reason }], ...(finish_reason ? { usage } : {}) }) + '\n\n');
@@ -74,16 +76,19 @@ const provider = createServer(async (request, response) => {
           audience: limitAttempts === 1 ? ['nell', 'mara'] : ['nell', 'corin'] };
       }
       response.writeHead(200, { 'content-type': 'text/event-stream' });
-      send({ role: 'assistant', content: JSON.stringify(performance) }, null);
-      send({}, 'stop');
+      send({ role: 'assistant', tool_calls: [{ index: 0, id: 'result', type: 'function', function: { name: 'doxvelt_turn', arguments: JSON.stringify(performance) } }] }, null);
+      send({}, 'tool_calls');
       response.end('data: [DONE]\n\n');
     } else {
       assert.equal(model, 'memory-route');
       const content = JSON.stringify({ memories: [{ gist: recall, feeling: 'Trusted', detail: '',
         salience: 0.9, confidence: 0.8, cues: ['key'], sourceMessageIds: ['m1'] }], impressions: [] });
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ id: 'reflection', object: 'chat.completion', model,
-        choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }], usage }));
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      for (const [delta, finish_reason] of [[{ content }, null], [{}, 'stop']]) {
+        response.write('data: ' + JSON.stringify({ id: 'reflection', object: 'chat.completion.chunk', model,
+          choices: [{ index: 0, delta, finish_reason }], ...(finish_reason ? { usage } : {}) }) + '\n\n');
+      }
+      response.end('data: [DONE]\n\n');
     }
   } catch (error) {
     providerErrors.push(error.message);
@@ -142,7 +147,7 @@ try {
     if (firstRun) await page.getByRole('button', { name: 'Continue', exact: true }).click();
     const signIn = page.getByRole('dialog', { name: 'Get started' });
     try { await signIn.getByRole('button', { name: 'Close', exact: true }).click({ timeout: 3_000 }); }
-    catch (error) { if (firstRun || error.name !== 'TimeoutError' || await signIn.isVisible()) throw error; }
+    catch (error) { if (error.name !== 'TimeoutError' || await signIn.isVisible()) throw error; }
     const picker = page.getByLabel('Saved episode', { exact: true });
     try {
       const workspace = page.getByRole('button', { name: 'Choose workspace', exact: true });
@@ -234,7 +239,12 @@ try {
   assert.equal(await turns.nth(1).getByText(performances['nell-route'].text, { exact: true }).count(), 1);
   assert.equal(await turns.nth(2).getByText(performances['mara-route'].text, { exact: true }).count(), 1);
   assert.equal(calls.length, beforeCorrection);
-  await page.waitForFunction(text => document.querySelector('[contenteditable="true"]')?.innerText === text, typed);
+  try {
+    await page.waitForFunction(text => document.querySelector('[contenteditable="true"]')?.innerText === text, typed);
+  } catch (error) {
+    console.error('Composer after correction:', await page.locator('[contenteditable="true"]').first().innerText());
+    throw error;
+  }
   await page.getByText('Memories are out of date for', { exact: false }).waitFor();
 
   // A replacement earlier than the correction commit still inherits corrected turns in its prefix.

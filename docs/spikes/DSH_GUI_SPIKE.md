@@ -147,6 +147,17 @@ routes against a local OpenAI-compatible endpoint with scripted responses. It
 verified the configured model IDs, private prompt boundaries, and native memory
 formation. It also restarts the launcher with a fresh DSH profile and reopens a saved path, then restarts with the original data directory and verifies that the existing memory can be inspected without another reflection call. Live model quality and provider-specific behavior remain unverified.
 
+## DSH model calls
+
+The launcher configures actor and reflection routes through the stock DSH provider plugin. The Doxvelt host plugin starts its local API inside the running DSH process and supplies that process's `ctx.llm` service to the runtime adapter. Actor calls use their selected provider/model and projected character context. Memory reflection uses its separately configured route through the same service.
+
+Doxvelt's direct Pi dependencies and disposable Pi Agent have been removed. The headless API creates the same DSH model service. DSH's upstream multi-provider package internally uses `pi-ai`.
+
+DSH `0.2.2-rc.1` exposes JSON tool schemas but no native `response_format` setting in its general model request API. For an audience proposal, Doxvelt declares a single `doxvelt_turn` result tool and requires one result call with the exact text/audience shape. The declaration grants no executable capability. Wrong audience, malformed arguments, ordinary prose, extra calls and unknown tools fail without adding a performance. The adapter makes one provider attempt.
+
+The browser fixture checks the result-tool schema and DSH request attribution for actor calls and reflection. It exercises independent actor routes, saved model configuration, audience corrections, private context, memory formation and restart. Live provider quality remains a separate check.
+
+
 ## Reproduce
 
 Use Node 24.9 or newer and an installed Chromium browser. Install the pinned test tools into a scratch directory, then run the fixture from the repository. The runner creates an isolated Doxvelt SQLite database and two fresh DSH homes, prints the checks, and saves screenshots and redacted host logs in the run directory. Set DOXVELT_REVERIE_EXECUTABLE to the independent native executable to include the memory checks.

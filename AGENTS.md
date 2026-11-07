@@ -2,7 +2,7 @@
 
 Doxvelt is a turn-based chat RPG and role-play simulation engine with subjective context, social knowledge, beliefs, memories, affiliations, artifacts, and player-directed turns.
 
-The current code is an early local prototype and executable specification. The target architecture introduces branch-aware event history, memory provenance, a replaceable Pi runtime adapter, capability mediation, and local/hosted deployment parity. Do not assume the current SQLite schema, Vercel AI integration, API routes, or folder boundaries are permanent.
+The current code is an early local prototype and executable specification. The target architecture introduces branch-aware event history, memory provenance, a replaceable DSH runtime adapter, capability mediation, and local/hosted deployment parity. Do not assume the current SQLite schema, Vercel AI integration, API routes, or folder boundaries are permanent.
 
 For the narrow approved context and future historical-regeneration supersession,
 read [Actor Knowledge](docs/design/ACTOR_KNOWLEDGE.md). Its constraints override
@@ -73,8 +73,7 @@ engines.
 Known next gaps are:
 
 - runtime-neutral model contracts and deployment-owned runtime profiles;
-- a bounded adapter for the validated `pi-ai` `Models` plus
-  `pi-agent-core` `Agent` composition;
+- verification of the DSH runtime adapter and provider configurations through sustained play;
 - staged, authorized Doxvelt capability calls with abort/regenerate isolation;
 - migration of Stage to branch/head/command/draft/memory-job contracts;
 - a real background worker policy for pending jobs beyond explicit local invocation;
@@ -87,7 +86,7 @@ The product design system lives in `design-system/`. It contains the static spec
 
 Use it for UI changes. Preserve Doxvelt-specific semantics for source spans, dossiers, beliefs, access paths, transcript turns, tags, badges, authoring fields, branch state, drafts, and restrained operational states.
 
-Keep Nuxt and Nuxt UI unless a concrete product requirement disproves the choice. Nuxt remains a client or thin BFF, never the domain kernel.
+The legacy workbench uses Nuxt and Nuxt UI. The selected play prototype uses DSH. Nuxt remains a client or thin BFF, never the domain kernel.
 
 - Keep API contracts outside page components.
 - Prefer generated or shared transport types.
@@ -175,20 +174,9 @@ Memory writers propose structured operations. Doxvelt validates and commits them
 
 ## Agent Runtime And Security
 
-The Pi spike is **VALIDATED**. Implement the first adapter with explicit
-`pi-ai` `Models` collections and a fresh low-level `pi-agent-core` `Agent` per
-candidate. Do not use `AgentHarness` v2 while its runtime operations remain an
-unfinished scaffold, and do not inherit `pi-coding-agent` defaults or resource
-discovery.
+The DSH play prototype uses the stock composer and transcript and DSH's model service. Read [the product vision](docs/design/PRODUCT_VISION.md) and [DSH spike](docs/spikes/DSH_GUI_SPIKE.md) for the selected host direction. They supersede earlier Pi runtime and Nuxt UI selection mandates in historical design documents.
 
-Prefer `pi-ai` and `pi-agent-core` with:
-
-- Doxvelt-supplied system prompts and actor context;
-- in-memory/disposable conversation state;
-- explicit curated skills;
-- Doxvelt-only capabilities;
-- no Pi conversation history as simulation truth;
-- no global skill, project-context, shell, filesystem, or network discovery.
+Doxvelt supplies actor context, provider/model selection and output validation through its runtime port. Actor generation receives one schema-defined reporting tool and no executable capabilities. The reporting tool returns the turn text and audience for domain validation.
 
 Agents do not receive database access, arbitrary host paths, provider credentials, shell/process execution, unrestricted network, or another actor's hidden context.
 
@@ -207,7 +195,7 @@ The domain engine sees ports and explicit owner scope in either mode. Hosted rea
 ## Implementation Guidance
 
 - Make design decisions explicit before large mechanics.
-- Prove immutable manual branches before integrating Pi.
+- Prove immutable manual branches before integrating a model harness.
 - Keep core behavior behind interfaces, not CLI or HTTP parsing.
 - Preserve source spans and human review of compiled prose.
 - Keep manual mode as a deterministic test seam.
@@ -231,4 +219,4 @@ The first replacement slice must prove:
 7. Pure context queries.
 8. No leaked side effects from rejected drafts.
 
-Only after that should Pi, executable skills, retrieval indexes, or hosted adapters expand the surface.
+Only after that should model calls, executable skills, retrieval indexes, or hosted adapters expand the surface.

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { appendPlayedTurn, resolvePlayAudience, savedEpisodeRequest } from './saved-episode.mjs';
 
-export const inject = ['connection', 'sessions', 'workspaceRegistry'];
+export const inject = ['connection', 'sessions', 'workspaceRegistry', 'llm'];
 
 const cast = ['Corin', 'Nell', 'Mara'];
 const actors = {
@@ -14,7 +14,9 @@ const actors = {
 export async function apply(ctx) {
   const fixtureRoot = process.env.DOXVELT_SPIKE_ROOT;
   const workspace = process.env.DOXVELT_STAGE_WORKSPACE ?? join(fixtureRoot, 'ferry-stage');
-  const origin = process.env.DOXVELT_STAGE_ENGINE ?? process.env.DOXVELT_SPIKE_ENGINE;
+  const origin = process.env.DOXVELT_STAGE_CONFIG
+    ? await (await import('./stage.mjs')).openStage(ctx, process.env.DOXVELT_STAGE_CONFIG)
+    : process.env.DOXVELT_SPIKE_ENGINE;
   const source = fixtureRoot ? join(fixtureRoot, 'fixture.json') : null;
   const fixture = source ? JSON.parse(readFileSync(source, 'utf8')) : null;
   await ctx.workspaceRegistry.create(workspace);

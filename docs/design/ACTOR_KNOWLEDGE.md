@@ -64,7 +64,7 @@ internal choices; no schema redesign is required by this product contract.
 New generation uses only the current complete whisper (including empty), permitted
 pre-turn knowledge and explicit director audience for recipient references. Removed
 input and source performances remain provenance only. Referenced identity does not
-expand a dossier. Keep explicit-recipient validation, empty tools, immutable saved
+expand a dossier. Keep explicit-recipient validation, no executable model tools, immutable saved
 artifacts, authorized scope, exact command replay, atomic rollback and branch-local
 source eligibility. Ordinary continuation retains its existing Accept action.
 
