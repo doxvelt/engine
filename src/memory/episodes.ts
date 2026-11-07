@@ -78,6 +78,10 @@ export class EpisodeMemory {
     const simulation = repository.getSimulation(query.ownerScope, query.simulationId)!;
     const actors = repository.getContentRevision(query.ownerScope, simulation.contentRevisionId)!.compiled.entities;
     const byId = new Map(actors.map(actor => [actor.id, actor]));
+    const labelFor = (id: string) => {
+      const actor = byId.get(id);
+      return actor?.visibility === "public" ? actor.name : id;
+    };
     const story = this.story(query);
     const dateRows = this.db.prepare("SELECT slot, date FROM fictional_dates WHERE story = ?").all(story);
     const dates = new Map(dateRows.map(row => [String(row.slot), String(row.date)]));
@@ -100,16 +104,22 @@ export class EpisodeMemory {
           id: turn.messageVersionId ?? turn.id,
           role: turn.actorId === actor.id ? "assistant" as const : "user" as const,
           text: JSON.stringify({
-            speaker: byId.get(turn.actorId)?.name ?? turn.actorId,
-            recipients: turn.audience.filter(id => id !== turn.actorId).map(id => byId.get(id)?.name ?? id),
+            speaker: labelFor(turn.actorId),
+            recipients: turn.audience.filter(id => id !== turn.actorId).map(labelFor),
             performance: turn.text,
           }),
         }));
         return messages.length ? [{ characterId: actor.id, name: actor.name,
           observation: { foundation: "The remembering character is " + actor.name + ".", messages } }] : [];
       });
+      // Older publications for these scenes may contain names the character never knew.
+      const changedRoleLabels = turns.some(turn => [turn.actorId, ...turn.audience].some(id => {
+        const actor = byId.get(id);
+        return actor && actor.visibility !== "public" && actor.name !== id;
+      }));
       return { slot, episodeId, label, date, sources,
-        revision: fingerprint([slot, date, simulation.contentRevisionId, turns.map(turn => turn.bodyRevisionId ?? turn.messageVersionId ?? turn.id)]) };
+        revision: fingerprint([slot, date, simulation.contentRevisionId, turns.map(turn => turn.bodyRevisionId ?? turn.messageVersionId ?? turn.id),
+          ...(changedRoleLabels ? ["public-role-labels-v1"] : [])]) };
     });
   }
 
@@ -248,8 +258,8 @@ function namedReflection(request: ReflectionRequest, source: Source, prior: Publ
   });
   const system = request.system.split("\n");
   system.splice(0, 3,
-    "Form subjective long-term memories for the named remembering character. Write in first person and refer to other characters by name.",
-    "Each played message contains a JSON record of the speaker, recipients, and performance. Use those named roles for attribution. Host user and assistant labels distinguish other characters and self. The human may play any character.",
+    "Form subjective long-term memories for the named remembering character. Write in first person and use the supplied labels for other characters.",
+    "Each played message contains a JSON record of the speaker, recipients, and performance. Use those roles for attribution. An opaque handle is that character's supplied label. Host user and assistant labels distinguish other characters and self. The human may play any character.",
     "Earlier memories are background for interpretation. Source message and episode aliases belong to the current episode. Cite current evidence for each new memory or impression.");
   return { ...request, system: system.join("\n"), input: { nativeEpisode: request.input, earlierSubjectiveMemory: previous } };
 }
