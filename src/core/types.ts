@@ -242,6 +242,7 @@ export type MessageVersionRecord = {
 
 export type RuntimeEvent =
   | { type: "message_accepted"; message: MessageVersionRecord }
+  | { type: "message_body_corrected"; messageVersionId: string; text: string }
   | {
       type: "audience_changed";
       actorId: string;
@@ -294,6 +295,7 @@ export type TranscriptTurn = {
   commitId?: string;
   logicalMessageId?: string;
   messageVersionId?: string;
+  bodyRevisionId?: string;
   actorId: string;
   text: string;
   audience: string[];
@@ -505,6 +507,8 @@ export type ActorContext = {
   promptPreview: string;
 };
 
+export const DEFAULT_ACTOR_PROFILE = Object.freeze({ id: "local-character", version: "v1" });
+
 export type RuntimeProfileRef = {
   id: string;
   version: string;
@@ -564,6 +568,7 @@ export type DraftRoutingInput = {
   /** Required for v2/v3. Complete replacement, including an intentionally empty whisper. */
   completeWhisper?: string;
   initialAudience: string[] | null;
+  audienceLimit?: string[];
   correction: string;
   correctedAudience: string[] | null;
   preservedText: string | null;

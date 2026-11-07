@@ -76,17 +76,10 @@ Historical regeneration instead safely commits/selects an alternate path after v
 `POST /simulations/:id/drafts`, followed by explicit acceptance or discard for continuation drafts.
 Saved drafts can be recovered after reload or API restart.
 
-Stage AI generation requires server-enforced JSON-schema output from the configured
-endpoint/model. The Pi adapter sends OpenAI-compatible chat completions with
-`response_format: { type: "json_schema", json_schema: { name: "audience_proposal_v1",
-strict: true, schema: ... } }`. The schema requires exactly `text` (string) and
-`audience` (array of strings), with no additional properties. Any endpoint that
-honors this contract can be used; there is no host allowlist, capability probe or
-formatting switch. Configuration does not verify this prerequisite.
+Stage AI generation uses DSH's model service. A structured request declares one result tool, `doxvelt_turn`, with the Doxvelt JSON schema requiring exactly `text` and `audience`. The model reports the completed turn through one call to that tool. Doxvelt validates its arguments and never executes it. The configured endpoint must support tool calls. Configuration alone does not verify provider compatibility.
 
 Doxvelt also validates nonempty performance text, available/nonduplicate recipients
-and director-corrected audience. Unsupported schema requests (including HTTP400/422)
-or invalid output fail without advancing history or saving a performance artifact.
+and director-corrected audience. Unsupported tool declarations, ordinary prose in place of a result, extra result calls, unknown tools or invalid arguments fail without advancing history or saving a performance artifact.
 There is no prompt-only fallback or automatic repair call. Explicit Retry repeats
 the saved prompt/context and output contract. Existing legacy unrouted text requests
 retain their text behavior. Manual Perform remains available without inference.

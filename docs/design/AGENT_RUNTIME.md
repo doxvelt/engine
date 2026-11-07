@@ -7,11 +7,7 @@
 
 This document defines the boundary between Doxvelt and any model/agent harness.
 
-The Pi runtime spike is **VALIDATED** for a first adapter built from explicit
-`pi-ai` `Models` collections and a fresh low-level `pi-agent-core` `Agent` per
-candidate. `AgentHarness` v2 remains an unfinished scaffold and is not the
-selected runtime. Pi is not the domain engine, persistence model, memory system,
-or authorization boundary.
+The selected runtime is DSH's model service. The graphical host supplies its running `ctx.llm` service to Doxvelt. The headless API creates the same DSH service with deployment-configured routes. Doxvelt owns context projection, output validation and canonical history.
 
 ## Why A Harness
 
@@ -27,7 +23,7 @@ A mature harness can provide:
 - model switching and usage accounting;
 - skill discovery and loading.
 
-Pi is attractive because `pi-ai` and `pi-agent-core` are general-purpose TypeScript packages. The `pi-coding-agent` package demonstrates sessions, skills, and interfaces but its coding defaults are not Doxvelt defaults.
+The [earlier Pi spike](../spikes/PI_RUNTIME_SPIKE.md) remains historical evidence. The maintained adapter uses the pinned DSH model API.
 
 ## Runtime Port
 
@@ -58,7 +54,7 @@ interface AgentRuntime {
 }
 ```
 
-Doxvelt contracts contain no Pi, provider-SDK, or UI types.
+Doxvelt domain contracts contain no harness, provider SDK or UI types.
 
 ## Runtime Profiles
 
@@ -77,30 +73,16 @@ A runtime profile combines versioned choices:
 
 Credentials are not part of the profile. The same profile may resolve through a local model, API key, or OAuth-backed provider according to deployment policy.
 
-## Pi Adapter
+## DSH adapter
 
-The first adapter uses:
+`DshActorTurnRuntime` makes one call to `ctx.llm.stream()` with the Doxvelt-projected prompt and the selected actor's provider and model. DSH supplies provider transport, credentials, streaming and token usage. Requests carry no DSH session history.
 
-- `@earendil-works/pi-ai` for provider/model/auth mechanics;
-- `@earendil-works/pi-agent-core` for the tool loop and runtime events;
-- a fresh in-memory `Agent` rebuilt from Doxvelt context for every generated
-  candidate and its draft transaction, including regenerations from the same
-  canonical branch head;
-- explicit custom tools backed only by the Capability Broker;
-- explicit skill resources supplied by Doxvelt.
+For the audience-proposal contract, the model reports a turn through the single `doxvelt_turn` result declaration. Doxvelt validates exactly one result and its text and audience. The reporting tool performs no action. Unknown tools, extra calls, prose in place of a result and invalid arguments fail. Legacy text requests retain text output and reject tool calls.
 
-Do not make Pi sessions authoritative. In particular:
+The pinned DSH general model API has no native `response_format` option. This adapter uses its tool-schema mechanism and application validation. It makes one provider attempt and supplies no formatting fallback or repair call. Saved prompts and domain schema references retain their existing meanings. Older saved Pi artifacts remain readable provenance.
 
-- do not use Pi conversation branches as Doxvelt simulation branches;
-- do not import Pi branch summaries into actor context;
-- do not allow Pi compaction to become character memory;
-- do not persist one independent Pi truth per actor;
-- do not rely on Pi tool side effects for canonical state.
+The DSH Web host also uses its model service for Reverie reflection. The headless API creates a DSH model service with the same route registration. Deployment credentials remain private to those routes. Doxvelt imports DSH packages. The upstream multi-provider adapter internally depends on `pi-ai`.
 
-A long-lived Pi worker may retain model catalogs, auth state, provider
-connections, and safe caches. Its conversational state is candidate-scoped and
-disposable: abort, rejection, or regeneration discards the entire `Agent` and
-draft transaction before another candidate starts.
 
 ## Model And Auth Boundary
 
@@ -110,7 +92,7 @@ A local installation may use:
 
 - local OpenAI-compatible endpoints;
 - direct provider API keys;
-- provider OAuth through Pi;
+- provider authentication through the harness;
 - user-selected credential stores.
 
 ### Hosted
@@ -198,10 +180,10 @@ The agent never receives:
 Tool calls during generation cannot mutate globally visible reality immediately.
 
 ```text
-Pi tool request
+Authorized model capability request
   -> Capability Broker authorization
   -> execute or stage inside draft transaction
-  -> actor-scoped result returned to Pi
+  -> actor-scoped result returned to the model
   -> final turn generated
   -> Doxvelt validates and atomically commits or discards
 ```
@@ -212,11 +194,11 @@ External irreversible effects are exceptional integrations. They require explici
 
 ## Containerization
 
-Pi itself states that it is not an operating-system permission boundary. Doxvelt therefore applies process isolation according to trust level.
+Doxvelt applies process isolation according to the trust level of executable integrations.
 
 ### Trusted runtime/auth worker
 
-May hold provider auth and run Pi's model loop. It receives no shell, filesystem, arbitrary-network, database, or executable-skill tool.
+May hold provider auth and run DSH model calls. It receives no shell, filesystem, arbitrary-network, database, or executable-skill tool.
 
 ### Sandboxed executor
 
@@ -278,7 +260,7 @@ Thinking traces remain provider-sensitive diagnostic data and are not character 
 - OAuth refresh failure is an account/runtime failure, not an actor event.
 - Runtime failure may be retried with another model without changing branch state until a response is accepted.
 
-## Pi Adoption Spike Result
+## Historical Pi adoption spike
 
 The bounded spike passed these adoption gates:
 
@@ -293,7 +275,4 @@ The bounded spike passed these adoption gates:
    assigned to the Doxvelt adapter contract.
 9. Equivalent Doxvelt output contracts across providers.
 
-The durable evidence and exact selected composition are recorded in
-[Pi Runtime Spike](../spikes/PI_RUNTIME_SPIKE.md). Slice 3 may now implement that
-bounded adapter; it must not expand Pi into Doxvelt's domain or persistence
-model, nor build a competing provider/auth layer.
+The [Pi runtime spike](../spikes/PI_RUNTIME_SPIKE.md) records the earlier evidence. The DSH adapter above is the maintained integration.

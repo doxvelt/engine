@@ -470,17 +470,27 @@ function invalid(message: string): DomainValidationError {
 
 export function validateRoutingInput(value: unknown): asserts value is DraftRoutingInput {
   const input = object(value, "Routing input");
-  exact(input, ["version", "initialAudience", "correction", "correctedAudience", "preservedText", "sourceDraftId", ...((input.version === 2 || input.version === 3 || input.version === 4) ? ["completeWhisper"] : [])], "Routing input");
+  exact(input, ["version", "initialAudience", "correction", "correctedAudience", "preservedText", "sourceDraftId",
+    ...((input.version === 2 || input.version === 3 || input.version === 4) ? ["completeWhisper"] : []),
+    ...(Object.hasOwn(input, "audienceLimit") ? ["audienceLimit"] : [])], "Routing input");
   if (input.version !== 1 && input.version !== 2 && input.version !== 3 && input.version !== 4) throw invalid("Unsupported routing version.");
   if ((input.version === 2 || input.version === 3 || input.version === 4) && (typeof input.completeWhisper !== "string" || input.completeWhisper.length > MAX_RUNTIME_TEXT_CHARS || input.correction !== ""))
     throw invalid("Complete whisper required without additive correction.");
   for (const key of ["initialAudience", "correctedAudience"])
     if (input[key] !== null) identityArray(input[key], key);
+  if (Object.hasOwn(input, "audienceLimit")) {
+    if ((input.version !== 3 && input.version !== 4) || input.initialAudience !== null ||
+        input.correctedAudience !== null || input.sourceDraftId !== null)
+      throw invalid("An audience limit requires a fresh actor choice.");
+    identityArray(input.audienceLimit, "Audience limit");
+  }
   if (typeof input.correction !== "string" || input.correction.length > MAX_RUNTIME_TEXT_CHARS)
     throw invalid("Invalid director correction.");
   if (input.sourceDraftId !== null) requiredSafeIdentifier(input.sourceDraftId, "Source draft");
   if (input.preservedText !== null) assertRuntimeText(input.preservedText, "Preserved text");
-  if (input.version !== 4 && input.sourceDraftId === null && (input.correctedAudience !== null || input.preservedText !== null || input.correction !== ""))
+  const freshFixedAudience = input.version === 3 && input.initialAudience === null && input.correctedAudience !== null;
+  if (input.version !== 4 && input.sourceDraftId === null &&
+      ((!freshFixedAudience && input.correctedAudience !== null) || input.preservedText !== null || input.correction !== ""))
     throw invalid("Corrections require a source candidate.");
   if (input.version === 4 && (input.sourceDraftId !== null || input.initialAudience !== null || input.preservedText !== null))
     throw invalid("Historical routing requires a fresh complete input and explicit or unspecified audience.");
@@ -498,10 +508,13 @@ export function validateRoutingBinding(draft: ActorTurnDraftRecord, receipt = fa
   }
   const routing = object(draft.routing, "Routing");
   exact(routing, ["version", "initialAudience", "correction", "correctedAudience", "preservedText", "sourceDraftId",
-    "availableRecipientIds", "originalDraftId", "originalGenerationCommandId", "source", ...((routing.version === 2 || routing.version === 3 || routing.version === 4) ? ["completeWhisper"] : [])], "Routing");
+    "availableRecipientIds", "originalDraftId", "originalGenerationCommandId", "source",
+    ...((routing.version === 2 || routing.version === 3 || routing.version === 4) ? ["completeWhisper"] : []),
+    ...(Object.hasOwn(routing, "audienceLimit") ? ["audienceLimit"] : [])], "Routing");
   const { version, initialAudience, correction, correctedAudience, preservedText, sourceDraftId } = routing;
   validateRoutingInput({ version, initialAudience, correction, correctedAudience, preservedText, sourceDraftId,
-    ...((version === 2 || version === 3 || version === 4) ? { completeWhisper: routing.completeWhisper } : {}) });
+    ...((version === 2 || version === 3 || version === 4) ? { completeWhisper: routing.completeWhisper } : {}),
+    ...(Object.hasOwn(routing, "audienceLimit") ? { audienceLimit: routing.audienceLimit } : {}) });
   identityArray(routing.availableRecipientIds, "Available recipients");
   requiredSafeIdentifier(routing.originalDraftId, "Original draft ID");
   requiredSafeIdentifier(routing.originalGenerationCommandId, "Original generation ID");
@@ -512,6 +525,8 @@ export function validateRoutingBinding(draft: ActorTurnDraftRecord, receipt = fa
       ...(typed.correctedAudience ?? typed.initialAudience ?? [])])]))
     throw invalid("Draft direction audience mismatch.");
   if (!typed.availableRecipientIds.includes(draft.actorId)) throw invalid("Actor missing from available identities.");
+  if (typed.audienceLimit && !sameIdentities(typed.availableRecipientIds, [draft.actorId, ...typed.audienceLimit]))
+    throw invalid("Available identities exceed the audience limit.");
   for (const id of (typed.version === 2 || typed.version === 3 || typed.version === 4) ? (typed.correctedAudience ?? typed.initialAudience ?? []) : [...(typed.initialAudience || []), ...(typed.correctedAudience || [])])
     if (!typed.availableRecipientIds.includes(id)) throw invalid("Directed identity is unavailable.");
   if (draft.promptPolicy.id !== ((typed.version === 3 || typed.version === 4) ? ACTOR_KNOWLEDGE_POLICY : "audience-proposal-v1") || draft.promptPolicy.version !== "v1" ||

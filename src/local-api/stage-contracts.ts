@@ -1,5 +1,5 @@
 export { ACTOR_KNOWLEDGE_POLICY } from "../core/types.ts";
-import type { ActorTurnDraftRecord, BranchRecord, TranscriptTurn } from "../core/types.ts";
+import type { ActorTurnDraftRecord, BranchRecord, RuntimeProfileRef, TranscriptTurn } from "../core/types.ts";
 
 export type StageActor = { id: string; name: string; kind: string };
 export type StageProjection = {
@@ -8,6 +8,9 @@ export type StageProjection = {
   transcript: TranscriptTurn[];
   audience: { actorId: string; status: string }[];
   actors: StageActor[];
+  generationActorIds?: string[];
+  actorConfigurations?: { characterId: string; key: string; label: string; profile: RuntimeProfileRef }[];
+  episodes?: { id: string; label: string }[];
 };
 export type StageDraft = Pick<ActorTurnDraftRecord,
   "id" | "branchId" | "basisHeadCommitId" | "actorId" | "audience" |
@@ -46,7 +49,7 @@ export type ReviseStageDraftBody = {
 
 export type GenerateStageDraftBody = {
   commandId: string; branchId: string; expectedHead: string; actorId: string;
-  audience: string[] | null; stageWhisperIds: string[];
+  audience: string[] | null; stageWhisperIds: string[]; fixedAudience?: boolean;
   draftingPolicy: typeof import("../core/types.ts").ACTOR_KNOWLEDGE_POLICY;
   completeWhisper: string;
 };

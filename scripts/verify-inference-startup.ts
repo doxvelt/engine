@@ -49,8 +49,12 @@ const upstream = createServer((request, response) => {
       }
       response.writeHead(200, { "content-type": "text/event-stream" });
       const text = JSON.stringify({ text: "Deterministic fixture performance.", audience: ["ceo", "cfo"] });
-      response.write(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", choices: [{ index: 0, delta: { content: text }, finish_reason: null }] })}\n\n`);
-      response.write(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 } })}\n\n`);
+      const structured = JSON.parse(body).tools?.some((tool: { function?: { name: string } }) => tool.function?.name === "doxvelt_turn");
+      const delta = structured
+        ? { tool_calls: [{ index: 0, id: "result", type: "function", function: { name: "doxvelt_turn", arguments: text } }] }
+        : { content: text };
+      response.write(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`);
+      response.write(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: structured ? "tool_calls" : "stop" }], usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 } })}\n\n`);
       response.end("data: [DONE]\n\n");
     } catch { response.writeHead(400); response.end("Fixture request assertion failed."); }
   });

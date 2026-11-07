@@ -38,6 +38,12 @@ cannot publish the configuration atomically, startup warns and manual play
 remains available; [create the full skeleton privately by hand](docs/LOCAL_REFERENCE.md#ai-drafts)
 if you want AI configuration.
 
+## DSH play prototype
+
+The DSH play prototype runs *The last crossing* or an authored story in the
+stock DeepSeek Harness composer and transcript. It uses your actor model
+settings and the standalone Reverie engine. [Launch instructions](docs/spikes/DSH_GUI_SPIKE.md#play-with-your-models)
+
 ## AI drafts
 
 AI generation is optional. Doxvelt does not install or provide a model server;

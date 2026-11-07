@@ -291,7 +291,7 @@ test("local API startup rejects incomplete and orphan runtime flags", async (t) 
   }
 });
 
-test("local OpenAI-compatible factory streams through Pi without exposing deployment secrets", async (t) => {
+test("local OpenAI-compatible factory streams through DSH without exposing deployment secrets", async (t) => {
   const secret = "local-test-secret";
   let body = "";
   let authorization = "";
@@ -364,7 +364,7 @@ test("local OpenAI-compatible factory streams through Pi without exposing deploy
     new RegExp(LOCAL_OPENAI_COMPATIBLE_KEYLESS_TRANSPORT_KEY),
   );
 });
-test("draft validation maps stale, actor, audience, whisper, and command conflicts without invoking Pi", async (t) => {
+test("draft validation maps stale, actor, audience, whisper, and command conflicts without invoking the model", async (t) => {
   const runtime = new DeterministicFakeRuntime([
     { type: "usage", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
     { type: "completed", text: "Ready", stopReason: "stop" },
