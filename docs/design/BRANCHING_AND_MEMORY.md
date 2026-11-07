@@ -70,6 +70,14 @@ Editing an accepted message:
 
 Downstream messages, events, perceptions, memories, and belief revisions from the old path remain intact but are not visible from the new branch head.
 
+### Body-only correction
+
+Saving a body-only correction creates a new branch at the current head with a correction event for the selected message. Its projected wording changes while subsequent played turns and episode boundaries remain available. Actor and audience changes use a replacement turn.
+
+If the corrected turn belongs to a closed episode, the revised projection withholds that closure's memories, memory operations and derived beliefs, together with later closures already formed from that history. Revisions of those memories are also withheld. Earlier unrelated closure memory stays eligible. Original commits, job results and memory operations remain immutable provenance in the archive, and the original branch keeps its matching memory.
+
+A late job completing for an invalidated closure cannot restore its results on the corrected path. A later deliberate closure can form fresh memory on that path. Reverie's explicit Memorize action forms a new version for the corrected episode. Reusing the original closure job ID continues to identify its original source.
+
 ### Regenerate
 
 Regenerating an actor response creates another draft and, if accepted, another child of the same input commit.
@@ -176,7 +184,7 @@ Closing an episode may:
 - extract subjective beliefs;
 - schedule embeddings and summaries.
 
-A closed episode commit is immutable. Editing history before it creates another branch that does not inherit the old closure or its memory operations. The original closed branch remains valid and inspectable.
+A closed episode commit is immutable. Replacing history before it creates another branch that does not inherit the old closure or its memory operations. Body-only corrections preserve the episode boundary and withhold the affected derivatives as described above. The original closed branch remains valid and inspectable.
 
 Closure work may initially remain blocking for a simple local product. The target contract must also support queued execution:
 

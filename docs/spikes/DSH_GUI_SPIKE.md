@@ -158,6 +158,12 @@ DSH `0.2.2-rc.1` exposes JSON tool schemas but no native `response_format` setti
 The browser fixture checks the result-tool schema and DSH request attribution for actor calls and reflection. It exercises independent actor routes, saved model configuration, audience corrections, private context, memory formation and restart. Live provider quality remains a separate check.
 
 
+## Memory source and correction safety
+
+Reverie reflection receives public character names as speaker and recipient labels. Non-public characters retain their IDs in those roles, even when the remembering character received their speech. A remembering character's own foundation can identify itself by name. Previously formed versions whose role labels exposed non-public names become drifted and require an explicit Memorize action before reuse.
+
+Body-only corrections preserve later played turns and episode boundaries. The corrected path withholds legacy closure memories, their revisions and derived beliefs from the corrected episode and later closures formed from the old history. This also applies to generation through the headless API. Original branches retain their matching derivatives. See [branching and memory](../design/BRANCHING_AND_MEMORY.md).
+
 ## Reproduce
 
 Use Node 24.9 or newer and an installed Chromium browser. Install the pinned test tools into a scratch directory, then run the fixture from the repository. The runner creates an isolated Doxvelt SQLite database and two fresh DSH homes, prints the checks, and saves screenshots and redacted host logs in the run directory. Set DOXVELT_REVERIE_EXECUTABLE to the independent native executable to include the memory checks.

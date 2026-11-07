@@ -168,7 +168,7 @@ Audience and access changes are explicit events. Private conversations are ordin
 
 Stage whispers are private direction in a draft transaction. They are consumed only by an accepted turn and do not automatically become canonical truth or memory.
 
-Episode closure remains a deliberate memory-consolidation checkpoint. Closed commits are immutable; editing earlier history creates another branch that does not inherit the old closure.
+Episode closure remains a deliberate memory-consolidation checkpoint. Closed commits are immutable. Replacement history diverges before the old closure. Body-only corrections preserve episode boundaries and later turns while withholding the affected closure memories and beliefs on the revised path.
 
 Memory writers propose structured operations. Doxvelt validates and commits them. Agents never receive direct persistence access.
 

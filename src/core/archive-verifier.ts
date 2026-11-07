@@ -1,6 +1,6 @@
 import { decodeAlternativeCommand, assertSupportedHistoricalEffects, originatingInput, resolveHistoricalSelection } from "./saved-alternatives.ts";
 import { ACTOR_KNOWLEDGE_POLICY, DEFAULT_ACTOR_PROFILE } from "./types.ts";
-import { branchBodyCorrections } from "./body-revisions.ts";
+import { branchBodyCorrections, invalidatedBodyClosures } from "./body-revisions.ts";
 import { turnCorrectionEvent } from "./turn-correction.ts";
 import { createHash } from "node:crypto";
 import {
@@ -1310,7 +1310,15 @@ function validateClosureIntegrity(
       throw invalidCommandResult(commandId, "extracted belief provenance mismatch");
     addUniqueClosureId(commandId, recordIds, belief.id);
   }
-  const expectedRetained = deriveRetainedBeliefs({
+  const producingInput = archive.commandResults.find(result => result.commandId === commandId)?.canonicalInput;
+  const producingBranch = producingInput?.kind === "closure"
+    ? archive.branches.find(branch => branch.id === producingInput.branchId) : undefined;
+  const excludedClosureIds = producingBranch ? invalidatedBodyClosures({
+    getBranch: (_owner, _simulation, id) => archive.branches.find(branch => branch.id === id) ?? null,
+    getCommit: (_owner, _simulation, id) => archive.commits.find(commit => commit.id === id) ?? null,
+    listAncestors: (_owner, _simulation, head) => ancestryThrough(archive.commits, head),
+  }, producingBranch, ancestry) : new Set<string>();
+  const retentionInput = {
     simulationId: archive.simulation.id,
     commandId,
     episodeId,
@@ -1319,8 +1327,13 @@ function validateClosureIntegrity(
     initialBeliefs: archive.contentRevision.compiled.beliefs,
     initialAccessLinks: archive.contentRevision.compiled.accessLinks,
     ancestry,
-  });
-  if (stableStringify(closure.retainedBeliefs) !== stableStringify(expectedRetained))
+  };
+  const expectedRetained = deriveRetainedBeliefs({ ...retentionInput, excludedClosureIds });
+  // Older archives may contain the former closure-derived retention snapshot.
+  // Preserve its immutable provenance while the live projection withholds stale sources.
+  const matchesLegacy = excludedClosureIds.size > 0 &&
+    stableStringify(closure.retainedBeliefs) === stableStringify(deriveRetainedBeliefs(retentionInput));
+  if (stableStringify(closure.retainedBeliefs) !== stableStringify(expectedRetained) && !matchesLegacy)
     throw invalidCommandResult(commandId, "retained belief set mismatch");
   for (const belief of closure.retainedBeliefs)
     addUniqueClosureId(commandId, recordIds, belief.id);

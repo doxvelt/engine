@@ -1,5 +1,5 @@
 import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
-import { branchBodyCorrections } from "./body-revisions.ts";
+import { branchBodyCorrections, invalidatedBodyClosures } from "./body-revisions.ts";
 import { compileWorkspace } from "./compiler.ts";
 import {
   applyAccessChange,
@@ -650,6 +650,10 @@ export function projectBranch(
   const episodeMemories: EpisodeMemoryRecord[] = [];
   const longTermMemories: LongTermMemoryRecord[] = [];
   const memoryOperations: MemoryOperation[] = [];
+  const corrections = branchBodyCorrections(repository, branch);
+  const invalidatedClosures = invalidatedBodyClosures(repository, branch, commits, corrections);
+  const invalidatedMemoryIds = new Set<string>();
+  const invalidatedBeliefIds = new Set<string>();
   const detachedOperations = repository.listDetachedMemoryOperations(
     query.ownerScope, query.simulationId,
   );
@@ -716,7 +720,21 @@ export function projectBranch(
           const late = detachedOperations.filter(
             (operation) => operation.closureCommitId === commit.id,
           );
-          memoryOperations.push(...(late.length ? late : legacyClosureOperations(commit)));
+          const operations = late.length ? late : legacyClosureOperations(commit);
+          if (invalidatedClosures.has(commit.id)) {
+            for (const operation of operations) invalidatedMemoryIds.add(operation.memoryId);
+            for (const memory of [...closure.memories, ...closure.longTermMemories]) invalidatedMemoryIds.add(memory.id);
+            for (const belief of [...closure.extractedBeliefs, ...closure.retainedBeliefs]) invalidatedBeliefIds.add(belief.id);
+            closure.memories = [];
+            closure.longTermMemories = [];
+            closure.extractedBeliefs = [];
+            closure.retainedBeliefs = [];
+            closure.memoryOperations = [];
+          } else {
+            memoryOperations.push(...operations);
+            closure.retainedBeliefs = closure.retainedBeliefs.filter(belief =>
+              !("id" in belief.sourceBelief && invalidatedBeliefIds.has(belief.sourceBelief.id)));
+          }
           beliefs.push(
             ...closure.extractedBeliefs,
             ...closure.retainedBeliefs,
@@ -724,13 +742,13 @@ export function projectBranch(
           break;
         }
         case "memory_operation":
-          memoryOperations.push(event.operation);
+          if (!invalidatedMemoryIds.has(event.operation.memoryId)) memoryOperations.push(event.operation);
           break;
         default:
           assertNever(event);
       }
     }
-  for (const [versionId, correction] of branchBodyCorrections(repository, branch)) {
+  for (const [versionId, correction] of corrections) {
     const turn = turnsByVersion.get(versionId);
     if (!turn) continue;
     turn.text = correction.text;
