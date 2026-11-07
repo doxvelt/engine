@@ -5,7 +5,67 @@ simulations. Choose who acts and who hears each turn; play their words yourself
 or optionally ask a model for a draft. Characters have subjective knowledge,
 beliefs and memories. No Doxvelt account is required.
 
-## Quick start
+## DSH alpha quick start
+
+The [v0.1.0-alpha.1 prerelease](https://github.com/doxvelt/engine/releases/tag/v0.1.0-alpha.1)
+uses the stock DeepSeek Harness composer and transcript. It is a source-run alpha,
+tested with DSH `0.2.2-rc.1` and Reverie `0.2.0` over protocol `1`.
+
+1. Download the release's source ZIP, extract it, and open a terminal in the
+   folder containing `package.json`. Install Node.js 24 or newer and Bun 1.3.13.
+   Install the project dependencies and the pinned DSH CLI.
+
+   ```sh
+   bun install --frozen-lockfile
+   npm install --prefix .doxvelt/dsh --ignore-scripts --no-audit --no-fund --save-exact @deepseek-ai/dsh@0.2.2-rc.1
+   ```
+
+2. Download the Windows x64 ZIP from [Reverie v0.2.0](https://github.com/memrok-com/reverie/releases/tag/v0.2.0)
+   and extract its `reverie-v0.2.0-windows-x64` folder into `.doxvelt`.
+   On other platforms, build Reverie from that tag and supply its executable path.
+
+3. Save your private model settings as `.doxvelt/models.json`. This minimal
+   example uses an OpenAI-compatible endpoint you provide. Replace the URL and
+   model ID with your own. Actor generation requires tool-call support.
+
+   ```json
+   {
+     "defaultActor": {
+       "baseUrl": "http://127.0.0.1:1234/v1",
+       "modelId": "your-model"
+     }
+   }
+   ```
+
+4. Start Doxvelt in DSH. The following command uses the extracted Windows engine.
+
+   ```sh
+   node scripts/dsh-stage.mjs --dsh .doxvelt/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js --reverie .doxvelt/reverie-v0.2.0-windows-x64/reverie-engine.exe --models .doxvelt/models.json
+   ```
+
+   If DSH asks for a workspace, choose **stage**. Use **Open saved episode**
+   to open **The last crossing**. Choose **Perform**, a character and an audience,
+   then type and send. The selection stays ready for your next turn.
+   **Generate** asks the selected actor to play and appends the result immediately.
+   **Episode memory** provides dating, deliberate memorization and inspection.
+
+Stop with **Ctrl+C** in the launch terminal. Keep `.doxvelt/stage` to retain your
+stories, memory catalog and DSH profile. Model credentials belong in private
+configuration or named environment variables. Do not share that directory.
+Manual performances make no model call; generation and memorization use your
+configured provider.
+
+See [model routes, saved episodes and revision controls](docs/spikes/DSH_GUI_SPIKE.md#play-with-your-models)
+for separate actor configurations, reflection, authored stories and launch options.
+The [alpha release notes](docs/releases/v0.1.0-alpha.1.md) describe compatibility,
+memory drift and current limits.
+
+## Legacy workbench
+
+The earlier Nuxt workbench remains available for authoring and reference. Its
+separate launch and draft-review flow below do not describe the DSH alpha.
+
+### Quick start
 
 1. [Download the source ZIP](https://github.com/doxvelt/engine/archive/refs/heads/main.zip),
    unzip it, and open a terminal inside the extracted `engine-main` folder
@@ -38,13 +98,7 @@ cannot publish the configuration atomically, startup warns and manual play
 remains available; [create the full skeleton privately by hand](docs/LOCAL_REFERENCE.md#ai-drafts)
 if you want AI configuration.
 
-## DSH play prototype
-
-The DSH play prototype runs *The last crossing* or an authored story in the
-stock DeepSeek Harness composer and transcript. It uses your actor model
-settings and the standalone Reverie engine. [Launch instructions](docs/spikes/DSH_GUI_SPIKE.md#play-with-your-models)
-
-## AI drafts
+### AI drafts
 
 AI generation is optional. Doxvelt does not install or provide a model server;
 use an OpenAI-compatible server and model that support **strict JSON-schema output**
@@ -65,7 +119,7 @@ In Stage, choose **Stage whisper**, enter private direction, and click
 **Generate draft**. Review the performance and recipients before **Accept**;
 **Discard** leaves history unchanged. [Configuration and security details](docs/LOCAL_REFERENCE.md#ai-drafts).
 
-## Saving and continuing
+### Saving and continuing
 
 Accepted turns and saved drafts persist locally in `.doxvelt/runtime.sqlite`.
 Home's **Continue** returns to your story; **Play the example** resumes the same
