@@ -55,6 +55,10 @@ configuration or named environment variables. Do not share that directory.
 Manual performances make no model call; generation and memorization use your
 configured provider.
 
+On Windows, keep project and data paths short. Deeply nested directories can
+exceed SQLite's path limit when reopening an external database. Move the data
+to a shorter path or choose a shorter `--data` directory if that occurs.
+
 See [model routes, saved episodes and revision controls](docs/spikes/DSH_GUI_SPIKE.md#play-with-your-models)
 for separate actor configurations, reflection, authored stories and launch options.
 The [alpha release notes](docs/releases/v0.1.0-alpha.1.md) describe compatibility,
