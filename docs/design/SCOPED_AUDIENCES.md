@@ -1,6 +1,7 @@
 # Scoped audiences and actor projections
 
-Perform supports inline audiences within one atomic, branch-bound turn. The actor
+DSH Perform and the legacy workbench support inline audiences within one atomic,
+branch-bound turn. The actor
 selector chooses the performer; there is no separate addressee. Transcript visual
 design is outside this change. Generated candidates retain their captured routing
 and existing acceptance contract; their prose is not implicitly parsed as notation.
@@ -21,7 +22,11 @@ selectors never change it or the composer actor. A new simulation/branch session
 starts without a default; browser recovery restores only that exact installation,
 owner, simulation and branch's saved buffer. Review the visible selection when
 returning to a context. Defaults change neither presence nor access, and delivery
-creates no automatic mutual first impressions.
+creates no automatic mutual first impressions. DSH keeps its default and fallback
+choice in that episode chat's browser state; a new path or episode chat resets
+them. `/perform @Corin` supplies the composer identity in DSH; the body can begin
+with a turn override or span. Explicit `#all` and `#self` remain DSH shorthands;
+neither is an implicit default. Generated direction keeps its existing grammar.
 
 Selectors accept pinned IDs or unambiguous, case-sensitive single-token names.
 Use IDs for names containing spaces. Unsupported actors, unknown/ambiguous names
@@ -104,7 +109,14 @@ retryable without repeating acceptance. Manual acceptance is synchronous after
 validation; abandoning unsent text creates nothing. Existing model-draft abort and
 memory-job failure behavior remain separate from immediate Perform.
 
-Behavior checks live in `scoped-audiences.test.ts` and
+DSH stores an acceptance request's original default, syntax, command ID and branch
+head before transmission. **Retry pending performance** reconciles it even after
+new typing or reload. A body-only correction reparses with the saved interpretation
+and base, persists fresh projections and retains audience structure. Routing
+changes require a replacement turn. The standalone Reverie bridge supplies only
+the observer's projected text and omits scope recipient metadata from reflection.
+
+Behavior checks live in `scoped-audiences.test.ts`, `dsh-scoped-retry.test.ts` and
 `scoped-audiences-api.test.ts`: both examples, precedence, outside-base recipients,
 private omission, actor perception, escaping, invalid input, safe context and
 memory callbacks, atomic rejection, restart/retry, browser recovery, changed

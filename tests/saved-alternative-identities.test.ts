@@ -151,19 +151,25 @@ test("pending runtime reserves both identities against another historical reques
   const ordinary = (await generateActorTurnDraft(f.store, ordinaryRuntime(), f.command("continuation"))).draft;
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
+  let markStarted!: () => void;
+  const started = new Promise<void>(resolve => { markStarted = resolve; });
   const slow: ActorTurnRuntime = { identity: { id: "slow", version: "v1" }, async *runActorTurn() {
+    markStarted();
     await gate; yield { type: "completed", text: JSON.stringify({ text: "Replacement", audience: ["ceo"] }), stopReason: "stop" };
   } };
   const pending = createSavedAlternative(f.store, slow, f.request);
   try {
+    await Promise.race([started, pending.then(() => { throw new Error("Generation finished before its pending state was inspected."); })]);
     assert.equal(f.store.getAlternative(scope.ownerScope, scope.simulationId, alternativeId(f.request))!.draft!.status, "generating");
-    const other = await openBranchStore(f.db).open(); t.after(() => other.close());
-    const before = other.exportSimulation(scope.ownerScope, scope.simulationId);
-    const fake = runtime();
-    await assert.rejects(createSavedAlternative(other, fake, { ...f.request, commandId: generationId(f.request) }), CommandIdentityError);
-    assert.equal(fake.calls, 0);
-    assert.throws(() => acceptActorTurnDraft(other, { ...scope, draftId: ordinary.id, commandId: generationId(f.request) }), CommandIdentityError);
-    assert.deepEqual(other.exportSimulation(scope.ownerScope, scope.simulationId), before);
+    const other = await openBranchStore(f.db).open();
+    try {
+      const before = other.exportSimulation(scope.ownerScope, scope.simulationId);
+      const fake = runtime();
+      await assert.rejects(createSavedAlternative(other, fake, { ...f.request, commandId: generationId(f.request) }), CommandIdentityError);
+      assert.equal(fake.calls, 0);
+      assert.throws(() => acceptActorTurnDraft(other, { ...scope, draftId: ordinary.id, commandId: generationId(f.request) }), CommandIdentityError);
+      assert.deepEqual(other.exportSimulation(scope.ownerScope, scope.simulationId), before);
+    } finally { other.close(); }
   } finally { release(); await pending; }
   validateSimulationArchive(f.store.exportSimulation(scope.ownerScope, scope.simulationId));
 });

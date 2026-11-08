@@ -9,6 +9,8 @@ import { parsePerformance, type AudienceSyntax } from "../src/core/audience-scop
 import { commitManualTurn, forkBranch, inspectActorContext, projectBranch, startBranchSimulation } from "../src/core/branch-kernel.ts";
 import { requestEpisodeClosure, runEpisodeMemoryJob } from "../src/core/branch-episode.ts";
 import { validateSimulationArchive } from "../src/core/archive-verifier.ts";
+import { correctTurnBody } from "../src/core/turn-correction.ts";
+import { EpisodeMemory } from "../src/memory/episodes.ts";
 import { createSavedAlternative } from "../src/core/saved-alternatives.ts";
 import { projectRoutingContext } from "../src/core/candidate-routing.ts";
 import { ACTOR_KNOWLEDGE_POLICY } from "../src/core/types.ts";
@@ -214,4 +216,46 @@ test("CLI scoped authoring commits once, inspects only perceived content and ret
   assert.equal(replay.commit.id, accepted.commit.id);
   assert.equal(replay.turn.id, accepted.turn.id);
   assert.equal(projectBranch(f.store, envelope(accepted.commit.id, "read")).transcript.length, 1);
+});
+
+test("body-only correction persists fresh projections and rejects audience changes without affecting the original path", async t => {
+  const f = await fixture(t);
+  const accepted = commitManualTurn(f.store, { ...envelope(f.started.root.id, "whisper"), payload: payload(whisper) });
+  const message = projectBranch(f.store, envelope(accepted.commit.id, "read")).transcript[0]!;
+  const corrected = correctTurnBody(f.store, { ownerScope: "local", simulationId: "scopes", sourceBranchId: "main",
+    expectedHead: accepted.commit.id, commandId: "correct", payload: { messageVersionId: message.messageVersionId!, text: whisper.replace("ferry rope", "purple lantern") } });
+  const query = { ownerScope: "local", simulationId: "scopes", branchId: corrected.branch.id, audience: [] };
+  assert.match(inspectActorContext(f.store, { ...query, actorId: "mara" }).subjective.transcript[0]!.text, /purple lantern/);
+  assert.equal(inspectActorContext(f.store, { ...query, actorId: "nell" }).subjective.transcript[0]!.text, heardWhisper);
+  assert.equal(inspectActorContext(f.store, { ...envelope(accepted.commit.id, "read"), actorId: "mara", audience: [] }).subjective.transcript[0]!.text, visibleWhisper);
+  assert.throws(() => correctTurnBody(f.store, { ownerScope: "local", simulationId: "scopes", sourceBranchId: corrected.branch.id,
+    expectedHead: corrected.commit.id, commandId: "routing-change", payload: { messageVersionId: message.messageVersionId!, text: whisper.replace('#Mara("', '#Nell("') } }), /Audience changes/);
+  validateSimulationArchive(f.store.exportSimulation("local", "scopes"));
+  await f.restart();
+  assert.match(inspectActorContext(f.store, { ...query, actorId: "corin" }).subjective.transcript[0]!.text, /purple lantern/);
+});
+
+test("standalone Reverie source and reflection callbacks receive only the observer projection", {
+  skip: !process.env.DOXVELT_REVERIE_EXECUTABLE && "Set DOXVELT_REVERIE_EXECUTABLE for native source/reflection verification.",
+}, async t => {
+  const f = await fixture(t);
+  const accepted = commitManualTurn(f.store, { ...envelope(f.started.root.id, "whisper"), payload: payload(whisper) });
+  commitManualTurn(f.store, { ...envelope(accepted.commit.id, "thought"), payload: payload("#Corin(PRIVATE_THOUGHT)") });
+  const captures: string[] = [];
+  const memory = new EpisodeMemory({ directory: path.join(f.root, "reverie"), executable: process.env.DOXVELT_REVERIE_EXECUTABLE!, modelKey: "deterministic", async reflect(request) {
+    const content = JSON.stringify(request.input);
+    captures.push(content);
+    assert.doesNotMatch(content, /baseAudience|projections|sourceOffsets|"recipients"/);
+    if (content.includes("[unintelligible]")) assert.doesNotMatch(content, /The key is under|PRIVATE_THOUGHT/);
+    return JSON.stringify({ memories: [{ gist: "I remember what I perceived.", detail: "", feeling: "", cues: ["ferry"], salience: 0.8, confidence: 0.7, sourceMessageIds: ["m1"] }], impressions: [] });
+  } });
+  try {
+    const query = { ownerScope: "local", simulationId: "scopes", branchId: "main" };
+    memory.setDate(f.store, query, "first", "2026-01-01");
+    const result = await memory.memorize(f.store, query, "first");
+    assert.equal(result.status, "published");
+    assert.equal(captures.length, 3);
+    assert.equal((await memory.memorize(f.store, query, "first")).status, "current");
+    assert.equal(captures.length, 3, "safe retry must reuse the accepted memory publication");
+  } finally { memory.close(); }
 });

@@ -126,3 +126,19 @@ export function projectTurn<T extends { actorId: string; text: string; audience:
   const projection = performance.projections.find(p => p.actorId === observerId);
   return projection ? { ...visible, text: projection.text, audience: [observerId] } : null;
 }
+
+/** A body-only correction keeps the saved audience structure and creates fresh projections. */
+export function correctScopedPerformance(
+  turn: { actorId: string; audience: string[]; performance?: ScopedPerformance }, text: string, identities: AuthoringIdentity[],
+): ScopedPerformance | undefined {
+  if (!turn.performance) return undefined;
+  const original = turn.performance;
+  const next = parsePerformance({ text, identities, actorId: turn.actorId, audience: original.baseAudience, syntax: original.syntax });
+  const routing = (performance: ScopedPerformance) => JSON.stringify([
+    performance.baseAudience, performance.spans.map(span => [span.audience, span.fallback !== null]),
+  ]);
+  if (next.actorId !== turn.actorId || routing(next.performance) !== routing(original) ||
+      JSON.stringify([...next.audience].sort()) !== JSON.stringify([...turn.audience].sort()))
+    throw new DomainValidationError("Audience changes require a replacement turn rather than a body-only correction.");
+  return next.performance;
+}

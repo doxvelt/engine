@@ -1,5 +1,6 @@
 import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
 import { parsePerformance, projectTurn } from "./audience-scopes.ts";
+import { branchBodyCorrections, invalidatedBodyClosures } from "./body-revisions.ts";
 import { compileWorkspace } from "./compiler.ts";
 import {
   applyAccessChange,
@@ -652,6 +653,7 @@ export function projectBranch(
     query.simulationId,
   );
   const transcript: TranscriptTurn[] = [];
+  const turnsByVersion = new Map<string, TranscriptTurn>();
   const audience = new Map<string, "active" | "inactive">();
   let accessLinks = [...revision.compiled.accessLinks];
   const beliefs: SubjectiveBeliefRecord[] = [...revision.compiled.beliefs];
@@ -660,6 +662,10 @@ export function projectBranch(
   const episodeMemories: EpisodeMemoryRecord[] = [];
   const longTermMemories: LongTermMemoryRecord[] = [];
   const memoryOperations: MemoryOperation[] = [];
+  const corrections = branchBodyCorrections(repository, branch);
+  const invalidatedClosures = invalidatedBodyClosures(repository, branch, commits, corrections);
+  const invalidatedMemoryIds = new Set<string>();
+  const invalidatedBeliefIds = new Set<string>();
   const detachedOperations = repository.listDetachedMemoryOperations(
     query.ownerScope, query.simulationId,
   );
@@ -671,8 +677,8 @@ export function projectBranch(
   for (const commit of commits)
     for (const event of commit.events) {
       switch (event.type) {
-        case "message_accepted":
-          transcript.push({
+        case "message_accepted": {
+          const turn: TranscriptTurn = {
             id: event.message.id,
             messageVersionId: event.message.id,
             logicalMessageId: event.message.logicalMessageId,
@@ -684,7 +690,12 @@ export function projectBranch(
             ...(event.message.performance ? { performance: event.message.performance } : {}),
             episodeId: null,
             createdAt: commit.createdAt,
-          });
+          };
+          transcript.push(turn);
+          turnsByVersion.set(event.message.id, turn);
+          break;
+        }
+        case "message_body_corrected":
           break;
         case "audience_changed":
           if (event.action === "remove") audience.delete(event.actorId);
@@ -722,7 +733,21 @@ export function projectBranch(
           const late = detachedOperations.filter(
             (operation) => operation.closureCommitId === commit.id,
           );
-          memoryOperations.push(...(late.length ? late : legacyClosureOperations(commit)));
+          const operations = late.length ? late : legacyClosureOperations(commit);
+          if (invalidatedClosures.has(commit.id)) {
+            for (const operation of operations) invalidatedMemoryIds.add(operation.memoryId);
+            for (const memory of [...closure.memories, ...closure.longTermMemories]) invalidatedMemoryIds.add(memory.id);
+            for (const belief of [...closure.extractedBeliefs, ...closure.retainedBeliefs]) invalidatedBeliefIds.add(belief.id);
+            closure.memories = [];
+            closure.longTermMemories = [];
+            closure.extractedBeliefs = [];
+            closure.retainedBeliefs = [];
+            closure.memoryOperations = [];
+          } else {
+            memoryOperations.push(...operations);
+            closure.retainedBeliefs = closure.retainedBeliefs.filter(belief =>
+              !("id" in belief.sourceBelief && invalidatedBeliefIds.has(belief.sourceBelief.id)));
+          }
           beliefs.push(
             ...closure.extractedBeliefs,
             ...closure.retainedBeliefs,
@@ -730,12 +755,19 @@ export function projectBranch(
           break;
         }
         case "memory_operation":
-          memoryOperations.push(event.operation);
+          if (!invalidatedMemoryIds.has(event.operation.memoryId)) memoryOperations.push(event.operation);
           break;
         default:
           assertNever(event);
       }
     }
+  for (const [versionId, correction] of corrections) {
+    const turn = turnsByVersion.get(versionId);
+    if (!turn) continue;
+    turn.text = correction.text;
+    if (correction.performance) turn.performance = correction.performance;
+    turn.bodyRevisionId = correction.commitId;
+  }
   const activeMemories = foldMemoryOperations(memoryOperations).active;
   const originalEpisodeMemories = episodeClosures.flatMap((item) => item.memories);
   const originalLongTermMemories = episodeClosures.flatMap(
@@ -781,6 +813,7 @@ export function inspectActorContext(
     audience?: string[];
     stageWhispers?: StageWhisperRecord[];
     turns?: TranscriptTurn[];
+    includeLongTermMemories?: boolean;
   },
 ): ActorContext {
   const projection = projectBranch(repository, query);
@@ -831,7 +864,7 @@ export function inspectActorContext(
     beliefs: projection.beliefs,
     accessLinks: projection.accessLinks,
     surfaces: revision.compiled.surfaces,
-    longTermMemories: projection.longTermMemories.filter(
+    longTermMemories: query.includeLongTermMemories === false ? [] : projection.longTermMemories.filter(
       (item) => item.actorId === actor.id,
     ),
     observedEntityIds,

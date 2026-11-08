@@ -1,4 +1,4 @@
-import { finalDraftAudience, prepareRouting, projectRoutingContext, routingInput } from "./candidate-routing.ts";
+import { capturedEpisodeRecall, finalDraftAudience, prepareRouting, projectRoutingContext, routingInput } from "./candidate-routing.ts";
 import {
   assertCompletedArtifact,
   assertRuntimeText,
@@ -245,7 +245,7 @@ export function validateReadyDraft(
       runtimeProfile: draft.runtimeProfile, promptPolicy: draft.promptPolicy, outputSchema: draft.outputSchema,
       skillDigests: draft.skillDigests, routing: routingInput(draft.routing) },
   }, whispers, draft.context && typeof draft.context === "object" && "correctionSource" in draft.context
-    ? draft.routing.source : null) : null;
+    ? draft.routing.source : null, capturedEpisodeRecall(draft.context)) : null;
   if (routed && !same(prepareRouting(repository, {
     ownerScope: draft.ownerScope, simulationId: draft.simulationId, branchId: draft.branchId,
     expectedHead: draft.basisHeadCommitId, commandId: draft.generationCommandId,

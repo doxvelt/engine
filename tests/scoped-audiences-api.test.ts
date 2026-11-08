@@ -12,6 +12,8 @@ import { inspectActorContext, projectBranch } from "../src/core/branch-kernel.ts
 import { validateSimulationArchive } from "../src/core/archive-verifier.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
 import type { BrowserStorage } from "../src/local-ui/lib/stage-recovery.ts";
+// @ts-expect-error DSH's host adapter is a JavaScript plugin loaded by the desktop host.
+import { savedEpisodeRequest } from "../scripts/dsh-gui-spike/saved-episode.mjs";
 
 async function fixture(t: test.TestContext) {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-scopes-api-"));
@@ -142,4 +144,31 @@ test("scoped defaults, fallback choice, frozen requests and historical scopes su
   await reopened.history.submit();
   assert.equal(reopened.history.error, "");
   assert.ok(reopened.history.target);
+});
+
+test("the maintained DSH host commits scoped text through the real API and replays the same occurrence", async t => {
+  const f = await fixture(t);
+  t.mock.method(globalThis, "fetch", f.fetcher);
+  const events: { type: string; data: Record<string, unknown> }[] = [];
+  const session = { get seq() { return events.length; }, append(type: string, data: Record<string, unknown>) { events.push({ type, data }); }, eventAt(index: number) { return events[index]; } };
+  const opened = await savedEpisodeRequest("http://stage.invalid", session, { mode: "open-saved", simulationId: "sim" });
+  assert.equal(opened.status, 200);
+  const status = await (await savedEpisodeRequest("http://stage.invalid", session, { mode: "scene-status" })).json();
+  const command = { mode: "perform", character: "Corin", audience: "!unset", audienceSyntax: "scoped-fallback-v1", requestId: crypto.randomUUID(), expectedHead: status.expectedHead,
+    body: '#Mara,Nell He whispers: #Mara(secret words|[unintelligible]) and steps back.' };
+  assert.equal((await savedEpisodeRequest("http://stage.invalid", session, command)).status, 200);
+  f.restart();
+  assert.equal((await savedEpisodeRequest("http://stage.invalid", session, command)).status, 200);
+  const bad = await savedEpisodeRequest("http://stage.invalid", session, { ...command, requestId: crypto.randomUUID(), body: "#Mara(unclosed" });
+  assert.equal(bad.status, 409, "stale preparation cannot mutate the branch");
+  const current = await (await savedEpisodeRequest("http://stage.invalid", session, { mode: "scene-status" })).json();
+  assert.equal((await savedEpisodeRequest("http://stage.invalid", session, { ...command, expectedHead: current.expectedHead, requestId: crypto.randomUUID(), body: "#Mara(unclosed" })).status, 400);
+  const store = await openBranchStore(f.dbPath).open();
+  try {
+    const q = { ownerScope: "local", simulationId: "sim", branchId: "main", audience: [] };
+    assert.equal(projectBranch(store, q).transcript.length, 1);
+    assert.equal(inspectActorContext(store, { ...q, actorId: "nell" }).subjective.transcript[0]!.text, "He whispers: [unintelligible] and steps back.");
+    assert.match(inspectActorContext(store, { ...q, actorId: "mara" }).subjective.transcript[0]!.text, /secret words/);
+    validateSimulationArchive(store.exportSimulation("local", "sim"));
+  } finally { store.close(); }
 });

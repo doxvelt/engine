@@ -1,6 +1,8 @@
 import { decodeAlternativeCommand, assertSupportedHistoricalEffects, originatingInput, resolveHistoricalSelection } from "./saved-alternatives.ts";
-import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
-import { assertAudienceSyntax, parsePerformance, projectTurn, validateScopedPerformance } from "./audience-scopes.ts";
+import { ACTOR_KNOWLEDGE_POLICY, DEFAULT_ACTOR_PROFILE } from "./types.ts";
+import { assertAudienceSyntax, correctScopedPerformance, parsePerformance, projectTurn, validateScopedPerformance } from "./audience-scopes.ts";
+import { branchBodyCorrections, invalidatedBodyClosures } from "./body-revisions.ts";
+import { turnCorrectionEvent } from "./turn-correction.ts";
 import { createHash } from "node:crypto";
 import {
   applyValidatedAccessChange,
@@ -29,7 +31,7 @@ import {
   decodeRecordedOutcome,
   decodeContentRevisionRecord,
 } from "./recorded-codec.ts";
-import type { SimulationArchive } from "./ports.ts";
+import type { CorrectTurnBodyCommand, RecordedOutcome, SimulationArchive } from "./ports.ts";
 import type {
   CommitRecord,
   AcceptDraftReceipt,
@@ -587,7 +589,7 @@ function validateBranchOriginCommand(
   }
   if (origin.kind === "edit") {
     if (
-      (input.kind !== "edit" && !(input.kind === "saved_alternative" && input.payload.request.action === "manual")) ||
+      (input.kind !== "edit" && input.kind !== "correct_turn_body" && !(input.kind === "saved_alternative" && input.payload.request.action === "manual")) ||
       input.branchId !== branch.id ||
       input.sourceBranchId !== origin.sourceBranchId ||
       input.expectedHead !== origin.sourceHeadCommitId ||
@@ -666,7 +668,7 @@ function validateCanonicalCommandInput(
   if (
     ![
       "start", "turn", "effects", "closure", "edit", "regenerate", "fork",
-      "whisper", "accept_draft", "saved_alternative", "revise_memory", "retract_memory",
+      "whisper", "accept_draft", "saved_alternative", "revise_memory", "retract_memory", "correct_turn_body",
     ].includes(String(input.kind)) ||
     input.ownerScope !== archive.simulation.ownerScope ||
     input.simulationId !== archive.simulation.id ||
@@ -690,6 +692,8 @@ function validateCanonicalCommandInput(
     validateStartInput(archive, command, decodedInput, result);
   else if (input.kind === "saved_alternative")
     validateSavedAlternative(archive, command);
+  else if (input.kind === "correct_turn_body")
+    validateTurnCorrection(archive, input, command.result);
   else if (input.kind === "accept_draft")
     validateAcceptedDraftCommandShape(archive, command, decodedInput, result);
   else if (["turn", "effects", "closure", "edit", "regenerate", "revise_memory", "retract_memory"].includes(
@@ -906,6 +910,7 @@ function validateTurnBasis(
     provenance: { operation: string };
   },
   sibling: boolean,
+  replacementActorId?: string,
 ): void {
   if (!isRecord(result.branch))
     throw invalidCommandResult(commandId, "turn branch mismatch");
@@ -949,7 +954,7 @@ function validateTurnBasis(
     !isAncestor(archive.commits, source.id, String(input.expectedHead)) ||
     commit.parentCommitId !== source.parentCommitId ||
     message.logicalMessageId !== sourceMessage.message.logicalMessageId ||
-    message.actorId !== sourceMessage.message.actorId ||
+    message.actorId !== (replacementActorId ?? sourceMessage.message.actorId) ||
     result.branch.name !== (input.branchName || defaultName)
   )
     throw invalidCommandResult(commandId, "sibling turn basis mismatch");
@@ -1315,7 +1320,15 @@ function validateClosureIntegrity(
       throw invalidCommandResult(commandId, "extracted belief provenance mismatch");
     addUniqueClosureId(commandId, recordIds, belief.id);
   }
-  const expectedRetained = deriveRetainedBeliefs({
+  const producingInput = archive.commandResults.find(result => result.commandId === commandId)?.canonicalInput;
+  const producingBranch = producingInput?.kind === "closure"
+    ? archive.branches.find(branch => branch.id === producingInput.branchId) : undefined;
+  const excludedClosureIds = producingBranch ? invalidatedBodyClosures({
+    getBranch: (_owner, _simulation, id) => archive.branches.find(branch => branch.id === id) ?? null,
+    getCommit: (_owner, _simulation, id) => archive.commits.find(commit => commit.id === id) ?? null,
+    listAncestors: (_owner, _simulation, head) => ancestryThrough(archive.commits, head),
+  }, producingBranch, ancestry) : new Set<string>();
+  const retentionInput = {
     simulationId: archive.simulation.id,
     commandId,
     episodeId,
@@ -1324,8 +1337,13 @@ function validateClosureIntegrity(
     initialBeliefs: archive.contentRevision.compiled.beliefs,
     initialAccessLinks: archive.contentRevision.compiled.accessLinks,
     ancestry,
-  });
-  if (stableStringify(closure.retainedBeliefs) !== stableStringify(expectedRetained))
+  };
+  const expectedRetained = deriveRetainedBeliefs({ ...retentionInput, excludedClosureIds });
+  // Older archives may contain the former closure-derived retention snapshot.
+  // Preserve its immutable provenance while the live projection withholds stale sources.
+  const matchesLegacy = excludedClosureIds.size > 0 &&
+    stableStringify(closure.retainedBeliefs) === stableStringify(deriveRetainedBeliefs(retentionInput));
+  if (stableStringify(closure.retainedBeliefs) !== stableStringify(expectedRetained) && !matchesLegacy)
     throw invalidCommandResult(commandId, "retained belief set mismatch");
   for (const belief of closure.retainedBeliefs)
     addUniqueClosureId(commandId, recordIds, belief.id);
@@ -1653,6 +1671,10 @@ function validateRuntimeEvent(value: unknown): void {
   if (value.type === "message_accepted") {
     exact(value, ["type", "message"], "message event");
     validateMessage(value.message);
+  } else if (value.type === "message_body_corrected") {
+    exact(value, ["type", "messageVersionId", "text", ...(Object.hasOwn(value, "performance") ? ["performance"] : [])], "turn correction event");
+    if (Object.hasOwn(value, "performance")) validateScopedPerformance(value.performance);
+    stringsOf(value, ["messageVersionId", "text"], "turn correction event");
   } else if (value.type === "audience_changed") {
     exact(value, ["type", "actorId", "action", "reason"], "audience event");
     stringsOf(value, ["actorId"], "audience event");
@@ -2280,6 +2302,36 @@ function validateAcceptedDraftCommandShape(
 }
 
 
+function validateTurnCorrection(archive: SimulationArchive, command: CorrectTurnBodyCommand, outcome: RecordedOutcome) {
+  const { ownerScope, simulationId, commandId, sourceBranchId, expectedHead } = command;
+  const fail = () => invalidCommandResult(commandId, "turn correction mismatch");
+  if (archive.schemaVersion !== 7 || outcome.kind !== "commit") throw fail();
+  const { commit, branch } = outcome;
+  const event = turnCorrectionEvent(command.payload);
+  const source = archive.branches.find(item => item.id === sourceBranchId);
+  const target = ancestryThrough(archive.commits, expectedHead).flatMap(item => item.events)
+    .find(item => item.type === "message_accepted" && item.message.id === event.messageVersionId);
+  if (!source || target?.type !== "message_accepted") throw fail();
+  const corrections = branchBodyCorrections({
+    getBranch: (_owner, _simulation, id) => archive.branches.find(item => item.id === id) ?? null,
+    getCommit: (_owner, _simulation, id) => archive.commits.find(item => item.id === id) ?? null,
+  }, source);
+  const previous = corrections.get(event.messageVersionId)?.text ?? target.message.text;
+  if (target.message.performance) {
+    event.performance = correctScopedPerformance({ ...target.message,
+      performance: corrections.get(event.messageVersionId)?.performance ?? target.message.performance }, event.text,
+      archive.contentRevision.compiled.entities.filter(entity => !!resolveTurnActor([entity], entity.id)))!;
+  }
+  if (previous === event.text || event.text !== command.payload.text ||
+      command.branchId !== domainId("correction_branch", ownerScope, simulationId, commandId) ||
+      branch.id !== command.branchId || branch.name !== "correction" || branch.headCommitId !== commit.id ||
+      branch.origin.kind !== "edit" || branch.origin.commandId !== commandId ||
+      branch.origin.sourceBranchId !== sourceBranchId || branch.origin.sourceHeadCommitId !== expectedHead ||
+      branch.origin.baseCommitId !== expectedHead ||
+      commit.id !== domainId("commit", ownerScope, simulationId, commandId) ||
+      commit.kind !== "effects" || commit.parentCommitId !== expectedHead || !equalSaved(commit.events, [event])) throw fail();
+}
+
 function validateSavedAlternative(archive: SimulationArchive, item: SimulationArchive["commandResults"][number]) {
   if (archive.schemaVersion !== 7) throw new Error("Saved alternatives require archive schema 7.");
   const command = decodeAlternativeCommand(item.canonicalInput);
@@ -2295,17 +2347,18 @@ function validateSavedAlternative(archive: SimulationArchive, item: SimulationAr
   assertSupportedHistoricalEffects(selection.selected);
   if (p.parentCommitId !== selection.parentCommitId || p.contentRevisionId !== archive.contentRevision.id ||
       !equalSaved(p.origin, originatingInput(repository, r)) ||
-      r.action === "generate" && p.completeWhisper !== (r.completeWhisper ?? p.origin.completeWhisper))
+      r.action === "generate" && p.completeWhisper !== (r.completeWhisper ?? (r.replacementActorId === undefined || r.replacementActorId === r.actorId ? p.origin.completeWhisper : null)))
     throw new Error("Historical input/origin receipt mismatch.");
-  requireArchiveActor(archive, r.commandId, r.actorId);
-  const audience = p.generated?.audience ?? normalizeAudience(r.actorId, r.audience!);
+  const actorId = r.replacementActorId ?? r.actorId;
+  requireArchiveActor(archive, r.commandId, actorId);
+  const audience = p.generated?.audience ?? normalizeAudience(actorId, r.audience!);
   for (const id of audience) requireArchiveActor(archive, r.commandId, id);
   if (p.generated) {
     const receipt = p.generated, routing = receipt.routing!;
     for (const id of routing.availableRecipientIds) requireArchiveActor(archive, r.commandId, id);
     if (routing.originalDraftId !== receipt.draftId || routing.originalGenerationCommandId !== receipt.generationCommandId ||
       routing.initialAudience !== null || routing.correction !== "" ||
-      !equalSaved(receipt.runtimeProfile, { id: "local-character", version: "v1" }) ||
+      !equalSaved(receipt.runtimeProfile, r.actorProfile ?? DEFAULT_ACTOR_PROFILE) ||
       !equalSaved(receipt.generatedArtifact.provenance.runtimeProfile, receipt.runtimeProfile) ||
       receipt.skillDigests.length ||
       archive.commandResults.some(other => other.commandId === receipt.generationCommandId ||
@@ -2314,22 +2367,22 @@ function validateSavedAlternative(archive: SimulationArchive, item: SimulationAr
   }
   const message = p.generated ? {
     id: domainId("message_version", r.ownerScope, r.simulationId, r.commandId), logicalMessageId: r.logicalMessageId,
-    actorId: r.actorId, text: p.generated.generatedArtifact.text, audience,
+    actorId, text: p.generated.generatedArtifact.text, audience,
     provenance: { mode: "generated" as const, operation: "regenerate" as const,
       sourceArtifactDigest: p.generated.generatedArtifact.digest, finalTextSource: "generated_verbatim" as const },
   } : buildManualMessage({ ownerScope: r.ownerScope, simulationId: r.simulationId, commandId: r.commandId,
-    actorId: r.actorId, text: r.manualText!.trim(), audience, logicalMessageId: r.logicalMessageId, operation: "edit" });
+    actorId, text: r.manualText!.trim(), audience, logicalMessageId: r.logicalMessageId, operation: "edit" });
   if (r.audienceSyntax) {
-    const scoped = parsePerformance({ text: r.manualText!, actorId: r.actorId, audience: r.audience,
+    const scoped = parsePerformance({ text: r.manualText!, actorId, audience: r.audience,
       syntax: r.audienceSyntax, identities: archive.contentRevision.compiled.entities.filter(entity => !!resolveTurnActor([entity], entity.id)) });
-    if (scoped.actorId !== r.actorId) throw new Error("Historical scoped performer changed.");
+    if (scoped.actorId !== actorId) throw new Error("Historical scoped performer changed.");
     message.performance = scoped.performance; message.audience = scoped.audience;
   }
   const events: RuntimeEvent[] = [{ type: "message_accepted", message }];
-  if (p.generated) events.push({ type: "stage_whisper_consumed", whisperId: domainId("alternative_input", domainId("saved_alternative", r.ownerScope, r.simulationId, r.commandId)), targetActorId: r.actorId, text: p.completeWhisper! });
+  if (p.generated) events.push({ type: "stage_whisper_consumed", whisperId: domainId("alternative_input", domainId("saved_alternative", r.ownerScope, r.simulationId, r.commandId)), targetActorId: actorId, text: p.completeWhisper! });
   if (commit.id !== domainId("commit", r.ownerScope, r.simulationId, r.commandId) || commit.kind !== "turn" ||
       commit.parentCommitId !== p.parentCommitId || !equalSaved(commit.events, events) || branch.headCommitId !== commit.id)
     throw new Error("Historical replacement event mismatch.");
-  validateTurnBasis(archive, r.commandId, command, { branch, commit }, commit, message, true);
+  validateTurnBasis(archive, r.commandId, command, { branch, commit }, commit, message, true, r.replacementActorId);
 }
 function equalSaved(a: unknown, b: unknown) { return stableStringify(a) === stableStringify(b); }

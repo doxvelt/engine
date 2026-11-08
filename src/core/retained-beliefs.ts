@@ -26,6 +26,7 @@ export function deriveRetainedBeliefs(input: {
   initialBeliefs: SubjectiveBeliefRecord[];
   initialAccessLinks: AccessLinkRecord[];
   ancestry: CommitRecord[];
+  excludedClosureIds?: ReadonlySet<string>;
 }): RetainedBeliefRecord[] {
   const actors = input.entities.filter(canHoldEpisodeMemory);
   const lostByActor = new Map(
@@ -72,7 +73,7 @@ export function deriveRetainedBeliefs(input: {
         beliefs.push(impression);
         continue;
       }
-      if (event.type === "episode_closed")
+      if (event.type === "episode_closed" && !input.excludedClosureIds?.has(commit.id))
         beliefs.push(
           ...event.closure.extractedBeliefs,
           ...event.closure.retainedBeliefs,

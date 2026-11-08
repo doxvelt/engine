@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { DatabaseSync } from "node:sqlite";
 import { compileWorkspace } from "../src/core/compiler.ts";
 import { commitManualTurn, forkBranch, commitRuntimeEffects, inspectActorContext, projectBranch, startBranchSimulationFromCompiled } from "../src/core/branch-kernel.ts";
 import { acceptActorTurnDraft, discardActorTurnDraft, generateActorTurnDraft } from "../src/core/draft-lifecycle.ts";
@@ -17,6 +18,8 @@ import type { CompiledWorkspace, ActorTurnDraftRecord } from "../src/core/types.
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
 import { DeterministicFakeRuntime } from "./helpers/deterministic-fake-runtime.ts";
 import type { RunActorTurnRequest } from "../src/agent-runtime/contracts.ts";
+import { EpisodeMemory } from "../src/memory/episodes.ts";
+import type { ReverieSource } from "../src/memory/reverie.ts";
 
 async function fixture(t: test.TestContext, customize?: (compiled: CompiledWorkspace) => void) {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-routing-"));
@@ -507,6 +510,73 @@ function knowledgeCommand(f: Awaited<ReturnType<typeof fixture>>, id: string, au
   Object.assign(command.payload.routing!, { version: 3, completeWhisper: "" });
   return command;
 }
+
+test("reflection speaker and recipient labels preserve hidden character identities", async t => {
+  const sentinel = "SECRET-TRUE-NAME";
+  const f = await fixture(t, compiled => { compiled.entities.find(actor => actor.id === "coo")!.name = sentinel; });
+  const spoken = commitManualTurn(f.store, { ...f.query, expectedHead: f.head, commandId: "hidden-speaker",
+    payload: { actorId: "coo", audience: ["ceo"], text: "Hello.", knowledgePolicy: "actor-knowledge-v1" } });
+  commitManualTurn(f.store, { ...f.query, expectedHead: spoken.commit.id, commandId: "hidden-recipient",
+    payload: { actorId: "ceo", audience: ["coo"], text: "I hear you.", knowledgePolicy: "actor-knowledge-v1" } });
+  const context = inspectActorContext(f.store, { ...f.query, actorId: "ceo" });
+  assert.doesNotMatch(context.promptPreview, /SECRET-TRUE-NAME/);
+  const executable = process.env.DOXVELT_REVERIE_EXECUTABLE;
+  const reflected: string[] = [];
+  const memory = new EpisodeMemory({ directory: path.join(f.root, "memory"), executable: executable ?? "", modelKey: "fixture",
+    async reflect(request) {
+      const input = request.input as { nativeEpisode: { characterFoundation: string } };
+      if (input.nativeEpisode.characterFoundation === "The remembering character is CEO.") {
+        assert.doesNotMatch(JSON.stringify(request), /SECRET-TRUE-NAME/);
+        reflected.push(input.nativeEpisode.characterFoundation);
+      }
+      return JSON.stringify({ memories: [{ gist: "I remember coo saying hello.", feeling: "", detail: "",
+        salience: 0.9, confidence: 0.8, cues: ["hello"], sourceMessageIds: ["m1"] }], impressions: [] });
+    } });
+  try {
+    // Inspect the source boundary without needing a separately installed native executable.
+    const scenes = (memory as unknown as { scenes: (repository: typeof f.store, query: typeof f.query) =>
+      { sources: { characterId: string; observation: ReverieSource }[] }[] }).scenes(f.store, f.query);
+    const source = scenes[0]!.sources.find(item => item.characterId === "ceo")!.observation;
+    assert.doesNotMatch(JSON.stringify(source), /SECRET-TRUE-NAME/);
+    assert.deepEqual(source.messages.map(message => JSON.parse(message.text)), [
+      { speaker: "coo", recipients: ["CEO"], performance: "Hello." },
+      { speaker: "CEO", recipients: ["coo"], performance: "I hear you." },
+    ]);
+    memory.setDate(f.store, f.query, "first", "2000-01-01");
+    const simulation = f.store.getSimulation(f.query.ownerScope, f.query.simulationId)!;
+    const transcript = projectBranch(f.store, f.query).transcript;
+    const legacyRevision = sha256(JSON.stringify(["first", "2000-01-01", simulation.contentRevisionId,
+      transcript.map(turn => turn.bodyRevisionId ?? turn.messageVersionId ?? turn.id)]));
+    const legacy = { id: "legacy-publication", slot: "first", revision: legacyRevision, date: "2000-01-01",
+      label: "Old episode", dependencies: [], characters: [{ characterId: "ceo", file: "unused.sqlite",
+        memories: [{ gist: sentinel, detail: "", feeling: "", sourceMessageIds: [] }], impressions: [] }] };
+    const catalog = new DatabaseSync(path.join(f.root, "memory/catalog.sqlite"));
+    try {
+      catalog.prepare("INSERT INTO memory_versions VALUES (?, ?, ?, ?)").run(legacy.id,
+        sha256(JSON.stringify([f.query.ownerScope, f.query.simulationId])), legacy.slot, JSON.stringify(legacy));
+    } finally { catalog.close(); }
+    const inspected = memory.inspect(f.store, f.query)[0]!;
+    assert.equal(inspected.status, "drifted");
+    assert.deepEqual(inspected.memories, []);
+    if (executable) {
+      assert.equal((await memory.memorize(f.store, f.query, "first")).status, "published");
+      assert.equal(reflected.length, 1);
+      const head = f.store.getBranch(f.query.ownerScope, f.query.simulationId, f.query.branchId)!.headCommitId;
+      const closed = await closeBranchEpisode(f.store, { ...f.query, expectedHead: head, commandId: "close-hidden",
+        payload: { label: "A greeting" } });
+      memory.setDate(f.store, f.query, closed.closure.episode.id, "2001-01-01");
+      const recall = await memory.recall(f.store, f.query, "ceo", "hello");
+      assert.match(JSON.stringify(recall), /coo saying hello/);
+      assert.doesNotMatch(JSON.stringify(recall), /SECRET-TRUE-NAME/);
+      const command = knowledgeCommand(f, "recall-hidden", ["coo"]);
+      command.expectedHead = closed.commit.id;
+      const draft = (await generateActorTurnDraft(f.store, runtime(["ceo"]), command, { episodeRecall: recall })).draft;
+      assert.equal(draft.status, "ready");
+      assert.match(draft.prompt, /coo saying hello/);
+      assert.doesNotMatch(draft.prompt, /SECRET-TRUE-NAME/);
+    }
+  } finally { memory.close(); }
+});
 
 test("actor knowledge ignores stale presence and acceptance never converts absent recipients into observations", async t => {
   const f = await fixture(t);

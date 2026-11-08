@@ -31,8 +31,8 @@ test("reopened historical editor cancels to the selected immutable turn, even wh
 });
 
 test("pending continuation exposes the actual Retry request control without a transient error", async () => {
-  const source = (await readFile(new URL("../src/local-ui/pages/stage.vue", import.meta.url), "utf8")).replaceAll("\r\n", "\n");
-  const template = source.slice(source.indexOf("<template>") + 10, source.indexOf("</template>\n\n<script"));
+  const source = await readFile(new URL("../src/local-ui/pages/stage.vue", import.meta.url), "utf8");
+  const template = source.slice(source.indexOf("<template>") + 10, source.search(/<\/template>\r?\n\r?\n<script/));
   const root = baseParse(template);
   let retryAncestors: ElementNode[] | undefined;
   function visit(node: { type: number; children?: unknown[] }, ancestors: ElementNode[]) {

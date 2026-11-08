@@ -1,6 +1,7 @@
 import { createSavedAlternative, discoverSavedAlternatives, originatingInput, type HistoricalSelection } from "../core/saved-alternatives.ts";
-import { ACTOR_KNOWLEDGE_POLICY } from "../core/types.ts";
+import { ACTOR_KNOWLEDGE_POLICY, DEFAULT_ACTOR_PROFILE, type RuntimeProfileRef } from "../core/types.ts";
 import { assertAudienceSyntax } from "../core/audience-scopes.ts";
+import { correctTurnBody } from "../core/turn-correction.ts";
 import { ROUTING_POLICY, routingInput } from "../core/candidate-routing.ts";
 import { navigationToken } from "../application/simulation-collection.ts";
 import path from "node:path";
@@ -45,6 +46,7 @@ import {
   writeSourceText,
 } from "../core/source.ts";
 import type { ActorTurnRuntime } from "../agent-runtime/contracts.ts";
+import type { EpisodeMemory } from "../memory/episodes.ts";
 import {
   openBranchStore,
   type SqliteSimulationRepository,
@@ -62,9 +64,22 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
 ];
+type ActorConfiguration = {
+  characterId: string | null;
+  key: string;
+  label: string;
+  profile: RuntimeProfileRef;
+  runtime: ActorTurnRuntime;
+};
+
 export type LocalApiOptions = {
+  runtimeDiagnostic?: () => string | null;
   dbPath?: string;
   actorTurnRuntime?: ActorTurnRuntime;
+  actorTurnRuntimes?: ReadonlyMap<string, ActorTurnRuntime>;
+  actorConfigurations?: readonly ActorConfiguration[];
+  episodeMemory?: EpisodeMemory;
+  sceneHeadings?: import("../store/scene-headings.ts").SceneHeadingStore;
   allowedOrigins?: readonly string[];
 };
 export function createLocalApiServer(options: LocalApiOptions = {}) {
@@ -95,8 +110,11 @@ export async function handleLocalApiRequest(
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
   if (method === "GET" && url.pathname === "/health")
     return send(response, 200, { ok: true });
-  if (method === "GET" && url.pathname === "/runtime")
-    return send(response, 200, runtimeStatus(options.actorTurnRuntime));
+  if (method === "GET" && url.pathname === "/runtime") {
+    const runtime = options.actorTurnRuntime ?? options.actorTurnRuntimes?.values().next().value
+      ?? options.actorConfigurations?.[0]?.runtime;
+    return send(response, 200, { ...runtimeStatus(runtime), diagnostic: options.runtimeDiagnostic?.() ?? null });
+  }
   if (parts[0] === "source")
     return sourceRoute(method, parts, url, request, response);
   if (method === "POST" && parts[0] === "packages") {
@@ -190,17 +208,29 @@ export async function handleLocalApiRequest(
       const projection = projectBranch(store, query(url, simulation));
       const revision = content(store, ownerScope, simulationId);
       const scenario = revision.compiled.scenarios.find(item => item.id === simulation.scenarioId);
+      const actors = revision.compiled.entities.filter(canOwnTurn);
       const result: StageProjection = {
         scenarioName: scenario?.name || simulation.scenarioId || "Stage",
         branch: projection.branch,
         transcript: projection.transcript,
+        ...(options.sceneHeadings ? { sceneHeadings: options.sceneHeadings.list(store, query(url, simulation)) } : {}),
+        episodes: projection.episodeClosures.map(({ episode }, index) => ({
+          id: episode.id, label: episode.label || "Episode " + (index + 1),
+        })),
         audience: projection.audience,
-        actors: revision.compiled.entities.filter(canOwnTurn).map(actor => ({
+        generationActorIds: actors.filter(actor => actorRuntimeFor(options, actor.id).runtime).map(actor => actor.id),
+        ...(options.actorConfigurations ? { actorConfigurations: actors.flatMap(actor => configurationsFor(options, actor.id)
+          .map(({ key, label, profile }) => ({ characterId: actor.id, key, label, profile }))) } : {}),
+        actors: actors.map(actor => ({
           id: actor.id, kind: actor.kind,
           name: actor.visibility === "public" ? actor.name : actor.id,
         })),
       };
       return send(response, 200, result);
+    }
+    if (method === "POST" && parts[2] === "scene-headings" && parts.length === 3 && options.sceneHeadings) {
+      const body = await bodyOf(request);
+      return send(response, 200, { heading: options.sceneHeadings.create(store, envelope(body, ownerScope, simulationId), required(body, "title")) });
     }
     if (method === "GET" && parts[2] === "actors")
       return send(response, 200, {
@@ -352,6 +382,16 @@ export async function handleLocalApiRequest(
         sourceCommitId: required(body, "sourceCommitId"), messageVersionId: required(body, "messageVersionId"),
         logicalMessageId: required(body, "logicalMessageId"), actorId: required(body, "actorId"),
       });
+      const historicalGeneration = (sourceBranchId: string) => {
+        const signal = new AbortController();
+        response.once?.("close", () => signal.abort());
+        const memory = options.episodeMemory;
+        return {
+          signal: signal.signal,
+          ...(memory ? { recall: (head: string, actorId: string, whisper: string) => memory.recall(store,
+            { ownerScope, simulationId, branchId: sourceBranchId, head }, actorId, whisper, signal.signal) } : {}),
+        };
+      };
       if (method === "POST" && parts[3] === "origin" && parts.length === 4) {
         const body = await bodyOf(request);
         if (Object.keys(body).some(key => !["sourceBranchId", "expectedHead", "sourceCommitId", "messageVersionId", "logicalMessageId", "actorId"].includes(key)))
@@ -366,7 +406,17 @@ export async function handleLocalApiRequest(
       }
       if (method === "POST" && parts.length === 3) {
         const body = await bodyOf(request);
-        const result = await createSavedAlternative(store, options.actorTurnRuntime, { ...body, ownerScope, simulationId } as Parameters<typeof createSavedAlternative>[2]);
+        rejectRuntimeSelection(body);
+        const sourceBranchId = required(body, "sourceBranchId");
+        const actorId = body.replacementActorId === undefined ? required(body, "actorId") : required(body, "replacementActorId");
+        const configuration = selectedActorConfiguration(body);
+        if (configuration && body.action !== "generate") throw new HttpError(400, "Only an actor uses a model configuration.");
+        const { actorConfiguration: _choice, ...alternative } = body;
+        const { runtime, profile } = actorRuntimeFor(options, actorId, configuration);
+        const actorProfile = body.action === "generate" && profile !== DEFAULT_ACTOR_PROFILE ? { actorProfile: profile } : {};
+        const result = await createSavedAlternative(store, runtime,
+          { ...alternative, ownerScope, simulationId, ...actorProfile } as Parameters<typeof createSavedAlternative>[2],
+          body.action === "generate" ? historicalGeneration(sourceBranchId) : undefined);
         return send(response, 200, { operation: stageAlternativeDetail(result.operation, store), replayed: result.replayed });
       }
       if (parts[3]) {
@@ -381,8 +431,10 @@ export async function handleLocalApiRequest(
         if (method === "POST" && parts[4] === "retry" && parts.length === 5) {
           const body = await bodyOf(request);
           if (Object.keys(body).some(k => k !== "commandId")) throw new HttpError(400, "Historical retry accepts only commandId.");
-          const result = await createSavedAlternative(store, options.actorTurnRuntime, { ...operation.request,
-            commandId: required(body, "commandId"), retryOf: operation.id });
+          const original = operation.request;
+          const result = await createSavedAlternative(store, actorRuntimeFor(options, original.replacementActorId ?? original.actorId, original.actorProfile).runtime, {
+            ...original, commandId: required(body, "commandId"), retryOf: operation.id,
+          }, historicalGeneration(original.sourceBranchId));
           return send(response, 200, { operation: stageAlternativeDetail(result.operation, store), replayed: result.replayed });
         }
       }
@@ -399,10 +451,20 @@ export async function handleLocalApiRequest(
       rejectRuntimeSelection(body);
       if (body.draftingPolicy !== undefined && body.draftingPolicy !== ROUTING_POLICY && body.draftingPolicy !== ACTOR_KNOWLEDGE_POLICY)
         throw new HttpError(400, "Unsupported drafting policy.");
-      if (!options.actorTurnRuntime)
+      const actorId = required(body, "actorId");
+      const { runtime: actorRuntime, profile } = actorRuntimeFor(options, actorId, selectedActorConfiguration(body));
+      if (!actorRuntime)
         throw new HttpError(503, "No local actor-turn runtime is configured.");
       const knowledge = body.draftingPolicy === ACTOR_KNOWLEDGE_POLICY;
       const routed = knowledge || body.draftingPolicy === ROUTING_POLICY;
+      if (body.fixedAudience !== undefined && typeof body.fixedAudience !== "boolean")
+        throw new HttpError(400, "fixedAudience must be a boolean.");
+      const fixedAudience = body.fixedAudience === true;
+      if (fixedAudience && (!knowledge || !Array.isArray(body.audience)))
+        throw new HttpError(400, "A fixed audience requires an explicit audience and actor knowledge policy.");
+      const audienceLimit = Object.hasOwn(body, "audienceLimit") ? requiredStrings(body, "audienceLimit") : undefined;
+      if (audienceLimit && (!knowledge || fixedAudience || body.audience != null))
+        throw new HttpError(400, "An audience limit requires an actor choice.");
       if (knowledge && typeof body.completeWhisper !== "string")
         throw new HttpError(400, "New actor knowledge policy requires completeWhisper.");
       const base = envelope(body, ownerScope, simulationId);
@@ -419,22 +481,29 @@ export async function handleLocalApiRequest(
               .audience.filter((item) => item.status === "active")
               .map((item) => item.actorId)
           : strings(body, "audience");
-      const result = await generateActorTurnDraft(store, options.actorTurnRuntime, {
+      const operation = knowledge && options.episodeMemory ? new AbortController() : undefined;
+      if (operation) response.once("close", () => operation.abort());
+      const episodeRecall = operation && options.episodeMemory
+        ? await options.episodeMemory.recall(store, { ...base, head: base.expectedHead }, actorId,
+          typeof body.completeWhisper === "string" ? body.completeWhisper : "", operation.signal)
+        : undefined;
+      const result = await generateActorTurnDraft(store, actorRuntime, {
         ...base,
         payload: {
-          actorId: required(body, "actorId"),
+          actorId,
           audience,
           stageWhisperIds: strings(body, "stageWhisperIds"),
-          runtimeProfile: { id: "local-character", version: "v1" },
+          runtimeProfile: profile,
           promptPolicy: { id: knowledge ? ACTOR_KNOWLEDGE_POLICY : routed ? ROUTING_POLICY : "default", version: "v1" },
           outputSchema: routed ? { id: "audience-proposal", digest: "v1" } : { id: "screenplay", digest: "schema-v1" },
           ...(routed ? { routing: { version: knowledge ? 3 as const : 1 as const,
             ...(knowledge ? { completeWhisper: body.completeWhisper as string } : {}),
-            initialAudience: body.audience == null ? null : audience, correction: "", correctedAudience: null,
+            initialAudience: fixedAudience || body.audience == null ? null : audience, correction: "", correctedAudience: fixedAudience ? audience : null,
+            ...(audienceLimit ? { audienceLimit } : {}),
             preservedText: null, sourceDraftId: null } } : {}),
           skillDigests: [],
         },
-      });
+      }, { ...(operation ? { signal: operation.signal } : {}), ...(episodeRecall === undefined ? {} : { episodeRecall }) });
       return send(response, 200, { ...result, draft: stageDraft(result.draft) });
     }
     if (method === "GET" && parts[2] === "drafts" && parts.length === 3) {
@@ -465,9 +534,10 @@ export async function handleLocalApiRequest(
       if (typeof correction !== "string") throw new HttpError(400, "correction must be text.");
       if (body.preservedText !== undefined && typeof body.preservedText !== "string")
         throw new HttpError(400, "preservedText must be text.");
-      if (body.preservedText === undefined && !options.actorTurnRuntime)
+      const { runtime: actorRuntime } = actorRuntimeFor(options, original.actorId, original.runtimeProfile);
+      if (body.preservedText === undefined && !actorRuntime)
         throw new HttpError(503, "No local actor-turn runtime is configured.");
-      const result = await generateActorTurnDraft(store, options.actorTurnRuntime || directorOnlyRuntime, {
+      const result = await generateActorTurnDraft(store, actorRuntime || directorOnlyRuntime, {
         ownerScope, simulationId, branchId: original.branchId, expectedHead: original.basisHeadCommitId,
         commandId: required(body, "commandId"), payload: {
           actorId: original.actorId, audience: audience ?? original.routing.initialAudience ?? [], stageWhisperIds: original.stageWhispers.map(item => item.id),
@@ -486,8 +556,9 @@ export async function handleLocalApiRequest(
         throw new HttpError(400, "Retry accepts only a commandId; routing is captured by the original draft.");
       const original = store.getActorTurnDraft(ownerScope, simulationId, parts[3]);
       if (!original) throw new HttpError(404, "Draft not found.");
-      if (!options.actorTurnRuntime && original.routing?.preservedText == null) throw new HttpError(503, "No local actor-turn runtime is configured.");
-      const result = await generateActorTurnDraft(store, options.actorTurnRuntime || directorOnlyRuntime, {
+      const { runtime: actorRuntime } = actorRuntimeFor(options, original.actorId, original.runtimeProfile);
+      if (!actorRuntime && original.routing?.preservedText == null) throw new HttpError(503, "No local actor-turn runtime is configured.");
+      const result = await generateActorTurnDraft(store, actorRuntime || directorOnlyRuntime, {
         ownerScope, simulationId, branchId: original.branchId,
         expectedHead: original.basisHeadCommitId, commandId: required(body, "commandId"),
         payload: {
@@ -612,6 +683,16 @@ export async function handleLocalApiRequest(
         ),
       });
     }
+    if (method === "POST" && parts[2] === "correct-turn-body" && parts.length === 3) {
+      const body = await bodyOf(request);
+      if (Object.keys(body).some(key => !["sourceBranchId", "expectedHead", "commandId", "messageVersionId", "text"].includes(key)))
+        throw new HttpError(400, "Save correction changes only the performance wording.");
+      return send(response, 200, correctTurnBody(store, {
+        ownerScope, simulationId, sourceBranchId: required(body, "sourceBranchId"),
+        expectedHead: required(body, "expectedHead"), commandId: required(body, "commandId"),
+        payload: { messageVersionId: required(body, "messageVersionId"), text: required(body, "text") },
+      }));
+    }
     if (method === "POST" && parts[2] === "edit") {
       const body = await bodyOf(request);
       const base = envelope(body, ownerScope, simulationId);
@@ -666,6 +747,21 @@ export async function handleLocalApiRequest(
           name: optional(body, "name") || null,
         }),
       );
+    }
+    if (parts[2] === "episode-memory" && options.episodeMemory) {
+      const memory = options.episodeMemory;
+      if (method === "GET" && parts.length === 3)
+        return send(response, 200, { episodes: memory.inspect(store, query(url, simulation)) });
+      if (method === "POST" && (parts[3] === "date" || parts[3] === "memorize") && parts.length === 4) {
+        const body = await bodyOf(request);
+        const base = envelope(body, ownerScope, simulationId);
+        assertExpectedBranchHead(store, base);
+        const slot = required(body, "slot");
+        if (parts[3] === "date") return send(response, 200, { episodes: memory.setDate(store, base, slot, required(body, "date")) });
+        const operation = new AbortController();
+        response.once("close", () => operation.abort());
+        return send(response, 200, await memory.memorize(store, base, slot, operation.signal));
+      }
     }
     if (method === "POST" && parts[2] === "episodes" && parts[3] === "close") {
       const body = await bodyOf(request);
@@ -992,6 +1088,7 @@ function rejectRuntimeSelection(body: Record<string, unknown>): void {
     "modelId",
     "baseUrl",
     "runtimeProfile",
+    "actorProfile",
     "promptPolicy",
     "outputSchema",
     "skills",
@@ -1003,11 +1100,33 @@ function rejectRuntimeSelection(body: Record<string, unknown>): void {
   }
 }
 
+function selectedActorConfiguration(body: Record<string, unknown>) {
+  return Object.hasOwn(body, "actorConfiguration") ? required(body, "actorConfiguration") : undefined;
+}
+
+function configurationsFor(options: LocalApiOptions, actorId: string) {
+  const all = options.actorConfigurations ?? [];
+  const specific = all.filter(configuration => configuration.characterId === actorId);
+  return specific.length ? specific : all.filter(configuration => configuration.characterId === null);
+}
+
+function actorRuntimeFor(options: LocalApiOptions, actorId: string, requested?: string | RuntimeProfileRef) {
+  const available = configurationsFor(options, actorId);
+  const recorded = typeof requested === "object" ? requested : undefined;
+  const exactProfile = recorded && (recorded.id !== DEFAULT_ACTOR_PROFILE.id || recorded.version !== DEFAULT_ACTOR_PROFILE.version);
+  const match = typeof requested === "string" ? available.find(item => item.key === requested)
+    : exactProfile ? available.find(item => item.profile.id === recorded.id && item.profile.version === recorded.version)
+    : available[0];
+  if (!match && (typeof requested === "string" || exactProfile))
+    throw new HttpError(409, "That actor configuration is unavailable for this character.");
+  return match ?? { runtime: options.actorTurnRuntimes?.get(actorId) ?? options.actorTurnRuntime, profile: DEFAULT_ACTOR_PROFILE };
+}
+
 function runtimeStatus(runtime: ActorTurnRuntime | undefined) {
   const identity = runtime?.identity;
   return {
     configured: Boolean(runtime),
-    runtimeProfile: { id: "local-character", version: "v1" },
+    runtimeProfile: DEFAULT_ACTOR_PROFILE,
     adapter: runtime
       ? {
           id: publicRuntimeIdentity(identity?.id),

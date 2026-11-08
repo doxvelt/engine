@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { projectTurn } from "./audience-scopes.ts";
+import { invalidatedBodyClosures } from "./body-revisions.ts";
 import {
   assertExpectedBranchHead,
   inspectActorContext,
@@ -350,6 +351,7 @@ async function generate(
     initialBeliefs: revision.compiled.beliefs,
     initialAccessLinks: revision.compiled.accessLinks,
     ancestry: projection.commits,
+    excludedClosureIds: invalidatedBodyClosures(repository, projection.branch, projection.commits),
   });
   return {
     operations,

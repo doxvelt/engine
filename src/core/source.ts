@@ -1,15 +1,19 @@
 import {
   lstat,
+  link,
   mkdir,
   open,
   readdir,
   readFile,
   realpath,
+  rename,
   rm,
   stat,
+  unlink,
   writeFile,
 } from "node:fs/promises";
 import { constants } from "node:fs";
+import { randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "./frontmatter.ts";
@@ -145,6 +149,33 @@ export async function writeSourceText(
     path: path.relative(root, absolutePath).replaceAll("\\", "/"),
     text
   };
+}
+
+/** Publish a reviewed source replacement without exposing a truncated file. */
+export async function publishSourceText(workspacePath: string, relativePath: string, text: string, expectedText: string | null, signal?: AbortSignal) {
+  const root = path.resolve(workspacePath);
+  const target = resolveSourcePath(root, relativePath);
+  const rootReal = await validateWorkspaceRoot(root);
+  signal?.throwIfAborted();
+  await createSafeSourceDirectories(root, path.dirname(target), rootReal);
+  await validateExistingSourcePath(root, target, rootReal, true);
+  await requireRegularSourceTarget(target, true);
+  const temporary = path.join(path.dirname(target), "." + path.basename(target) + "." + randomUUID() + ".tmp");
+  try {
+    const handle = await open(temporary, "wx", 0o600);
+    try { await handle.writeFile(text, "utf8"); await handle.sync(); }
+    finally { await handle.close(); }
+    let current: string | null = null;
+    try { current = (await readSourceText(root, relativePath)).text; }
+    catch (error) { if (!isNodeError(error) || error.code !== "ENOENT") throw error; }
+    if (current !== expectedText) throw new Error("Source changed before publication. Reopen it before saving.");
+    signal?.throwIfAborted();
+    if (expectedText === null) {
+      // Exclusive publication also prevents a competing creator being overwritten.
+      await link(temporary, target);
+    } else await rename(temporary, target);
+    return { root, path: path.relative(root, target).replaceAll("\\", "/"), text };
+  } finally { await unlink(temporary).catch(error => { if (!isNodeError(error) || error.code !== "ENOENT") throw error; }); }
 }
 
 export async function deleteWorkspaceSource(workspacePath: string): Promise<{ root: string; deleted: true }> {

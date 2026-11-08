@@ -1089,7 +1089,7 @@ export class SqliteSimulationRepository
     const memoryJobTransitions = this.listMemoryJobTransitions(ownerScope, simulationId);
     const detachedMemoryOperations = this.listDetachedMemoryOperations(ownerScope, simulationId);
     return {
-      schemaVersion: commandResults.some(item => item.canonicalInput.kind === "saved_alternative") ? 7 : 6,
+      schemaVersion: commandResults.some(item => item.canonicalInput.kind === "saved_alternative" || item.canonicalInput.kind === "correct_turn_body") ? 7 : 6,
       contentRevision,
       simulation,
       branches,

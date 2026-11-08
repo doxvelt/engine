@@ -1,5 +1,7 @@
 # Target Architecture
 
+> The DSH runtime and play prototype supersede the Pi adapter selection below. See [Agent Runtime](AGENT_RUNTIME.md) and [the DSH spike](../spikes/DSH_GUI_SPIKE.md) for the current host integration.
+
 > Approved correction: [Actor Knowledge](ACTOR_KNOWLEDGE.md) supersedes older
 > presence-derived observation and selective-context targets. All legitimate
 > branch-relative knowledge is supplied upfront; outgoing recipients grant no

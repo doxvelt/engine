@@ -275,6 +275,17 @@ test("frontmatter parser accepts yaml-only files with closing fence at EOF", () 
   assert.equal(parsed.body, "");
 });
 
+test("frontmatter decodes JSON-quoted strings and preserves legacy literal paths", () => {
+  for (const value of ['The "Old" Harbor \\ North', "Mara's landing", "true", "[north, south]", "雪の港"])
+    assert.equal(parseFrontmatter(`---\nname: ${JSON.stringify(value)}\n---`).data.name, value);
+  assert.equal(parseFrontmatter(String.raw`---
+name: "C:\Users\Mara"
+---`).data.name, String.raw`C:\Users\Mara`);
+  assert.equal(parseFrontmatter(String.raw`---
+name: 'C:\north\harbor'
+---`).data.name, String.raw`C:\north\harbor`);
+});
+
 test("OpenAI-compatible model diagnostics normalize valid base URLs", () => {
   const model = modelRecord({
     base_url: "http://localhost:11434/v1/",
