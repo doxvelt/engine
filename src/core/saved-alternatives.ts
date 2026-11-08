@@ -99,7 +99,7 @@ export function validateAlternativeRequest(value: unknown): AlternativeRequest {
   if (r.action === "manual") {
     if (Object.hasOwn(r, "audienceSyntax")) assertAudienceSyntax(r.audienceSyntax);
     assertRuntimeText(r.manualText, "Manual performance");
-    if (!r.audience || r.completeWhisper !== undefined || r.retryOf !== undefined) throw new DomainValidationError("Manual editing requires concrete audience and performance only.");
+    if ((r.audience === null && !r.audienceSyntax) || r.completeWhisper !== undefined || r.retryOf !== undefined) throw new DomainValidationError("Manual editing requires concrete audience or scoped authoring, and performance only.");
   } else if (r.manualText !== undefined || Object.hasOwn(r, "audienceSyntax")) throw new DomainValidationError("Generation cannot supply manual authoring.");
   return structuredClone(r);
 }
@@ -280,7 +280,7 @@ export function buildAlternativeCommit(repository: SavedAlternativeRepository, o
   } else {
     commit = buildManualCommit(repository, { ownerScope: r.ownerScope, simulationId: r.simulationId, branchId: r.sourceBranchId,
       expectedHead: operation.parentCommitId, commandId: r.commandId,
-      payload: { actorId, text: r.manualText!, audience: r.audience!, stageWhisperIds: [], knowledgePolicy: "actor-knowledge-v1",
+      payload: { actorId, text: r.manualText!, audience: r.audience, stageWhisperIds: [], knowledgePolicy: "actor-knowledge-v1",
         ...(r.audienceSyntax ? { audienceSyntax: r.audienceSyntax } : {}) } },
     { logicalMessageId: r.logicalMessageId, operation: "edit" });
     commit.createdAt = operation.createdAt;

@@ -19,7 +19,7 @@ function editor(x: unknown): boolean {
     exact(Object.fromEntries(Object.entries(x).filter(([key]) => key !== "audienceSyntax")), ["selection", "action", "performance", "whisper", "confirmed", "audience", "propose", "revision"]) &&
     exact(x.selection, selectionKeys) && object(x.selection) && Object.values(x.selection).every(text) &&
     ["manual", "generate"].includes(String(x.action)) && text(x.performance) && text(x.whisper) && typeof x.confirmed === "boolean" &&
-    ids(x.audience) && typeof x.propose === "boolean" && Number.isSafeInteger(x.revision) && Number(x.revision) >= 0;
+    (ids(x.audience) || x.audience === null && Object.hasOwn(x, "audienceSyntax")) && typeof x.propose === "boolean" && Number.isSafeInteger(x.revision) && Number(x.revision) >= 0;
 }
 /** Stored data is untrusted. Only the bounded Stage command transports can replay. */
 export function validFrozenRequest(x: unknown): x is FrozenRequest {

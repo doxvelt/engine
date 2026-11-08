@@ -49,6 +49,20 @@ test("both authored examples and actor-primary precedence", () => {
   assert.equal(projected(own, "nell"), "fallback");
 });
 
+test("fallback occurrences require primary content, including within a shared performance", () => {
+  for (const text of ["#Mara(|she nods)", "#Mara( \n\t|she nods)", "Shared #Mara(|she nods)", "#Mara(|)"])
+    assert.throws(() => parse(text, ["mara", "nell"], "scoped-fallback-v1"), /nonempty primary/);
+  assert.equal(projected(parse("#Mara(She nods.|she nods)", ["mara", "nell"], "scoped-fallback-v1"), "corin"), "She nods.");
+});
+
+test("authored spacing is preserved, including the documented way to scope connective whitespace", () => {
+  assert.equal(projected(parse("Hello #Mara(secret) world"), "nell"), "Hello  world");
+  const connected = parse("Hello #Mara(secret )world");
+  assert.equal(projected(connected, "nell"), "Hello world");
+  assert.equal(projected(connected, "mara"), "Hello secret world");
+  assert.equal(projected(connected, "corin"), "Hello secret world");
+});
+
 test("private thought, fully scoped content, explicit markers and actor override", () => {
   const thought = parse("#Corin(PRIVATE_THOUGHT)");
   assert.deepEqual(thought.audience, ["corin"]);
@@ -125,6 +139,7 @@ test("invalid input and stale heads leave branch/history unchanged; private turn
   const f = await fixture(t);
   const before = f.store.exportSimulation("local", "scopes");
   assert.throws(() => commitManualTurn(f.store, { ...envelope(f.started.root.id, "bad"), payload: payload("#Missing(secret)") }));
+  assert.throws(() => commitManualTurn(f.store, { ...envelope(f.started.root.id, "empty-primary"), payload: payload("#Mara(|she nods)") }), /nonempty primary/);
   assert.deepEqual(f.store.exportSimulation("local", "scopes"), before);
   const thought = commitManualTurn(f.store, { ...envelope(f.started.root.id, "thought"), payload: payload("#Corin(PRIVATE_THOUGHT)") });
   assert.throws(() => commitManualTurn(f.store, { ...envelope(f.started.root.id, "stale"), payload: payload(whisper) }), /head conflict/);

@@ -748,20 +748,22 @@ window.__ModuleLoader__.load({
       }
 
       function audienceSelect(label, character, audience, disabled, onChange, onLimit) {
-        const selected = audience ?? form.audienceLimit ?? [];
+        const selected = audience ?? (onLimit ? form.audienceLimit : null) ?? [];
         return h('fieldset', { disabled, 'aria-label': label },
           h('legend', null, label),
           onLimit && h('label', null, h('input', { type: 'checkbox', checked: audience === null,
             onChange: event => onChange(event.target.checked ? null : selected) }), ' Actor chooses'),
+          !onLimit && audience === null && h('button', { type: 'button', onClick: () => onChange([]) }, 'Use actor-only base'),
           ...form.cast.filter(item => item.token !== character).map(item => h('label', { key: item.token, style: { marginLeft: 8 } },
             h('input', { type: 'checkbox', checked: selected.includes(item.token),
               onChange: event => {
                 const recipients = event.target.checked ? [...selected, item.token] : selected.filter(value => value !== item.token);
-                (audience === null ? onLimit : onChange)(recipients);
+                (audience === null && onLimit ? onLimit : onChange)(recipients);
               } }),
             ' ', item.name)),
           audience === null && h('small', { style: { display: 'block' } },
-            selected.length ? 'The actor can choose among the checked characters.' : 'No limit. Check characters to limit the choice.'));
+            !onLimit ? 'No base selected. Shared text needs a turn audience or an explicit base selection.'
+              : selected.length ? 'The actor can choose among the checked characters.' : 'No limit. Check characters to limit the choice.'));
       }
 
       function generationFields(prefix) {
@@ -782,8 +784,9 @@ window.__ModuleLoader__.load({
       }
 
       const editLocked = busy || Boolean(retry);
-      const routingChanged = form && (form.speaker !== form.originalActor || form.editedAudience.length !== form.originalAudience.length ||
-        form.editedAudience.some(item => !form.originalAudience.includes(item)));
+      const routingChanged = form && (form.speaker !== form.originalActor ||
+        (form.editedAudience === null || form.originalAudience === null ? form.editedAudience !== form.originalAudience
+          : form.editedAudience.length !== form.originalAudience.length || form.editedAudience.some(item => !form.originalAudience.includes(item))));
       const validText = Boolean(form?.body.trim());
       return h('article', { 'data-doxvelt-turn': turn.id, style: { padding: '0.6rem 0' } },
         h('strong', null, turn.character), ' → ', turn.audience || 'Self',

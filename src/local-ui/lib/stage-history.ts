@@ -1,9 +1,10 @@
 import type { HistoricalOriginBody, SavedAlternativeBody, StageAlternative, StageAlternativeDetail, StageAlternatives, StageOrigin, StageProjection } from "../../local-api/stage-contracts.ts";
 import type { TranscriptTurn } from "../../core/types.ts";
 import type { StageSession } from "./stage-session.ts";
+import { parsePerformance } from "../../core/audience-scopes.ts";
 
 export type HistoryEditor = { selection: HistoricalOriginBody; action: "manual" | "generate"; performance: string; whisper: string;
-  confirmed: boolean; audience: string[]; propose: boolean; revision: number;
+  confirmed: boolean; audience: string[] | null; propose: boolean; revision: number;
   audienceSyntax?: import("../../core/audience-scopes.ts").AudienceSyntax };
 export type HistoryCommand = { suffix: string; body: Record<string, unknown>; editor: HistoryEditor; operationId: string | null };
 export type HistoryBuffer = { editor: HistoryEditor | null; command: HistoryCommand | null };
@@ -27,8 +28,10 @@ export class StageHistory {
   private get whisperChanged() { return !!this.editor && this.editor.whisper !== (this.origin?.completeWhisper ?? ""); }
   private get changed() {
     const turn = this.session.projection?.transcript.find(t => t.messageVersionId === this.editor?.selection.messageVersionId);
-    const originalAudience = turn?.performance ? turn.performance.baseAudience ?? [] : turn?.audience ?? [];
-    return this.performanceChanged || this.whisperChanged || !!this.editor?.propose || JSON.stringify([...(this.editor?.audience ?? [])].sort()) !== JSON.stringify([...originalAudience].sort());
+    const originalAudience = turn?.performance ? turn.performance.baseAudience : turn?.audience ?? [];
+    const currentAudience = this.editor?.audience ?? null;
+    return this.performanceChanged || this.whisperChanged || !!this.editor?.propose ||
+      JSON.stringify(currentAudience === null ? null : [...currentAudience].sort()) !== JSON.stringify(originalAudience === null ? null : [...originalAudience].sort());
   }
   leaveForTarget() {
     this.target = null;
@@ -44,13 +47,14 @@ export class StageHistory {
   get stale() { return !!this.editor && this.editor.selection.expectedHead !== this.session.projection?.branch.headCommitId; }
   get locked() { return this.busy || !!this.command || this.session.recoveryBlocked; }
   touch() { if (this.editor) this.editor.revision++; this.session.autosave(); }
+  setAudience(audience: string[] | null) { if (this.editor) { this.editor.audience = audience === null ? null : [...audience]; this.touch(); } }
   async open(turn: TranscriptTurn) {
     if (this.locked || this.session.busy || this.session.needsReconcile || !turn.commitId || !turn.messageVersionId || !turn.logicalMessageId) return;
     if (!this.session.autosave()) return;
     this.editor = { selection: { sourceBranchId: this.session.scope.branchId, expectedHead: this.session.projection!.branch.headCommitId,
       sourceCommitId: turn.commitId, messageVersionId: turn.messageVersionId, logicalMessageId: turn.logicalMessageId, actorId: turn.actorId },
       action: "manual", performance: turn.text, whisper: "", confirmed: false,
-      audience: [...(turn.performance ? turn.performance.baseAudience ?? [] : turn.audience)],
+      audience: turn.performance?.baseAudience === null ? null : [...(turn.performance?.baseAudience ?? turn.audience)],
       ...(turn.performance ? { audienceSyntax: turn.performance.syntax } : {}), propose: false, revision: 0 };
     this.origin = null; this.discovery = null; this.error = ""; this.notice = ""; this.target = null;
     this.generation++; this.session.autosave();
@@ -80,8 +84,16 @@ export class StageHistory {
   async submit() {
     const e = this.editor;
     if (!e || this.locked || this.stale || !this.origin || (e.action === "generate" && !e.confirmed) || (e.action === "manual" && !e.performance.trim())) return;
+    if (e.action === "manual" && e.audienceSyntax) {
+      try {
+        parsePerformance({ text: e.performance, actorId: e.selection.actorId, audience: e.audience, syntax: e.audienceSyntax, identities: this.session.actors });
+      } catch (error) { this.error = error instanceof Error ? error.message : String(error); return; }
+    } else if (e.audience === null && !(e.action === "generate" && e.propose)) {
+      this.error = "Choose recipients or request a fresh audience proposal."; return;
+    }
     const body: SavedAlternativeBody = { ...e.selection, commandId: crypto.randomUUID(), action: e.action,
-      audience: e.action === "generate" && e.propose ? null : [...new Set([...(e.action === "manual" && e.audienceSyntax ? [] : [e.selection.actorId]), ...e.audience])],
+      audience: (e.action === "generate" && e.propose) || (e.action === "manual" && e.audienceSyntax && e.audience === null) ? null
+        : [...new Set([...(e.action === "manual" && e.audienceSyntax ? [] : [e.selection.actorId]), ...(e.audience ?? [])])],
       ...(e.action === "manual" ? { manualText: e.performance, ...(e.audienceSyntax ? { audienceSyntax: e.audienceSyntax } : {}) } : { completeWhisper: e.whisper }) };
     this.command = { suffix: "/alternatives", body, editor: copy(e), operationId: null };
     if (!this.session.autosave()) return;

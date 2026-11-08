@@ -12,13 +12,15 @@ import { inspectActorContext, projectBranch } from "../src/core/branch-kernel.ts
 import { validateSimulationArchive } from "../src/core/archive-verifier.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
 import type { BrowserStorage } from "../src/local-ui/lib/stage-recovery.ts";
+import { DeterministicFakeRuntime } from "./helpers/deterministic-fake-runtime.ts";
 // @ts-expect-error DSH's host adapter is a JavaScript plugin loaded by the desktop host.
 import { savedEpisodeRequest } from "../scripts/dsh-gui-spike/saved-episode.mjs";
 
-async function fixture(t: test.TestContext) {
+async function fixture(t: test.TestContext, runtime?: import("../src/agent-runtime/contracts.ts").ActorTurnRuntime) {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-scopes-api-"));
   const dbPath = path.join(root, "source.sqlite");
-  let server = createLocalApiServer({ dbPath });
+  const options = { dbPath, ...(runtime ? { actorTurnRuntime: runtime } : {}) };
+  let server = createLocalApiServer(options);
   const calls: { path: string; body: Record<string, unknown> }[] = [];
   let drop = false;
   t.after(async () => { server.close(); await rm(root, { recursive: true, force: true }); });
@@ -41,7 +43,7 @@ async function fixture(t: test.TestContext) {
   const start = await request("/simulations/start", { simulationId: "sim", branchId: "main", commandId: "start", workspacePath: path.resolve("examples/last-crossing"), scenarioId: "last-crossing" });
   assert.equal(start.status, 200);
   const scope = { apiBase: "http://stage.invalid", simulationId: "sim", branchId: "main" };
-  return { root, dbPath, fetcher, request, calls, scope, drop() { drop = true; }, restart() { server.close(); server = createLocalApiServer({ dbPath }); } };
+  return { root, dbPath, fetcher, request, calls, scope, drop() { drop = true; }, restart() { server.close(); server = createLocalApiServer(options); } };
 }
 
 test("Stage requires an explicit default, retains it through overrides, uses span projections and resets on scope change", async t => {
@@ -144,6 +146,100 @@ test("scoped defaults, fallback choice, frozen requests and historical scopes su
   await reopened.history.submit();
   assert.equal(reopened.history.error, "");
   assert.ok(reopened.history.target);
+});
+
+test("historical scoped edits retain a null base through recovery and require explicit resolution for shared text", async t => {
+  const f = await fixture(t);
+  const values = new Map<string, string>();
+  const storage: BrowserStorage = { get length() { return values.size; }, key(i) { return [...values.keys()][i] ?? null; },
+    getItem(key) { return values.get(key) ?? null; }, setItem(key, value) { values.set(key, value); } };
+  const session = new StageSession(f.scope, f.fetcher);
+  await session.refresh(); await session.enableRecovery(storage);
+  session.mode = "perform"; session.actorId = "corin"; session.performance = "#Mara(Original primary.)";
+  await session.perform(); assert.equal(session.error, "");
+  const source = session.projection!.transcript[0]!;
+  assert.equal(source.performance!.baseAudience, null);
+  await session.history.open(source);
+  assert.equal(session.history.editor!.audience, null);
+  assert.equal(validStageBuffer(session.snapshot()), true);
+  session.dispose(); f.restart();
+  const reopened = new StageSession(f.scope, f.fetcher);
+  await reopened.refresh(); await reopened.enableRecovery(storage);
+  assert.equal(reopened.recoveryBlocked, false, reopened.recoveryWarning);
+  assert.equal(reopened.history.editor!.audience, null);
+  reopened.history.editor!.performance = "#Mara(Revised primary.) Shared text needs a base.";
+  const posts = f.calls.length;
+  await reopened.history.submit();
+  assert.match(reopened.history.error, /Choose a default or turn audience/);
+  assert.equal(reopened.history.command, null);
+  assert.equal(f.calls.length, posts, "validation must happen before freezing or sending the edit");
+  const invalid = await f.request("/simulations/sim/alternatives", { ...reopened.history.editor!.selection,
+    commandId: "unresolved-shared-text", action: "manual", audience: null, audienceSyntax: "scoped-v1",
+    manualText: reopened.history.editor!.performance });
+  const invalidResult = await invalid.json();
+  assert.equal(invalid.status, 200);
+  assert.equal(invalidResult.operation.status, "failed");
+  assert.equal(invalidResult.operation.failure, "validation_failed");
+  reopened.history.editor!.performance = "#Mara(Revised primary.)";
+  await reopened.history.submit();
+  assert.equal(reopened.history.error, "");
+  assert.equal(f.calls.filter(call => call.path.endsWith("/alternatives")).at(-1)!.body.audience, null);
+  assert.equal(reopened.history.target!.transcript[0]!.performance!.baseAudience, null);
+  reopened.history.setAudience([]);
+  reopened.history.editor!.performance = "#Mara(Revised primary.) Shared with the actor.";
+  await reopened.history.submit();
+  assert.equal(reopened.history.error, "");
+  assert.deepEqual(f.calls.filter(call => call.path.endsWith("/alternatives")).at(-1)!.body.audience, []);
+  const target = reopened.history.target!;
+  const store = await openBranchStore(f.dbPath).open();
+  const imported = await openBranchStore(path.join(f.root, "null-base-import.sqlite")).open();
+  try {
+    const archive = store.exportSimulation("local", "sim");
+    validateSimulationArchive(archive); imported.importSimulation(archive);
+    const q = { ownerScope: "local", simulationId: "sim", branchId: target.branch.id, audience: [] };
+    assert.equal(inspectActorContext(imported, { ...q, actorId: "mara" }).subjective.transcript[0]!.text, "Revised primary.");
+    assert.equal(inspectActorContext(imported, { ...q, actorId: "corin" }).subjective.transcript[0]!.text, "Revised primary. Shared with the actor.");
+    assert.equal(inspectActorContext(imported, { ...q, actorId: "nell" }).subjective.transcript.length, 0);
+    assert.equal(projectBranch(store, { ...q, branchId: "main" }).transcript[0]!.text, source.text);
+  } finally { imported.close(); store.close(); }
+});
+
+test("DSH historical discovery and edit-next preserve an unresolved base without granting shared text", async t => {
+  const runtime = new DeterministicFakeRuntime([{ type: "completed", text: JSON.stringify({ text: "I hear the scoped primary.", audience: ["mara"] }) }]);
+  const f = await fixture(t, runtime);
+  const session = new StageSession(f.scope, f.fetcher);
+  await session.refresh(); session.mode = "perform"; session.actorId = "corin";
+  session.performance = "#Mara(Entirely scoped.)"; await session.perform();
+  const turn = session.projection!.transcript[0]!;
+  t.mock.method(globalThis, "fetch", f.fetcher);
+  const events: { type: string; data: Record<string, unknown> }[] = [];
+  const dsh = { get seq() { return events.length; }, append(type: string, data: Record<string, unknown>) { events.push({ type, data }); }, eventAt(index: number) { return events[index]; } };
+  assert.equal((await savedEpisodeRequest("http://stage.invalid", dsh, { mode: "open-saved", simulationId: "sim" })).status, 200);
+  const response = await savedEpisodeRequest("http://stage.invalid", dsh, { mode: "history-origin", id: turn.logicalMessageId, version: turn.messageVersionId });
+  assert.equal(response.status, 200);
+  const origin = await response.json();
+  assert.equal(origin.audience, null);
+  const request = { mode: "history-edit-next", id: turn.logicalMessageId, version: turn.messageVersionId,
+    expectedHead: origin.expectedHead, requestId: crypto.randomUUID(), attempt: 0, speaker: "Corin", editedAudience: null,
+    character: "Mara", audience: [], whisper: "", body: "#Mara(Revised scoped primary.)" };
+  const changed = await savedEpisodeRequest("http://stage.invalid", dsh, request);
+  assert.equal(changed.status, 200);
+  const saved = await changed.json();
+  assert.equal(saved.retry, null);
+  assert.equal(runtime.calls, 1);
+  const invalid = await savedEpisodeRequest("http://stage.invalid", dsh, { ...request, requestId: crypto.randomUUID(),
+    body: "#Mara(Revised scoped primary.) Missing base for shared text." });
+  assert.equal(invalid.status, 422);
+  assert.equal(runtime.calls, 1, "invalid editing must not proceed to next-turn generation");
+  const store = await openBranchStore(f.dbPath).open();
+  try {
+    const q = { ownerScope: "local", simulationId: "sim", branchId: saved.selection.branchId };
+    const alternate = projectBranch(store, q).transcript;
+    assert.equal(alternate.length, 2);
+    assert.equal(alternate[0]!.performance!.baseAudience, null);
+    assert.equal(projectBranch(store, { ...q, branchId: "main" }).transcript.length, 1);
+    validateSimulationArchive(store.exportSimulation("local", "sim"));
+  } finally { store.close(); }
 });
 
 test("the maintained DSH host commits scoped text through the real API and replays the same occurrence", async t => {

@@ -102,6 +102,7 @@ export function parsePerformance(input: {
       append(char);
     }
     if (depth !== 0) throw new DomainValidationError("Unclosed audience scope.");
+    if (fallback !== null && !primary.trim()) throw new DomainValidationError("An observer fallback requires a nonempty primary performance.");
     spans.push({ audience, primary, fallback });
   }
   flush();

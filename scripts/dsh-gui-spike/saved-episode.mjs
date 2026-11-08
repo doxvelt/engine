@@ -291,7 +291,7 @@ async function historicalRequest(origin, opened, command, signal) {
     ]);
     const routing = item => ({
       actor: mention(stage.actors.find(actor => actor.id === item.actorId)),
-      audience: stage.actors.filter(actor => actor.id !== item.actorId &&
+      audience: item.performance?.baseAudience === null ? null : stage.actors.filter(actor => actor.id !== item.actorId &&
         (item.performance ? item.performance.baseAudience ?? [] : item.audience).includes(actor.id)).map(mention),
     });
     return Response.json({
@@ -343,7 +343,7 @@ async function editAndGenerateNext(origin, simulation, stage, selection, simulat
   const editedAudience = historyAudience(stage, performer.id, command.editedAudience);
   const nextAudience = historyAudience(stage, next.id, command.audience);
   const audienceLimit = command.audienceLimit === undefined ? undefined : historyAudience(stage, next.id, command.audienceLimit);
-  if (!editedAudience || nextAudience === undefined || (command.audienceLimit !== undefined && (!audienceLimit || nextAudience !== null)))
+  if (editedAudience === undefined || (editedAudience === null && !audienceSyntax) || nextAudience === undefined || (command.audienceLimit !== undefined && (!audienceLimit || nextAudience !== null)))
     return failure('Choose recipients from the cast.', 400);
   if (!Number.isSafeInteger(command.attempt) || command.attempt < 0 ||
       typeof command.whisper !== 'string' || command.whisper.length > 100_000)

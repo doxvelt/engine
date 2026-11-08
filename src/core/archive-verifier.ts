@@ -2351,7 +2351,7 @@ function validateSavedAlternative(archive: SimulationArchive, item: SimulationAr
     throw new Error("Historical input/origin receipt mismatch.");
   const actorId = r.replacementActorId ?? r.actorId;
   requireArchiveActor(archive, r.commandId, actorId);
-  const audience = p.generated?.audience ?? normalizeAudience(actorId, r.audience!);
+  const audience = p.generated?.audience ?? normalizeAudience(actorId, r.audience ?? []);
   for (const id of audience) requireArchiveActor(archive, r.commandId, id);
   if (p.generated) {
     const receipt = p.generated, routing = receipt.routing!;

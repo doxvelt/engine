@@ -44,6 +44,9 @@ fallback. A fallback describes the perceivable aspect of the same occurrence,
 not another speech act or event. Perceiving a claim neither establishes its truth
 nor forces belief.
 
+A fallback requires nonblank primary content, even if the turn also contains
+shared prose. A fallback cannot be the only performance of an occurrence.
+
 `[not perceived]` is ordinary authored fallback text, not an automatic rule.
 Use `[unintelligible]` for noticed but uncomprehended speech. Unnoticed acts and
 private thoughts leave no placeholder unless authored. Empty observer projections
@@ -74,6 +77,12 @@ scope's outer depth. Inner-parenthesis pipes are text; a second outer-depth pipe
 fails. For example, `#Mara(The mark (two strokes) means A\|B.)` delivers
 `The mark (two strokes) means A|B.`. Leading/trailing observer whitespace is trimmed;
 internal authored spacing and punctuation are preserved.
+
+Whitespace remains under author control; omission does not rewrite the surrounding
+prose. `Hello #Mara(secret) world` leaves two spaces for an excluded observer.
+Write `Hello #Mara(secret )world` to give that observer `Hello world` and Mara
+`Hello secret world`. Include connective whitespace and punctuation in the span
+whose omission should remove them.
 
 ## Commands and immutable history
 
@@ -115,6 +124,11 @@ new typing or reload. A body-only correction reparses with the saved interpretat
 and base, persists fresh projections and retains audience structure. Routing
 changes require a replacement turn. The standalone Reverie bridge supplies only
 the observer's projected text and omits scope recipient metadata from reflection.
+
+Historical editors retain a null base for an entirely scoped turn. Adding shared
+text requires a leading turn audience or an explicit base selection, including
+an explicit actor-only choice. Opening or recovering the editor does not resolve
+that missing base automatically.
 
 Behavior checks live in `scoped-audiences.test.ts`, `dsh-scoped-retry.test.ts` and
 `scoped-audiences-api.test.ts`: both examples, precedence, outside-base recipients,
