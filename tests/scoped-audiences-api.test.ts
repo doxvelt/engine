@@ -165,10 +165,13 @@ test("the maintained DSH host commits scoped text through the real API and repla
   assert.equal((await savedEpisodeRequest("http://stage.invalid", session, { ...command, expectedHead: current.expectedHead, requestId: crypto.randomUUID(), body: "#Mara(unclosed" })).status, 400);
   assert.equal((await savedEpisodeRequest("http://stage.invalid", session, { ...command, expectedHead: current.expectedHead,
     requestId: crypto.randomUUID(), body: "#[mara] A private bracket-selected line." })).status, 200);
+  const selfBasis = await (await savedEpisodeRequest("http://stage.invalid", session, { mode: "scene-status" })).json();
+  assert.equal((await savedEpisodeRequest("http://stage.invalid", session, { ...command, expectedHead: selfBasis.expectedHead,
+    requestId: crypto.randomUUID(), character: "Mara", audience: "Mara", body: "Own primary." })).status, 200);
   const store = await openBranchStore(f.dbPath).open();
   try {
     const q = { ownerScope: "local", simulationId: "sim", branchId: "main", audience: [] };
-    assert.equal(projectBranch(store, q).transcript.length, 2);
+    assert.equal(projectBranch(store, q).transcript.length, 3);
     assert.equal(inspectActorContext(store, { ...q, actorId: "nell" }).subjective.transcript[0]!.text, "He whispers: [unintelligible] and steps back.");
     assert.match(inspectActorContext(store, { ...q, actorId: "mara" }).subjective.transcript[0]!.text, /secret words/);
     validateSimulationArchive(store.exportSimulation("local", "sim"));

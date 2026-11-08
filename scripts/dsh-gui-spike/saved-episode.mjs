@@ -189,8 +189,16 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
   const cast = new Map(stage.actors.map(actor => [mention(actor), actor.id]));
   const actorId = cast.get(command.character);
   const scoped = !generating && command.audienceSyntax;
-  const route = scoped && command.audience === '!unset' ? { recipients: null }
-    : resolvePlayAudience(command.audience, command.character, [...cast.keys()], generating);
+  let route;
+  if (scoped) {
+    if (command.audience === '!unset') route = { recipients: null };
+    else if (command.audience === '!all') route = { recipients: [...cast.keys()] };
+    else if (command.audience === '!self') route = { recipients: [] };
+    else if (typeof command.audience === 'string') {
+      const recipients = command.audience.split(',');
+      if (recipients.every(token => cast.has(token)) && new Set(recipients).size === recipients.length) route = { recipients };
+    }
+  } else route = resolvePlayAudience(command.audience, command.character, [...cast.keys()], generating);
   let text = typeof command.body === 'string' ? command.body.trim() : '';
   if (scoped) {
     if (!['scoped-v1', 'scoped-fallback-v1'].includes(scoped) || typeof command.expectedHead !== 'string' ||
