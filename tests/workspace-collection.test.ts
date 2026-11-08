@@ -64,6 +64,26 @@ test("collection objects are ordinary workspace files and stale edits cannot ove
   } finally { f.memory.close(); }
 });
 
+test("collection object names retain quotes and backslashes in pickers and pinned story source", async () => {
+  const f = await fixture();
+  const name = 'The "Old" Harbor \\ North: Mara\'s [landing]';
+  try {
+    for (const kind of ["world", "scenario", "format", "character"] as const)
+      await createCollectionObject(f.root, { kind, id: "harbor", name, body: "A quiet landing." });
+    const collection = await workspaceCollection(f.root);
+    for (const choices of [collection.worlds, collection.scenarios, collection.formats, collection.characters])
+      assert.equal(choices.find(item => item.id === "harbor")!.name, name);
+    const started = await startCollectionStory(f.root, { ...f.setup, collectionRevision: collection.revision,
+      worldId: "harbor", scenarioId: "harbor", formatId: "harbor", characterIds: ["harbor"] }, f.memory);
+    const store = await openBranchStore((await workspaceLocation(f.root)).database).open();
+    try {
+      const compiled = store.exportSimulation("local", started.simulationId).contentRevision.compiled;
+      for (const choices of [compiled.worlds, compiled.scenarios, compiled.formats, compiled.entities])
+        assert.equal(choices.find(item => item.id === "harbor")!.name, name);
+    } finally { store.close(); }
+  } finally { f.memory.close(); }
+});
+
 test("new stories pin selected collection objects, date the episode, safely retry and isolate playthroughs", async () => {
   const f = await fixture();
   try {

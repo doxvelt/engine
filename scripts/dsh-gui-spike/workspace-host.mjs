@@ -37,7 +37,8 @@ export async function registeredSessionWorkspace(ctx, session) {
   if (!session.header.cwd) throw new WorkspaceCollectionError('workspace-required', 'Choose a DSH workspace first.', 409);
   const root = await realpath(session.header.cwd);
   for (const workspace of ctx.workspaceRegistry.list()) {
-    if (await realpath(workspace.path) === root) return root;
+    const registeredRoot = await realpath(workspace.path).catch(() => null);
+    if (registeredRoot === root) return root;
   }
   throw new WorkspaceCollectionError('workspace-unregistered', 'This chat is not in a registered DSH workspace.', 409);
 }

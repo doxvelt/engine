@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 // @ts-expect-error The DSH host is a native JavaScript plugin, also loaded by Electron.
-import { applyWorkspaceHost } from "../scripts/dsh-gui-spike/workspace-host.mjs";
+import { applyWorkspaceHost, registeredSessionWorkspace } from "../scripts/dsh-gui-spike/workspace-host.mjs";
 
 type Event = { type: string; data: Record<string, unknown> };
 function session(id: string, cwd: string) {
@@ -13,6 +13,16 @@ function session(id: string, cwd: string) {
     append(type: string, data: Record<string, unknown>) { events.push({ type, data }); },
     eventAt(index: number) { return events[index]!; } };
 }
+
+test("missing registered workspace folders do not block live workspaces or authorize unregistered chats", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-host-registry-"));
+  const missing = path.join(root, "missing");
+  const ctx = { workspaceRegistry: { list: () => [{ path: missing }, { path: root }] } };
+  assert.equal(await registeredSessionWorkspace(ctx, session("live", root)), await realpath(root));
+  await assert.rejects(registeredSessionWorkspace({ workspaceRegistry: { list: () => [{ path: missing }] } },
+    session("unregistered", root)), { code: "workspace-unregistered" });
+  await assert.rejects(registeredSessionWorkspace(ctx, session("missing", missing)), { code: "ENOENT" });
+});
 
 test("desktop host scopes activation and source writes to registered chat workspaces and leaves authoring alone", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-host-"));
@@ -27,7 +37,7 @@ test("desktop host scopes activation and source writes to registered chat worksp
     on(name: string, callback: (...args: unknown[]) => unknown) { listeners.set(name, callback); },
     connection: { fetch: { register(config: { fetch: typeof endpoint }) { endpoint = config.fetch; } } },
     sessions: { get: (id: string) => chats.get(id), flush: async () => {} },
-    workspaceRegistry: { list: () => [{ path: root }, { path: elsewhere }] },
+    workspaceRegistry: { list: () => [{ path: path.join(root, "missing-workspace") }, { path: root }, { path: elsewhere }] },
     llm: { listProviders: () => [{ id: "fixture", name: "Fixture" }],
       listModels: async () => [{ id: "model", name: "Test model" }],
       async *stream() { throw new Error("No model call is permitted in this check"); } },
