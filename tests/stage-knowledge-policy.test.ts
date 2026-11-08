@@ -65,7 +65,7 @@ test("Stage Perform uses explicit knowledge policy across real HTTP, replay, nex
   const replay = await f.post("/turns", body); assert.equal(replay.replayed, true);
   assert.equal("context" in replay, false);
   await f.post("/turns", { ...body, knowledgePolicy: "forged" }, 400);
-  const legacyBody = { ...body }; delete legacyBody.knowledgePolicy;
+  const legacyBody = { ...body }; delete legacyBody.knowledgePolicy; delete legacyBody.audienceSyntax;
   await f.post("/turns", legacyBody, 409);
   f.session.mode = "direct"; f.session.actorId = "ceo"; f.session.audienceMode = "selected"; f.session.audienceIds = ["cfo"];
   await f.session.generate(); assert.equal(f.session.error, "");

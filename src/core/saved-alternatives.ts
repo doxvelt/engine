@@ -2,6 +2,7 @@ import type { ActorTurnRuntime } from "../agent-runtime/contracts.ts";
 import { generateActorTurnDraft } from "./draft-lifecycle.ts";
 import { buildAcceptedCommit, receiptFor, validateReadyDraft } from "./draft-acceptance.ts";
 import { buildManualCommit } from "./branch-kernel.ts";
+import { assertAudienceSyntax, type AudienceSyntax } from "./audience-scopes.ts";
 import { domainId, normalizeAudience, stableStringify } from "./domain-rules.ts";
 import { assertRuntimeText, decodeAcceptDraftReceipt, requiredSafeIdentifier, sha256 } from "./draft-contracts.ts";
 import { BranchConflictError, CommandIdentityError, DomainNotFoundError, DomainValidationError } from "./ports.ts";
@@ -16,6 +17,7 @@ export type AlternativeRequest = HistoricalSelection & {
   ownerScope: string; simulationId: string; commandId: string;
   action: "generate" | "manual"; audience: string[] | null;
   completeWhisper?: string; manualText?: string; retryOf?: string;
+  audienceSyntax?: AudienceSyntax;
 };
 export type OriginInput = {
   kind: "generated" | "manual" | "unavailable";
@@ -57,7 +59,7 @@ const equal = (a: unknown, b: unknown) => stableStringify(a) === stableStringify
 export function validateAlternativeRequest(value: unknown): AlternativeRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new DomainValidationError("Invalid historical request.");
   const r = value as AlternativeRequest;
-  const keys = ["ownerScope", "simulationId", "commandId", "sourceBranchId", "expectedHead", "sourceCommitId", "messageVersionId", "logicalMessageId", "actorId", "action", "audience", "completeWhisper", "manualText", "retryOf"];
+  const keys = ["ownerScope", "simulationId", "commandId", "sourceBranchId", "expectedHead", "sourceCommitId", "messageVersionId", "logicalMessageId", "actorId", "action", "audience", "completeWhisper", "manualText", "retryOf", "audienceSyntax"];
   if (Object.keys(r).some(k => !keys.includes(k))) throw new DomainValidationError("Unknown historical request field.");
   for (const key of keys.slice(0, 9) as (keyof AlternativeRequest)[]) requiredSafeIdentifier(r[key], key);
   if (!["generate", "manual"].includes(r.action)) throw new DomainValidationError("Invalid historical action.");
@@ -67,9 +69,10 @@ export function validateAlternativeRequest(value: unknown): AlternativeRequest {
   if (r.completeWhisper !== undefined && (typeof r.completeWhisper !== "string" || r.completeWhisper.length > 100_000)) throw new DomainValidationError("Invalid complete whisper.");
   if (r.retryOf !== undefined) requiredSafeIdentifier(r.retryOf, "retryOf");
   if (r.action === "manual") {
+    if (Object.hasOwn(r, "audienceSyntax")) assertAudienceSyntax(r.audienceSyntax);
     assertRuntimeText(r.manualText, "Manual performance");
     if (!r.audience || r.completeWhisper !== undefined || r.retryOf !== undefined) throw new DomainValidationError("Manual editing requires concrete audience and performance only.");
-  } else if (r.manualText !== undefined) throw new DomainValidationError("Generation cannot supply manual text.");
+  } else if (r.manualText !== undefined || Object.hasOwn(r, "audienceSyntax")) throw new DomainValidationError("Generation cannot supply manual authoring.");
   return structuredClone(r);
 }
 
@@ -233,7 +236,8 @@ export function buildAlternativeCommit(repository: SavedAlternativeRepository, o
   } else {
     commit = buildManualCommit(repository, { ownerScope: r.ownerScope, simulationId: r.simulationId, branchId: r.sourceBranchId,
       expectedHead: operation.parentCommitId, commandId: r.commandId,
-      payload: { actorId: r.actorId, text: r.manualText!, audience: r.audience!, stageWhisperIds: [], knowledgePolicy: "actor-knowledge-v1" } },
+      payload: { actorId: r.actorId, text: r.manualText!, audience: r.audience!, stageWhisperIds: [], knowledgePolicy: "actor-knowledge-v1",
+        ...(r.audienceSyntax ? { audienceSyntax: r.audienceSyntax } : {}) } },
     { logicalMessageId: r.logicalMessageId, operation: "edit" });
     commit.createdAt = operation.createdAt;
   }

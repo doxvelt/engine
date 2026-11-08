@@ -255,9 +255,11 @@ These labels describe interaction; they do not rename domain records. See
   immediately; a separate manual preview remains undecided.
 - **Draft performance:** proposed output awaiting acceptance, distinct from private
   direction and accepted history.
-- **Actor / Audience:** one acting identity and the explicit whole-turn recipients.
-  Optional `#actor` / `@audience` notation is selected direction, not shipped grammar.
-  Plain names never route; sender-own perception remains independent.
+- **Actor / Audience:** one acting identity and recipients of the performance.
+  Perform uses `@actor`, a leading `#audience` turn override and `#audience(text)`
+  span audiences. The visible composer default persists within its authoring
+  context; turn overrides do not modify it. See [Scoped audiences](SCOPED_AUDIENCES.md).
+  Plain names in prose never route; sender-own perception remains independent.
 - **Continue:** the selected return action for resuming an existing simulation.
 - **Actor state:** the selected label for target runtime-state inspection; historical
   timing and authorization remain gated. Current Stage exposes safe identity only.

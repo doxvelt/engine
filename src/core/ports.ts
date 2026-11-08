@@ -20,7 +20,8 @@ export type ManualTurnPayload = {
   knowledgePolicy?: typeof import("./types.ts").ACTOR_KNOWLEDGE_POLICY;
   actorId: string;
   text: string;
-  audience: string[];
+  audience: string[] | null;
+  audienceSyntax?: import("./audience-scopes.ts").AudienceSyntax;
   logicalMessageId?: string;
   operation?: "turn" | "edit" | "regenerate";
   audienceChanges?: Array<{

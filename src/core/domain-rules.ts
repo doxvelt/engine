@@ -1,4 +1,5 @@
 import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
+import { assertAudienceSyntax } from "./audience-scopes.ts";
 import { canOwnTurn } from "./turn-ownership.ts";
 import { createHash } from "node:crypto";
 import type {
@@ -37,15 +38,24 @@ export function recordCommand<TKind extends RecordedCommand["kind"]>(
   if (["turn", "edit", "regenerate"].includes(kind)) {
     const payload = command.payload as Record<string, unknown>;
     if (Object.hasOwn(payload, "knowledgePolicy") &&
-        (kind !== "turn" || payload.knowledgePolicy !== ACTOR_KNOWLEDGE_POLICY))
+        ((kind !== "turn" && !payload.audienceSyntax) || payload.knowledgePolicy !== ACTOR_KNOWLEDGE_POLICY))
       throw new DomainValidationError("Unsupported manual knowledge policy.");
     delete payload.logicalMessageId;
     delete payload.operation;
     payload.text = (payload.text as string).trim();
-    payload.audience = normalizeAudience(
-      payload.actorId as string,
-      payload.audience as string[],
-    );
+    if (Object.hasOwn(payload, "audienceSyntax")) {
+      assertAudienceSyntax(payload.audienceSyntax);
+      if (payload.knowledgePolicy !== ACTOR_KNOWLEDGE_POLICY)
+        throw new DomainValidationError("Scoped authoring requires the actor-knowledge policy.");
+      if (payload.audience !== null && (!Array.isArray(payload.audience) || payload.audience.some(id => typeof id !== "string")))
+        throw new DomainValidationError("Invalid composer audience.");
+    } else {
+      if (!Array.isArray(payload.audience)) throw new DomainValidationError("Legacy turns require an audience.");
+      payload.audience = normalizeAudience(
+        payload.actorId as string,
+        payload.audience as string[],
+      );
+    }
     normalizeEffectPayload(payload);
   } else if (kind === "effects") {
     normalizeEffectPayload(command.payload as Record<string, unknown>);

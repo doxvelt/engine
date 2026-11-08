@@ -46,7 +46,7 @@ one. See AI Drafts below and the [slice scope](docs/design/LAST_CROSSING.md).
 - Author worlds, scenarios, formats, models, entities, and connections as files.
 - Compile Markdown source into inspectable runtime fabric.
 - Play branch-aware hard-turn scenes on Stage, through the CLI or local API.
-- Control who is in the audience for each turn.
+- Control who is in the audience for each turn, including [inline scoped audiences](docs/design/SCOPED_AUDIENCES.md) in Perform.
 - Add private stage whispers for one actor's next turn.
 - Grant and revoke runtime access without editing source files.
 - Edit, regenerate, and fork accepted history through the CLI or local API without

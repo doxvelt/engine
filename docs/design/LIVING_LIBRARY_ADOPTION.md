@@ -89,8 +89,13 @@ independent aggregate gate results accompany the implementation PR.
 actor/audience before generation. Manual Perform commits immediately. Generated
 acceptance can edit text but cannot rebind actor/audience. No routing parser ships.
 
-**Target:** Stage whisper/Perform vocabulary; optional synchronized #actor/@audience
-and pickers, arbitrary subsets and All as concrete cast selection. Keep Original
+**Current manual contract:** [Scoped audiences](SCOPED_AUDIENCES.md) supersedes
+the older reversed notation, whole-turn union and passage-delivery exclusion below.
+Perform uses @actor, a leading #audience and span-local #audience(text), with a
+visible context-local default and proposed observer fallbacks behind explicit opt-in.
+
+**Target:** Stage whisper/Perform vocabulary; audience scopes and composer defaults,
+arbitrary subsets and All as concrete cast selection. Keep Original
 stage whisper distinct from the draft performance. Permit private natural-language
 direction to request a draft with a proposed audience for explicit review.
 

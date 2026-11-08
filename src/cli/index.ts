@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { assertAudienceSyntax } from "../core/audience-scopes.ts";
+import { ACTOR_KNOWLEDGE_POLICY } from "../core/types.ts";
 import { generateDoxveltText } from "../ai/generate.ts";
 import { resolveCurrentBeliefs } from "../core/beliefs.ts";
 import {
@@ -272,18 +274,20 @@ async function turn(args: string[], store: SqliteSimulationRepository) {
     throw new CliError(
       "Model output must be generated with draft and accepted separately with turn --manual.",
     );
-  assertExpectedBranchHead(store, e);
-  const p = projectBranch(store, {
+  const syntax = value(args, "--audience-syntax");
+  if (syntax !== undefined) assertAudienceSyntax(syntax);
+  if (!syntax) assertExpectedBranchHead(store, e);
+  const p = syntax ? null : projectBranch(store, {
     ownerScope: e.ownerScope,
     simulationId: e.simulationId,
     branchId: e.branchId,
     head: e.expectedHead,
   });
   const audienceIds =
-    parseAudience(value(args, "--audience")) ||
-    p.audience
+    parseAudience(value(args, "--audience")) || (syntax ? null :
+    p!.audience
       .filter((item) => item.status === "active")
-      .map((item) => item.actorId);
+      .map((item) => item.actorId));
   const pending = store.listPendingStageWhispers(
     e.ownerScope,
     e.simulationId,
@@ -291,13 +295,13 @@ async function turn(args: string[], store: SqliteSimulationRepository) {
     e.expectedHead,
     actorId,
   );
-  const actorContext = inspectActorContext(store, {
+  const actorContext = syntax ? null : inspectActorContext(store, {
     ownerScope: e.ownerScope,
     simulationId: e.simulationId,
     branchId: e.branchId,
     head: e.expectedHead,
     actorId,
-    audience: audienceIds,
+    audience: audienceIds ?? [],
     stageWhispers: pending,
   });
   const text = required(args, "--manual");
@@ -307,6 +311,7 @@ async function turn(args: string[], store: SqliteSimulationRepository) {
       actorId,
       text,
       audience: audienceIds,
+      ...(syntax ? { audienceSyntax: syntax, knowledgePolicy: ACTOR_KNOWLEDGE_POLICY } : {}),
       stageWhisper: value(args, "--whisper") || null,
       ...(args.includes("--whisper-ids")
         ? { stageWhisperIds: parseAudience(value(args, "--whisper-ids")) || [] }
@@ -315,7 +320,8 @@ async function turn(args: string[], store: SqliteSimulationRepository) {
   });
   return {
     message: "Committed manual turn.",
-    turn: projectBranch(store, query(args, store)).transcript.at(-1),
+    turn: syntax ? projectBranch(store, query(args, store)).transcript.find(turn => turn.commitId === result.commit.id)
+      : projectBranch(store, query(args, store)).transcript.at(-1),
     commit: result.commit,
     consumedStageWhispers: result.commit.events.filter(
       (item) => item.type === "stage_whisper_consumed",

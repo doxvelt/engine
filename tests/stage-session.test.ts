@@ -66,11 +66,12 @@ test("Perform sends only its buffer and explicit available audience, retaining A
   session.direction = "Private instruction";
   session.performance = "Authored opening";
   session.mode = "perform";
+  session.audienceMode = "all";
   await session.perform();
   const turn = calls.find(call => call.path.endsWith("/turns"))?.body;
   assert.equal(turn?.manualText, "Authored opening");
   assert.deepEqual(turn?.stageWhisperIds, []);
-  assert.deepEqual(turn?.audience, ["scene", "a"]);
+  assert.deepEqual([...(turn?.audience as string[])].sort(), ["a", "scene"]);
   assert.equal(JSON.stringify(turn).includes("Private instruction"), false);
   assert.equal(session.direction, "Private instruction");
   assert.equal(session.actorId, "scene");
@@ -112,7 +113,7 @@ test("lost mutation responses and double click retry the same frozen command", a
     return Response.json({ drafts: [] });
   };
   const session = new StageSession({ apiBase: 'http://stage.invalid', simulationId: 'sim', branchId: 'main' }, fetcher);
-  await session.refresh(); session.performance = 'Opening';
+  await session.refresh(); session.performance = 'Opening'; session.audienceMode = "selected";
   const firstRequest = session.perform();
   await session.perform();
   release(); await firstRequest;

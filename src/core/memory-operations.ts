@@ -17,6 +17,7 @@ import type {
   PerceptionRecord,
 } from "./types.ts";
 import { runtimeEventId } from "./retained-beliefs.ts";
+import { projectTurn } from "./audience-scopes.ts";
 
 export { runtimeEventId };
 
@@ -26,7 +27,8 @@ export function projectPerceptions(commits: CommitRecord[]): PerceptionRecord[] 
     commit.events.forEach((event, index) => {
       if (event.type !== "message_accepted") return;
       const sourceEventId = runtimeEventId(commit.id, index);
-      for (const actorId of event.message.audience)
+      for (const actorId of event.message.audience) {
+        if (!projectTurn(event.message, actorId)) continue;
         result.push({
           id: domainId("perception", actorId, sourceEventId, event.message.id),
           simulationId: commit.simulationId,
@@ -36,6 +38,7 @@ export function projectPerceptions(commits: CommitRecord[]): PerceptionRecord[] 
           sourceMessageVersionId: event.message.id,
           createdAt: commit.createdAt,
         });
+      }
     });
   return result;
 }

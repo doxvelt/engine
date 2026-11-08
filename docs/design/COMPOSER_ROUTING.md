@@ -6,7 +6,9 @@
 > observation. Legacy saved policies keep their exact interpretation.
 
 This bounded contract follows the approved separation of observation/access from
-tentative delivery. It does not implement notation grammar or historical revision.
+tentative delivery. [Scoped audiences](SCOPED_AUDIENCES.md) now defines the manual
+Perform grammar and per-character projections; generated candidate routing keeps
+the contract below. Historical revision has its own separate contract.
 
 ## Version and observation boundary
 

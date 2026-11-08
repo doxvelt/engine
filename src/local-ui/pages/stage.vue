@@ -154,19 +154,19 @@
           <UFormField label="Actor">
             <USelect v-model="session.actorId" :items="actorItems" class="w-full" aria-label="Actor" :disabled="locked" />
           </UFormField>
-          <UFormField label="Audience" class="text-right">
+          <UFormField :label="session.mode === 'perform' ? 'Default audience' : 'Audience'" class="text-right">
             <UPopover>
               <UButton color="neutral" variant="subtle" class="w-full justify-end" :disabled="locked" aria-label="Choose audience">
-                <span class="truncate">{{ session.audienceMode === 'unspecified' ? 'No initial selection' : session.audienceMode === 'all' ? 'all' : audienceLabel }}</span>
+                <span class="truncate">{{ session.audienceMode === 'unspecified' ? session.mode === 'perform' ? 'No default selected' : 'No initial selection' : session.audienceMode === 'all' ? 'all' : audienceLabel }}</span>
                 <UIcon name="i-lucide-chevron-down" />
               </UButton>
               <template #content>
                 <div class="max-h-72 w-64 overflow-y-auto p-4 text-left">
-                  <URadioGroup v-model="session.audienceMode" :items="session.mode === 'direct' ? [{ label: 'No initial selection', value: 'unspecified' }, { label: 'Selected actors', value: 'selected' }] : [{ label: 'All listed actors', value: 'all' }, { label: 'Selected actors', value: 'selected' }]" />
+                  <URadioGroup v-model="session.audienceMode" :items="session.mode === 'direct' ? [{ label: 'No initial selection', value: 'unspecified' }, { label: 'Selected actors', value: 'selected' }] : [{ label: 'No default selected', value: 'unspecified' }, { label: 'All listed actors', value: 'all' }, { label: 'Selected actors', value: 'selected' }]" />
                   <UButton color="neutral" variant="link" @click="session.selectAllAudience()">Select all · allow deselection</UButton>
                   <UCheckboxGroup v-if="session.audienceMode === 'selected'" v-model="session.audienceIds" :items="audienceItems" class="mt-3" />
                   <p class="mt-3 text-xs text-muted">The actor also perceives their own turn.</p>
-                  <p class="mt-2 text-xs">{{ session.audienceMode === 'unspecified' ? 'No initial audience selected; review the generated proposal.' : `Audience: ${audienceLabel}` }}</p>
+                  <p class="mt-2 text-xs">{{ session.audienceMode === 'unspecified' ? session.mode === 'perform' ? 'Select a default or write a leading #audience. Defaults apply only in this simulation and branch.' : 'No initial audience selected; review the generated proposal.' : `Audience: ${audienceLabel}` }}</p>
                 </div>
               </template>
             </UPopover>
@@ -174,6 +174,10 @@
         </div>
         <UTextarea v-if="session.mode === 'direct'" v-model="session.direction" :rows="3" class="w-full" aria-label="Stage whisper" placeholder="Stage whisper (optional)…" :disabled="locked" />
         <UTextarea v-else v-model="session.performance" :rows="3" class="w-full" aria-label="Performance" placeholder="Write the actor’s words or actions…" :disabled="locked" />
+        <div v-if="session.mode === 'perform'" class="mt-2 text-xs text-muted">
+          <p>@Actor selects the performer. #Mara,Nell sets this turn’s audience; #Mara(text) scopes a span. Use IDs for names with spaces.</p>
+          <UCheckbox v-model="session.observerFallbacks" label="Enable proposed observer fallbacks: #Mara(primary|fallback)" class="mt-2" :disabled="locked" />
+        </div>
         <div class="mt-2 flex items-center justify-between gap-2">
           <UTabs v-model="session.mode" :items="[{ label: 'Stage whisper', value: 'direct' }, { label: 'Perform', value: 'perform' }]" :content="false" @mousedown.capture="beginComposerMode" @click="activateComposerMode" size="xs" :ui="{ list: 'w-52' }" />
           <UButton type="submit" color="primary" :loading="session.busy" :disabled="!canSubmit">{{ session.mode === 'direct' ? 'Generate draft' : 'Perform' }}</UButton>

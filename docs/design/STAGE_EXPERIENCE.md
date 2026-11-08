@@ -36,7 +36,9 @@ The existing Nuxt/Nuxt UI Stage uses shared
 - Actor and Audience pickers send explicit supported IDs from the pinned cast.
   The current **All** picker expands that cast; it does not change the persistent
   presence roster or supply an unrestricted API alias. The sender perceives its
-  own turn. Invalid IDs fail without widening delivery. No input routing parser ships.
+  own turn. Invalid IDs fail without widening delivery. Perform also supports
+  [scoped audiences](SCOPED_AUDIENCES.md), with a visible context-local default
+  and explicit opt-in for the proposed observer-fallback extension.
 - Generated performances are read-first drafts with Edit, Retry, Accept and
   Discard. Actor and audience are captured at generation and cannot be rebound
   at acceptance. Retry creates a distinct durable candidate with the captured
@@ -131,8 +133,9 @@ and assistive-technology validation remain separate; LL-01/#15 is not closed her
 
 The bounded picker implementation now follows [Composer Routing](COMPOSER_ROUTING.md).
 Its versioned proposal policy separates observation from delivery; legacy drafts
-retain fixed routing and their historical context interpretation. The notation
-requirements below remain a target, not shipped grammar.
+retain fixed routing and their historical context interpretation. The implemented
+Perform grammar and its compatibility boundary are in
+[Scoped audiences](SCOPED_AUDIENCES.md); older notation targets below do not expand it.
 
 Merged #30 implements #29 complete-whisper replacement on #27's candidate
 lifecycle. Routed responses are projected on the server; legacy full-record
@@ -150,16 +153,13 @@ automatic mutual observation. Legacy manual commands retain their saved semantic
 Current Stage complete-whisper revisions likewise opt into the new policy even
 when their saved source is legacy; exact Retry and Accept keep the source policy.
 
-Optional typed `#actor` / `@audience` notation and pickers share explicit routing
-state in both directions; typing syntax must never be required. Opening guidance,
-composer controls and notation operate on the same active draft, not separate
-setup forms. Preserve each mode's prose and routing across switching, reopening
-and refinement; candidate corrections retain their own state. Select one actor
-and an arbitrary audience subset. Within an explicit performance-routing scope,
-recipient occurrences form a deduplicated whole-turn union, including inline
-occurrences; there are no passage-level deliveries. Removing one occurrence keeps
-a recipient if another remains. Unknown identities or multiple actors require
-correction. Plain names in prose never route.
+Perform uses `@actor`, leading `#audience` and `#audience(text)` spans under
+[Scoped audiences](SCOPED_AUDIENCES.md). This supersedes the older reversed
+notation and whole-turn-union target. Pickers supply the composer actor and
+explicit default; typed turn overrides do not change those selections. Scopes
+replace the audience for their span and restore the base afterward. Plain names
+in prose never route. Preserve each mode's prose and routing across switching,
+reopening and refinement; generated candidate corrections retain their own state.
 
 **All** is a bulk selection of concrete supported cast IDs from the pinned
 revision, with individual deselection available. It grants no new access and does
@@ -206,7 +206,8 @@ buffers retain empty deletions across candidate switching and terminal recovery.
 Legacy additive inputs remain labeled as legacy; a complete replacement must be
 provided explicitly rather than synthesized from original-plus-correction text.
 See [Composer Routing](COMPOSER_ROUTING.md) for versioning and receipt semantics.
-Historical editing, browser-close autosave and notation remain separate work.
+Historical editing and browser-close autosave have their separate contracts;
+manual scoped notation follows [Scoped audiences](SCOPED_AUDIENCES.md).
 
 ## Historical revision
 
