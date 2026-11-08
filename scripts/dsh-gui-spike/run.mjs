@@ -159,34 +159,34 @@ try {
   const audience = page.getByLabel('Audience', { exact: true });
   await audience.waitFor();
 
-  await editor.fill('/perform @Corin to @Ne');
-  const nell = page.getByRole('option', { name: 'Nell Doxvelt character', exact: true });
-  await nell.waitFor();
+  await editor.fill('/perform @Co');
+  const corin = page.getByRole('option', { name: 'Corin Doxvelt character', exact: true });
+  await corin.waitFor();
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await editor.press('End');
   await editor.press('Space');
-  await page.keyboard.insertText('| Mara, this letter is only for Nell.');
+  await page.keyboard.insertText('#Nell Mara, this letter is only for Nell.');
   assert.equal(await audience.inputValue(), 'Nell');
   await audience.selectOption('Mara');
-  assert.match(await editor.innerText(), /to @Mara/);
-  await editor.fill('/perform @Corin to @Nell | Mara, this letter is only for Nell.');
+  assert.match(await editor.innerText(), /#Mara/);
+  await editor.fill('/perform @Corin #Nell Mara, this letter is only for Nell.');
   assert.equal(await audience.inputValue(), 'Nell');
   await editor.press('Enter');
   await rows.nth(0).waitFor();
-  await waitForDraft(page, '/perform @Corin to @Nell |');
+  await waitForDraft(page, '/perform @Corin #Nell');
   assert.equal((await readFixture()).turns[0].audience, 'Nell');
   results.push('Keyboard completion, bidirectional routing, and manual Enter');
 
-  await editor.fill('/generate @Nell to actor | PRIVATE: Be discreet.');
+  await editor.fill('/generate @Nell #actor PRIVATE: Be discreet.');
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await rows.nth(1).waitFor();
-  await waitForDraft(page, '/generate @Nell to actor |');
+  await waitForDraft(page, '/generate @Nell #actor');
   assert.match(await rows.nth(1).innerText(), /Nell → Corin/);
-  await editor.fill('/generate @Mara to @Nell | Watch the weather.');
+  await editor.fill('/generate @Mara #Nell Watch the weather.');
   await editor.press('Enter');
   await rows.nth(2).waitFor();
-  await waitForDraft(page, '/generate @Mara to @Nell |');
+  await waitForDraft(page, '/generate @Mara #Nell');
   const played = await readFixture();
   assert.deepEqual(played.calls.map(call => call.configuration), ['fixture-a', 'fixture-b']);
   assert.deepEqual(played.calls.map(call => call.perceived), [['1'], []]);
@@ -198,7 +198,7 @@ try {
   assert.equal(await rows.count(), 3);
   results.push('Two actor configurations in one conversation, private direction, and automatic append');
 
-  await editor.fill('/perform @Corin to @Nell | Unsent continuation.');
+  await editor.fill('/perform @Corin #Nell Unsent continuation.');
   await page.getByRole('button', { name: 'Edit turn 1' }).click();
   await page.getByRole('textbox', { name: 'Correct performance' }).fill('Mara, the sealed letter is only for Nell.');
   await page.getByRole('button', { name: 'Save correction' }).click();
@@ -208,7 +208,7 @@ try {
   assert.match(await editor.innerText(), /Unsent continuation/);
   results.push('Inline correction preserves the later turns and unsent continuation');
 
-  await editor.fill('/generate @Nell to actor | force failure');
+  await editor.fill('/generate @Nell #actor force failure');
   await editor.press('Enter');
   await page.getByText('Scripted generation failed. Try again.', { exact: true }).waitFor();
   assert.match(await editor.innerText(), /force failure/);
@@ -223,22 +223,22 @@ try {
   assert.deepEqual(await rows.allInnerTexts(), before);
   assert.deepEqual(pageErrors, []);
   results.push('Generation failure preserves the input, retry commits once, reload restores four rows');
-  await editor.fill('/generate @Mara to @Nell | Check the steering rope.');
+  await editor.fill('/generate @Mara #Nell Check the steering rope.');
   await editor.press('Enter');
   await rows.nth(4).waitFor();
-  await waitForDraft(page, '/generate @Mara to @Nell |');
-  assert.equal(await page.getByLabel('Action', { exact: true }).inputValue(), 'generate');
-  assert.equal(await page.getByLabel('Actor', { exact: true }).inputValue(), 'Mara');
+  await waitForDraft(page, '/generate @Mara #Nell');
+  assert.equal(await page.getByRole('tab', { name: 'Generate', exact: true }).getAttribute('aria-selected'), 'true');
+  assert.equal(await page.getByRole('tablist', { name: 'Actor', exact: true }).getByRole('tab', { name: 'Mara', exact: true }).getAttribute('aria-selected'), 'true');
   assert.equal(await audience.inputValue(), 'Nell');
   assert.equal(await editor.evaluate(element => element === document.activeElement), true);
   await page.keyboard.insertText('Try the spare rope.');
-  assert.match(await editor.innerText(), /to @Nell \|\s+Try the spare rope\./);
+  assert.match(await editor.innerText(), /#Nell\s+Try the spare rope\./);
   await page.keyboard.press('Enter');
   await rows.nth(5).waitFor();
   assert.deepEqual((await readFixture()).calls.at(-1), {
     configuration: 'fixture-b', whisper: 'Try the spare rope.', perceived: ['3', '5'],
   });
-  await waitForDraft(page, '/generate @Mara to @Nell |');
+  await waitForDraft(page, '/generate @Mara #Nell');
   await page.screenshot({ path: path.join(root, 'sticky-mode.png'), animations: 'disabled' });
   results.push('The next generated turn accepts typing and Enter without reselecting the mode, character, or audience');
 
@@ -253,14 +253,14 @@ try {
   const savedPicker = page.getByLabel('Saved episode', { exact: true });
   assert.equal(await restoredRows.count(), 0);
   const restoredEditor = page.locator('[contenteditable="true"]').first();
-  await restoredEditor.fill('/perform @Corin to @Nell | Unsent saved-episode draft.');
+  await restoredEditor.fill('/perform @Corin #Nell Unsent saved-episode draft.');
   assert.equal(await savedPicker.isDisabled(), true);
-  await restoredEditor.fill('/perform @Corin to @Nell | ');
+  await restoredEditor.fill('/perform @Corin #Nell ');
   await savedPicker.selectOption(saved.simulationId);
   await restoredRows.getByText(savedLine).waitFor();
   assert.equal(await restoredRows.count(), 1);
   assert.equal(await savedPicker.locator('option:checked').textContent(), 'The last crossing');
-  await waitForDraft(page, '/perform @Corin to @Nell |');
+  await waitForDraft(page, '/perform @Corin #Nell');
 
   await page.waitForFunction(() => {
     const selection = document.getSelection();
@@ -274,7 +274,7 @@ try {
   await page.keyboard.insertText('I will watch the ferry rope.');
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await restoredRows.nth(1).waitFor();
-  await waitForDraft(page, '/perform @Corin to @Nell |');
+  await waitForDraft(page, '/perform @Corin #Nell');
   assert.equal(await restoredEditor.evaluate(element => element === document.activeElement), true);
   await page.keyboard.insertText('Nell, bring the lantern.');
   await page.keyboard.press('Enter');
@@ -285,16 +285,16 @@ try {
   ]);
   assert.ok(durable.transcript.every(turn => turn.actorId === 'corin' && turn.audience.includes('nell') && !turn.audience.includes('mara')));
   assert.deepEqual(pageErrors, []);
-  await waitForDraft(page, '/perform @Corin to @Nell |');
+  await waitForDraft(page, '/perform @Corin #Nell');
   await page.screenshot({ path: path.join(root, 'saved-episode.png'), animations: 'disabled' });
   results.push('A fresh DSH profile reopens the SQLite episode after the local API restarts and appends two manual turns');
 
-  await restoredEditor.fill('/generate @Nell to @Corin | Route to the wrong character, Mara.');
+  await restoredEditor.fill('/generate @Nell #Corin Route to the wrong character, Mara.');
   await restoredEditor.press('Enter');
   await page.getByText('Generation did not produce a valid turn. The direction is still in the composer.', { exact: true }).waitFor();
   assert.match(await restoredEditor.innerText(), /Route to the wrong character/);
   assert.equal((await engineRequest(engineUrl, savedRoute + '/stage')).transcript.length, 3);
-  await restoredEditor.fill('/generate @Nell to @Corin | Acknowledge Corin.');
+  await restoredEditor.fill('/generate @Nell #Corin Acknowledge Corin.');
   await restoredEditor.press('Enter');
   await restoredRows.getByText('I have the lantern.', { exact: true }).waitFor();
   const committed = (await engineRequest(engineUrl, savedRoute + '/stage')).transcript.at(-1);
@@ -320,7 +320,7 @@ try {
     await page.getByText('Memories saved.', { exact: true }).waitFor();
     await page.getByText('I still remember the sealed letter agreement.', { exact: true }).first().waitFor();
     await page.screenshot({ path: path.join(root, 'episode-memory.png'), animations: 'disabled' });
-    await waitForDraft(page, '/generate @Nell to @Corin |');
+    await waitForDraft(page, '/generate @Nell #Corin');
     await page.getByRole('button', { name: 'End and open next episode', exact: true }).click();
     await page.locator('[data-doxvelt-turn]').first().waitFor({ state: 'hidden' });
     await page.getByText('Episode memory', { exact: true }).click();
@@ -328,7 +328,7 @@ try {
     await page.getByRole('button', { name: 'Set date', exact: true }).click();
     await page.getByRole('button', { name: 'Close episode memory' }).click();
     const sequelEditor = page.locator('[contenteditable="true"]').first();
-    await sequelEditor.fill('/generate @Nell to @Corin | Remember the sealed letter.');
+    await sequelEditor.fill('/generate @Nell #Corin Remember the sealed letter.');
     await sequelEditor.press('Enter');
     await page.locator('[data-doxvelt-turn]').getByText('I have the lantern.', { exact: true }).waitFor();
     assert.equal(await page.locator('[data-doxvelt-turn]').count(), 1);

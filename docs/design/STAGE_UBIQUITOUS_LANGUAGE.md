@@ -23,6 +23,10 @@ These are the terms for Stage play and memory. The existing engine glossary also
 
 | Term | Meaning |
 | --- | --- |
+| **Collection** | The reusable authored worlds, scenarios, formats, characters and connections in one DSH workspace. |
+| **Story** | An independent playthrough started from selected pinned collection objects, with its own history paths and memories. |
+| **Scenario** | A reusable premise and starting situation selected when a story begins. |
+| **Scene heading** | A player-only heading organizing a group of turns. It supplies no character knowledge or reflection source. |
 | **Episode** | A played scene or stretch of play with a transcript, a place in fictional time, and a deliberate opportunity to memorize it. |
 | **Transcript** | The ordered record of played turns for the selected episode revision. Each character receives their own perception of that record as immediate context. |
 | **Fictional time** | When the story takes place. It determines which other episodes are prequels or sequels regardless of the order in which the player opens or plays them. |

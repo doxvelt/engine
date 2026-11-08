@@ -90,7 +90,7 @@ function castFor(stage) {
 
 function displayRows(stage, episodeId = null) {
   const names = new Map(stage.actors.map(actor => [actor.id, actor.name]));
-  return stage.transcript.filter(turn => turn.episodeId === episodeId).map(turn => ({
+  const turns = stage.transcript.filter(turn => turn.episodeId === episodeId).map(turn => ({
     id: turn.logicalMessageId ?? turn.id,
     character: names.get(turn.actorId) ?? turn.actorId,
     audience: turn.audience.filter(id => id !== turn.actorId).map(id => names.get(id) ?? id).join(', '),
@@ -98,6 +98,11 @@ function displayRows(stage, episodeId = null) {
     version: turn.bodyRevisionId ?? turn.messageVersionId,
     saved: true,
   }));
+  const headings = (stage.sceneHeadings ?? []).filter(heading => heading.episodeId === episodeId);
+  const after = id => headings.filter(heading => heading.after === id).map(heading => ({
+    id: heading.id, title: heading.title, sceneHeading: true,
+  }));
+  return [...after(null), ...turns.flatMap(turn => [turn, ...after(turn.id)])];
 }
 
 function syncRows(session, current, next) {
@@ -167,6 +172,16 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
   if (command.mode.startsWith('memory-')) return episodeMemoryRequest(origin, session, opened, ended || Boolean(opened.episodeId), command, signal);
   if (command.mode.startsWith('history-')) return historicalRequest(origin, opened, command, signal);
   if (ended || opened.episodeId) return failure('This episode ended. Open a new DSH session to play the next episode.', 409);
+  if (command.mode === 'scene-status' || command.mode === 'scene-create') {
+    const stage = await engineRequest(origin, stageRoute(opened), undefined, signal);
+    if (command.mode === 'scene-status') return Response.json({ expectedHead: stage.branch.headCommitId });
+    await engineRequest(origin, simulationRoute(opened.simulationId) + '/scene-headings', {
+      branchId: opened.branchId, expectedHead: command.expectedHead, commandId: command.commandId, title: command.title,
+    }, signal);
+    const updated = await engineRequest(origin, stageRoute(opened), undefined, signal);
+    if (!syncRows(session, episodeState(session).rows, displayRows(updated))) return failure('The heading is saved. Reopen this episode to see it.', 409);
+    return Response.json({ ok: true });
+  }
   const generating = command.mode === 'generate';
   if (!generating && command.mode !== 'perform') return failure('Choose Perform or Generate.', 400);
 
@@ -188,18 +203,18 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
   const audience = route.recipients?.map(token => cast.get(token)) ?? null;
   if (generating) {
     const audienceLimit = route.limit?.map(token => cast.get(token));
-    if (!await commitGeneratedTurn(origin, simulation, basis, audience, text, { audienceLimit, actorConfiguration: command.actorConfiguration }))
+    if (!await commitGeneratedTurn(origin, simulation, basis, audience, text, { signal, audienceLimit, actorConfiguration: command.actorConfiguration }))
       return failure('Generation did not produce a valid turn. The direction is still in the composer.', 422);
     const updated = await engineRequest(origin, stageRoute(opened));
     if (!syncRows(session, episodeState(session).rows, displayRows(updated))) {
       return failure('The turn was saved. Reopen the episode to see the updated transcript.', 409);
     }
   } else {
-    const { turn } = await engineRequest(origin, simulation + '/turns', {
+    await engineRequest(origin, simulation + '/turns', {
       ...basis, audience, manualText: text, knowledgePolicy: 'actor-knowledge-v1',
-    });
-    const [row] = displayRows({ ...stage, transcript: [turn] });
-    appendPlayedTurn(session, row);
+    }, signal);
+    const updated = await engineRequest(origin, stageRoute(opened), undefined, signal);
+    if (!syncRows(session, episodeState(session).rows, displayRows(updated))) return failure('The turn is saved. Reopen this episode to see it.', 409);
   }
   return Response.json({ ok: true });
 }

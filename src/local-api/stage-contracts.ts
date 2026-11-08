@@ -11,6 +11,7 @@ export type StageProjection = {
   generationActorIds?: string[];
   actorConfigurations?: { characterId: string; key: string; label: string; profile: RuntimeProfileRef }[];
   episodes?: { id: string; label: string }[];
+  sceneHeadings?: import("../store/scene-headings.ts").SceneHeading[];
 };
 export type StageDraft = Pick<ActorTurnDraftRecord,
   "id" | "branchId" | "basisHeadCommitId" | "actorId" | "audience" |
