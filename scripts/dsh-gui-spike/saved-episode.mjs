@@ -198,7 +198,10 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
     // Explicit legacy shorthand remains a choice; it is never a missing default.
     text = text.replace(/^#all(?=\s|$)/, '#' + stage.actors.map(actor => actor.id).join(','))
       .replace(/^#self(?=\s|$)/, '#' + actorId);
-    text = text.replace(/^#\[([\w-]+)\](?=\s|$)/, (original, token) => cast.has(token) ? '#' + cast.get(token) : original);
+    text = text.replace(/^#\[([\w-]+)\](?=\s|$)/, (original, token) => {
+      const matches = [...cast].filter(([label]) => label.toLowerCase() === token.toLowerCase());
+      return matches.length === 1 ? '#' + matches[0][1] : original;
+    });
   }
   if (!actorId || !route || (!generating && !text)) {
     return failure('Choose a valid performer and audience, and enter a performance for Perform.', 400);
