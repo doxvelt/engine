@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { appendPlayedTurn, resolvePlayAudience, savedEpisodeRequest } from './saved-episode.mjs';
+import { applyWorkspaceHost } from './workspace-host.mjs';
 
 export const inject = ['connection', 'sessions', 'workspaceRegistry', 'llm'];
 
@@ -11,8 +12,10 @@ const actors = {
   Mara: { configuration: 'fixture-b', text: 'The wind is picking up.', audience: 'Nell' },
 };
 
-export async function apply(ctx) {
+export async function apply(ctx, options = {}) {
   const fixtureRoot = process.env.DOXVELT_SPIKE_ROOT;
+  if (!fixtureRoot && !process.env.DOXVELT_STAGE_CONFIG && !process.env.DOXVELT_SPIKE_ENGINE)
+    return applyWorkspaceHost(ctx, options);
   const workspace = process.env.DOXVELT_STAGE_WORKSPACE ?? join(fixtureRoot, 'ferry-stage');
   const origin = process.env.DOXVELT_STAGE_CONFIG
     ? await (await import('./stage.mjs')).openStage(ctx, process.env.DOXVELT_STAGE_CONFIG)

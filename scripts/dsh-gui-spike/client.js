@@ -1,8 +1,8 @@
 window.__ModuleLoader__.load({
-  id: '@doxvelt/dsh-gui-spike',
+  id: '@doxvelt/dsh',
   factory(require) {
     const { createElement: h, useEffect, useRef, useState } = require('react');
-    const { Button, Modal } = require('@deepseek-ai/dsh-client-ui-primitives');
+    const { Button, Modal, SegmentedTabs } = require('@deepseek-ai/dsh-client-ui-primitives');
     const fixtureCast = ['Corin', 'Nell', 'Mara'].map(token => ({ token, name: token, canGenerate: token !== 'Corin' }));
     const casts = new Map();
     const castFor = sessionId => casts.get(sessionId) ?? fixtureCast;
@@ -12,6 +12,8 @@ window.__ModuleLoader__.load({
     const routes = new Map();
     const sceneListeners = new Map();
     const carryDrafts = new Map();
+    const episodeSessions = new Map();
+    const modeDrafts = new Map();
 
     async function submit(sessionId, command, signal) {
       try {
@@ -21,8 +23,10 @@ window.__ModuleLoader__.load({
           body: JSON.stringify({ sessionId, ...command }),
         });
         const result = await response.json();
+        if (response.ok && command.mode === 'saved') episodeSessions.set(sessionId, result.workspace ? Boolean(result.opened) : true);
         if (response.ok && result.opened?.cast) casts.set(sessionId, result.opened.cast);
         if (response.ok && ['perform', 'generate', 'correct'].includes(command.mode)) void sceneListeners.get(sessionId)?.();
+        if (response.ok && ['perform', 'generate'].includes(command.mode)) modeDrafts.get(sessionId)?.delete(command.mode);
         return response.ok ? { kind: 'success', result } : { kind: 'error', status: response.status, text: result.error };
       } catch {
         return { kind: 'error', uncertain: true, text: 'The scene could not save. Try again.' };
@@ -42,6 +46,41 @@ window.__ModuleLoader__.load({
     }
 
     function parseDraft(draft, cast) {
+      const compact = /^\/(perform|generate)\s+@([\w-]+)(?:#([a-z0-9-]+))?\s+(#[\s\S]*)$/i.exec(draft.trimStart());
+      if (compact) {
+        const resolve = name => cast.find(actor => actor.token.toLowerCase() === name.toLowerCase())?.token;
+        const mode = compact[1].toLowerCase();
+        const character = resolve(compact[2]);
+        const key = compact[3]?.toLowerCase();
+        const actor = actorChoices(cast, mode).find(choice => choice.character === character && (!key || choice.configuration === key));
+        const selections = [];
+        let rest = compact[4];
+        while (rest.startsWith('#')) {
+          const token = /^#(?:\[([\w-]+)\]|([\w-]+)(?::([\w,-]+))?)(?=\s|$)/.exec(rest);
+          if (!token) return { mode, character, actor: actor?.token, body: rest };
+          selections.push({ name: token[1] ?? token[2], limit: token[3], literal: Boolean(token[1]) });
+          const following = rest.slice(token[0].length);
+          const another = /^[ \t]+#/.test(following);
+          rest = another ? following.trimStart() : following.replace(/^[ \t]/, '');
+          if (!another) break;
+        }
+        let audience;
+        const single = selections.length === 1 && selections[0];
+        if (single && !single.literal && /^(all|self)$/i.test(single.name) && !single.limit) audience = '!' + single.name.toLowerCase();
+        else if (single && !single.literal && /^actor$/i.test(single.name) && mode === 'generate') {
+          const limit = single.limit?.split(',').map(resolve);
+          if (!limit) audience = '!actor';
+          else if (limit.every(token => token && token !== character)) audience = '!actor:' + [...new Set(limit)].join(',');
+        } else {
+          const recipients = selections.map(item => !item.limit && resolve(item.name));
+          if (recipients.length && recipients.every(Boolean)) {
+            const others = cast.filter(actor => actor.token !== character && recipients.includes(actor.token)).map(actor => actor.token);
+            audience = others.length ? others.join(',') : '!self';
+          }
+        }
+        return { mode, character, actor: actor?.token, actorConfiguration: actor?.configuration, audience, body: rest };
+      }
+      // Keep unsent drafts from the earlier web prototype readable.
       const match = /^\/(perform|generate)\s+@([\w-]+)(?:#([a-z0-9-]+))?\s+to\s+([^|]+)\|\s*([\s\S]*)$/i.exec(draft.trimStart());
       if (!match) return undefined;
       const resolve = name => cast.find(actor => actor.token.toLowerCase() === name.toLowerCase())?.token;
@@ -74,7 +113,7 @@ window.__ModuleLoader__.load({
         submit(args) {
           const command = parseDraft('/' + mode + ' ' + args, castFor(session.sessionId));
           if (!command?.actor || !command.audience) {
-            return Promise.resolve({ kind: 'error', text: 'Choose a valid actor and audience. You can use to all, to @Nell, @Mara, or to actor before |.' });
+            return Promise.resolve({ kind: 'error', text: 'Choose a valid actor and audience, such as @Corin #Mara or @Corin #all, followed by your words.' });
           }
           return submit(session.sessionId, command);
         },
@@ -82,10 +121,9 @@ window.__ModuleLoader__.load({
     }
 
     function formatDraft({ mode, character, actor, audience, body = '' }) {
-      const mentions = value => value.split(',').map(token => '@' + token).join(', ');
-      const recipients = ['!all', '!self', '!actor'].includes(audience) ? audience.slice(1)
-        : audience.startsWith('!actor:') ? 'actor among ' + mentions(audience.slice(7)) : mentions(audience);
-      return '/' + mode + ' @' + (mode === 'generate' ? actor : character) + ' to ' + recipients + ' | ' + body;
+      const recipients = audience.startsWith('!actor:') ? '#actor:' + audience.slice(7)
+        : audience.startsWith('!') ? '#' + audience.slice(1) : audience.split(',').map(token => /^(all|self|actor)$/i.test(token) ? '#[' + token + ']' : '#' + token).join(' ');
+      return '/' + mode + ' @' + (mode === 'generate' ? actor : character) + ' ' + recipients + ' ' + body;
     }
 
     function supportedRoute(values, cast) {
@@ -113,7 +151,7 @@ window.__ModuleLoader__.load({
       const cast = castFor(sessionId);
       const command = parseDraft(draft, cast);
       const busy = phase === 'submitting' || phase === 'sending' || phase === 'adjudicating';
-      const [saved, setSaved] = useState({ simulations: [], opened: null, branches: [], episodes: [] });
+      const [saved, setSaved] = useState({ workspace: { loading: true }, simulations: [], opened: null, branches: [], episodes: [] });
       const [opening, setOpening] = useState(false);
       const [error, setError] = useState('');
       const restorationFrame = useRef(null);
@@ -144,7 +182,9 @@ window.__ModuleLoader__.load({
         if (openState !== 'open') return;
         let current = true;
         void submit(sessionId, { mode: 'saved' }).then(outcome => {
-          if (current && outcome.kind === 'success') setSaved(outcome.result);
+          if (!current) return;
+          if (outcome.kind === 'success') setSaved(outcome.result);
+          else setError(outcome.text);
         });
         return () => { current = false; };
       }, [openState, sessionId]);
@@ -153,16 +193,16 @@ window.__ModuleLoader__.load({
         if (command?.actor && command.audience) {
           const { mode, character, actor, audience } = command;
           routes.set(sessionId, { mode, character, actor, audience });
-        } else if (!draft && !busy && openState === 'open') {
+        } else if (!draft && !busy && openState === 'open' && (!saved.workspace || saved.opened)) {
           // Let the stock composer restore focus after its submit transaction first.
           const selection = inputActions.captureInsertion();
           const route = supportedRoute({ ...(routes.get(sessionId) ?? defaultRoute) }, cast);
           if (route.character && route.audience) return restoreDraft(route, selection);
         }
-      }, [draft, busy, openState, sessionId, inputActions, cast]);
+      }, [draft, busy, openState, sessionId, inputActions, cast, saved.opened, saved.workspace]);
 
       useEffect(() => {
-        if (!saved.opened || (command?.body ?? (/^\/(perform|generate)\b[^|]*\|\s*$/i.test(draft) ? '' : draft)).trim()) return;
+        if (!saved.opened || (command?.body ?? draft).trim()) return;
         // Opening history can remount the stock editor. Place its caret after the route in the new view.
         const span = { ...inputActions.captureInsertion(), start: 0, end: draft.length };
         const route = supportedRoute({ ...(routes.get(sessionId) ?? defaultRoute), ...command }, cast);
@@ -192,7 +232,13 @@ window.__ModuleLoader__.load({
       }
 
       function update(change) {
-        const values = { ...defaultRoute, body: draft, ...command, ...change };
+        let values = { ...defaultRoute, body: draft, ...command, ...change };
+        if (change.mode && command?.mode && change.mode !== command.mode) {
+          let buffers = modeDrafts.get(sessionId);
+          if (!buffers) modeDrafts.set(sessionId, buffers = new Map());
+          buffers.set(command.mode, { ...command });
+          values = buffers.get(change.mode) ?? { ...values, body: '' };
+        }
         const route = supportedRoute(values, cast);
         if (route.character && route.audience) inputActions.setDraft(formatDraft(route));
       }
@@ -200,14 +246,38 @@ window.__ModuleLoader__.load({
         const labels = { '!all': 'Everyone', '!self': 'Only self', '!actor': 'Actor chooses' };
         const optionLabel = option => label === 'Audience limit' && option === '!all' ? 'No limit'
           : (Object.hasOwn(labels, option) ? labels[option] : undefined) ?? option.split(',').map(token => cast.find(actor => actor.token === token)?.name ?? token).join(' + ');
+        if (options.length === 2) return h(SegmentedTabs, { label, value: value ?? '',
+          onChange: next => { if (!busy && !opening) onChange(next); },
+          items: options.map(option => ({ value: option, label: displayName?.(option) ?? optionLabel(option), disabled: busy || opening })) });
         return h('label', { style: { display: 'inline-flex', gap: 4, alignItems: 'center' } }, label, ' ',
-          h('select', { 'aria-label': label, value: value ?? '', disabled: busy || opening,
+          h('select', { 'aria-label': label, value: value ?? '', disabled: busy || opening, style: { font: 'inherit' },
             onChange: event => onChange(event.target.value) },
             h('option', { value: '', disabled: true }, 'Choose'),
             options.map(option => h('option', { value: option, key: option }, displayName?.(option) ?? optionLabel(option)))));
       }
 
       const unsent = Boolean((command?.body ?? draft).trim());
+      if (saved.workspace && !saved.opened) return h('div', { style: { padding: '0 8px 8px', fontSize: 13 } },
+        saved.workspace.loading ? (error && h('span', { role: 'alert' }, error))
+          : !saved.workspace.active ? h(Button, { size: 'sm', variant: 'outline', disabled: opening || busy,
+            onClick: async () => {
+              setOpening(true);
+              const result = await submit(sessionId, { mode: 'workspace-activate' });
+              if (result.kind === 'success') {
+                const state = await submit(sessionId, { mode: 'saved' });
+                if (state.kind === 'success') setSaved(state.result); else setError(state.text);
+              } else setError(result.text);
+              setOpening(false);
+            } }, opening ? 'Activating Doxvelt…' : 'Activate Doxvelt for this workspace')
+          : h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' } },
+            h(WorkspaceTools, { sessionId, busy: busy || opening, unsent,
+              onChanged: async () => { const state = await submit(sessionId, { mode: 'saved' }); if (state.kind === 'success') setSaved(state.result); },
+              onCreated: selection => openEpisodeSession(selection) }),
+            h('select', { 'aria-label': 'Saved episode', value: '', disabled: opening || busy || unsent,
+              style: { font: 'inherit' }, onChange: event => { void openSaved(event.target.value); } },
+              h('option', { value: '', disabled: true }, 'Continue a saved story'),
+              saved.simulations.map(item => h('option', { key: item.simulationId, value: item.simulationId }, item.scenarioName ?? item.simulationId)))),
+        !saved.workspace.loading && error && h('p', { role: 'alert' }, error));
       const available = actorChoices(cast, command?.mode);
       const recipients = cast.filter(actor => actor.token !== command?.character).map(actor => actor.token);
       const groups = recipients.length <= 4
@@ -220,8 +290,12 @@ window.__ModuleLoader__.load({
       if (audience && audience !== '!actor' && !fixed.includes(audience)) fixed.push(audience);
       if (!limits.includes(limit)) limits.push(limit);
       return h('div', { 'aria-label': 'Doxvelt routing', style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '0 8px 8px', width: '100%', margin: '0 auto',
-        maxWidth: 'var(--dsh-composer-card-max-width, 712px)', boxSizing: 'border-box' } },
-        select('Action', command?.mode, cast.some(actor => actor.canGenerate) ? modes : ['perform'], mode => update({ mode })),
+        maxWidth: 'var(--dsh-composer-card-max-width, 712px)', boxSizing: 'border-box', fontSize: 13 } },
+        h(SegmentedTabs, { label: 'Action', value: command?.mode ?? 'perform',
+          onChange: mode => { if (!busy && !opening) update({ mode }); },
+          items: (cast.some(actor => actor.canGenerate) ? modes : ['perform']).map(mode => ({
+            value: mode, label: mode === 'perform' ? 'Perform' : 'Generate', disabled: busy || opening,
+          })) }),
         select(command?.mode === 'generate' ? 'Actor' : 'Character', command?.actor, available.map(item => item.token), actor => {
           update({ actor, character: available.find(item => item.token === actor).character });
         }, token => available.find(item => item.token === token)?.name),
@@ -249,12 +323,192 @@ window.__ModuleLoader__.load({
           }, h('option', { value: '' }, 'Current episode'),
             ...saved.episodes.map(episode => h('option', { value: episode.id, key: episode.id }, episode.label)))),
         saved.opened?.episodeId && h('span', null, 'Closed episode'),
+        saved.workspace?.active && h(WorkspaceTools, { sessionId, busy: busy || opening, unsent,
+          onChanged: async () => { const state = await submit(sessionId, { mode: 'saved' }); if (state.kind === 'success') setSaved(state.result); },
+          onCreated: selection => openEpisodeSession(selection) }),
+        saved.workspace?.active && saved.opened && !saved.opened.episodeId && h(SceneControls, { sessionId, busy: busy || opening }),
         error && h('span', { role: 'alert' }, error),
         saved.opened && h(MemoryControls, { sessionId, busy, unsent,
+          memoryConfigured: saved.workspace ? saved.workspace.memoryConfigured : true,
           openNextEpisode: () => openEpisodeSession({ simulationId: saved.opened.simulationId, branchId: saved.opened.branchId }) }));
     }
 
-    function MemoryControls({ sessionId, busy, openNextEpisode, unsent }) {
+    function WorkspaceTools({ sessionId, busy, unsent, onCreated, onChanged }) {
+      const [view, setView] = useState(null);
+      const [collection, setCollection] = useState(null);
+      const [object, setObject] = useState(null);
+      const [source, setSource] = useState(null);
+      const [setup, setSetup] = useState({ worldId: '', scenarioId: '', formatId: '', characterIds: [], date: '' });
+      const [working, setWorking] = useState(false);
+      const [error, setError] = useState('');
+      const [created, setCreated] = useState(null);
+      const [models, setModels] = useState([]);
+      const operation = useRef(null);
+      async function load() {
+        const result = await submit(sessionId, { mode: 'collection' });
+        if (result.kind !== 'success') throw new Error(result.text);
+        setCollection(result.result);
+        return result.result;
+      }
+      async function open(next) {
+        setView(next); setCollection(null); setError(''); setWorking(true); setObject(null); setSource(null); setCreated(null);
+        operation.current = null;
+        try {
+          if (next === 'models') {
+            const data = check(await submit(sessionId, { mode: 'workspace-models' }));
+            setModels(data.models); setCollection(data); return;
+          }
+          const data = await load();
+          setSetup({ worldId: data.worlds[0]?.id ?? '', scenarioId: data.scenarios[0]?.id ?? '',
+            formatId: data.formats[0]?.id ?? '', characterIds: data.characters.map(item => item.id), date: '' });
+        } catch (error) { setError(error.message); }
+        finally { setWorking(false); }
+      }
+      function change(values) { operation.current = null; setSetup(previous => ({ ...previous, ...values })); }
+      async function perform(action) {
+        setWorking(true); setError('');
+        try { await action(); } catch (error) { setError(error.message); }
+        finally { setWorking(false); }
+      }
+      function check(result) { if (result.kind !== 'success') throw new Error(result.text); return result.result; }
+      function newObject(kind) { setSource(null); setObject({ kind, name: '', id: '', body: '' }); setError(''); }
+      const kindNames = { world: 'world', scenario: 'scenario', character: 'character', format: 'format' };
+      const fieldStyle = { display: 'grid', gap: 4, marginBottom: 12 };
+      function field(label, value, onChange, type = 'text') {
+        return h('label', { style: fieldStyle }, label, h('input', { 'aria-label': label, value, type,
+          disabled: working, onChange: event => onChange(event.target.value), style: { font: 'inherit', padding: 6 } }));
+      }
+      function choose(kind, items, key) {
+        return h('div', { style: { display: 'flex', gap: 8, marginBottom: 12, alignItems: 'end' } },
+          h('label', { style: { ...fieldStyle, flex: 1, marginBottom: 0 } }, kind[0].toUpperCase() + kind.slice(1),
+            items.length === 2 ? h(SegmentedTabs, { label: 'Episode ' + kind, value: setup[key],
+              onChange: value => { if (!working) change({ [key]: value }); },
+              items: items.map(item => ({ value: item.id, label: item.name, disabled: working })) })
+            : h('select', { 'aria-label': 'Episode ' + kind, value: setup[key], disabled: working,
+              onChange: event => change({ [key]: event.target.value }), style: { font: 'inherit', padding: 6 } },
+              h('option', { value: '', disabled: true }, 'Choose ' + kind),
+              items.map(item => h('option', { key: item.id, value: item.id }, item.name)))),
+          h(Button, { size: 'sm', variant: 'outline', disabled: working, onClick: () => newObject(kind) }, 'New ' + kind + '…'));
+      }
+      function modelChoice(label, key, emptyLabel) {
+        return h('label', { style: fieldStyle }, label,
+          h('select', { 'aria-label': label, value: JSON.stringify(collection.configuration[key] ?? null), disabled: working,
+            onChange: event => setCollection({ ...collection, configuration: { ...collection.configuration, [key]: JSON.parse(event.target.value) ?? undefined } }),
+            style: { font: 'inherit', padding: 6 } },
+            h('option', { value: 'null' }, emptyLabel),
+            models.map(model => h('option', { key: model.provider + ':' + model.model, value: JSON.stringify({ provider: model.provider, model: model.model }) }, model.label))));
+      }
+      const title = object ? 'New ' + kindNames[object.kind] : source ? 'Edit source' : view === 'models' ? 'Doxvelt models' : view === 'episode' ? 'Create episode' : 'Workspace collection';
+      return h('div', { style: { display: 'flex', gap: 8, fontSize: 13 } },
+        h(Button, { size: 'sm', variant: 'outline', disabled: busy || unsent, onClick: () => { void open('episode'); } }, 'New episode'),
+        h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => { void open('library'); } }, 'Collection'),
+        h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => { void open('models'); } }, 'Models'),
+        h(Modal, { open: Boolean(view), title, closeLabel: 'Close Doxvelt setup', onClose: () => { if (!working) setView(null); } },
+          h('div', { style: { fontSize: 13, maxHeight: '65vh', overflowY: 'auto' } },
+            error && h('p', { role: 'alert' }, error),
+            working && h('p', { role: 'status' }, 'Saving or loading…'),
+            view === 'models' ? collection?.configuration && h('form', { onSubmit: event => {
+              event.preventDefault(); void perform(async () => {
+                check(await submit(sessionId, { mode: 'workspace-save-models', configuration: collection.configuration, expectedRevision: collection.configurationRevision }));
+                await onChanged(); setView(null);
+              });
+            } },
+              h('p', null, 'Choose models already configured in DSH. Provider connections and credentials remain in the harness.'),
+              modelChoice('Character generation', 'actorModel', 'Manual play only'),
+              modelChoice('Memory reflection', 'reflectionModel', 'Use character generation model'),
+              h(Button, { type: 'submit', variant: 'primary', disabled: working }, 'Save model choices'))
+            : object ? h('form', { onSubmit: event => {
+              event.preventDefault(); void perform(async () => {
+                check(await submit(sessionId, { mode: 'collection-create', object }));
+                await load();
+                const key = { world: 'worldId', scenario: 'scenarioId', format: 'formatId' }[object.kind];
+                if (key) change({ [key]: object.id });
+                else change({ characterIds: [...setup.characterIds, object.id] });
+                setObject(null);
+              });
+            } },
+              field('Name', object.name, name => setObject({ ...object, name,
+                id: name.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) })),
+              field('Object ID', object.id, id => setObject({ ...object, id })),
+              h('label', { style: fieldStyle }, 'Description (Markdown)', h('textarea', { 'aria-label': 'Description (Markdown)', rows: 8,
+                value: object.body, disabled: working, onChange: event => setObject({ ...object, body: event.target.value }), style: { width: '100%', font: 'inherit' } })),
+              object.kind === 'character' && h('p', null, 'Use :+3 at the end of a line for something this character takes as true, or :+1 for a suspicion.'),
+              h(Button, { type: 'submit', disabled: working || !object.name.trim() || !object.id, variant: 'primary' }, 'Create ' + object.kind),
+              h(Button, { type: 'button', variant: 'outline', disabled: working, onClick: () => setObject(null) }, 'Back'))
+            : source ? h('form', { onSubmit: event => {
+              event.preventDefault(); void perform(async () => {
+                check(await submit(sessionId, { mode: 'collection-save', source: { path: source.path, text: source.text, expectedRevision: source.revision } }));
+                await load(); setSource(null);
+              });
+            } }, h('p', null, source.path),
+              h('textarea', { 'aria-label': 'Source Markdown', rows: 14, value: source.text, disabled: working,
+                onChange: event => setSource({ ...source, text: event.target.value }), style: { width: '100%', font: 'inherit' } }),
+              h('p', null, 'Changes apply when starting a new story. Existing stories keep their pinned source.'),
+              h(Button, { type: 'submit', disabled: working, variant: 'primary' }, 'Save source'),
+              h(Button, { type: 'button', disabled: working, variant: 'outline', onClick: () => setSource(null) }, 'Back'))
+            : view && collection && (view === 'episode' ? h('form', { onSubmit: event => {
+              event.preventDefault(); void perform(async () => {
+                operation.current ??= crypto.randomUUID();
+                const result = check(await submit(sessionId, { mode: 'create-story', setup: {
+                  ...setup, operationId: operation.current, collectionRevision: collection.revision,
+                } }));
+                if (result.status === 'partial') { setCreated(result); setError(result.message); }
+                else { await onCreated(result); setView(null); }
+              });
+            } },
+              h('p', null, 'Start a new story from this workspace collection. Each story keeps its own history and memories.'),
+              choose('world', collection.worlds, 'worldId'), choose('scenario', collection.scenarios, 'scenarioId'),
+              choose('format', collection.formats, 'formatId'),
+              h('fieldset', { disabled: working, style: { marginBottom: 12 } }, h('legend', null, 'Characters'),
+                collection.characters.map(character => h('label', { key: character.id, style: { display: 'block' } },
+                  h('input', { type: 'checkbox', checked: setup.characterIds.includes(character.id),
+                    onChange: event => change({ characterIds: event.target.checked ? [...setup.characterIds, character.id] : setup.characterIds.filter(id => id !== character.id) }) }), character.name)),
+                h(Button, { type: 'button', size: 'sm', variant: 'outline', onClick: () => newObject('character') }, 'New character…')),
+              field('Episode date', setup.date, date => change({ date }), 'date'),
+              created ? h(Button, { type: 'button', onClick: () => { void onCreated(created); } }, 'Open saved story')
+                : h(Button, { type: 'submit', variant: 'primary', disabled: working || !setup.worldId || !setup.scenarioId || !setup.formatId || !setup.characterIds.length || !setup.date }, 'Create episode'))
+            : h('div', null,
+              h('p', null, 'Objects are Markdown files in this workspace. You can edit them here, directly, or with the harness.'),
+              h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 } },
+                Object.keys(kindNames).map(kind => h(Button, { key: kind, size: 'sm', variant: 'outline', disabled: working,
+                  onClick: () => newObject(kind) }, 'New ' + kind + '…'))),
+              collection.files.length === 0 && h('p', null, 'Your collection is empty. Create an object here or while setting up an episode.'),
+              collection.files.map(file => h('div', { key: file.path }, h(Button, { variant: 'outline', size: 'sm', disabled: working,
+                onClick: () => { void perform(async () => {
+                  const result = check(await submit(sessionId, { mode: 'collection-read', path: file.path }));
+                  setSource({ path: file.path, text: result.text, revision: file.revision });
+                }); } }, file.path))))))));
+    }
+
+    function SceneControls({ sessionId, busy }) {
+      const [open, setOpen] = useState(false);
+      const [title, setTitle] = useState('');
+      const [basis, setBasis] = useState(null);
+      const [saving, setSaving] = useState(false);
+      const [error, setError] = useState('');
+      const command = useRef(null);
+      return h('div', null,
+        h(Button, { size: 'sm', variant: 'outline', disabled: busy || saving, onClick: async () => {
+          setOpen(true); setError(''); setBasis(null); setTitle(''); command.current = null;
+          const result = await submit(sessionId, { mode: 'scene-status' });
+          if (result.kind === 'success') setBasis(result.result.expectedHead); else setError(result.text);
+        } }, 'New scene'),
+        h(Modal, { open, title: 'New scene', closeLabel: 'Close scene heading', onClose: () => { if (!saving) setOpen(false); } },
+          h('form', { style: { fontSize: 13 }, onSubmit: async event => {
+            event.preventDefault(); setSaving(true); setError(''); command.current ??= crypto.randomUUID();
+            const result = await submit(sessionId, { mode: 'scene-create', expectedHead: basis, commandId: command.current, title });
+            if (result.kind === 'success') setOpen(false); else setError(result.text);
+            setSaving(false);
+          } },
+            h('p', null, 'A scene heading organizes the transcript. It does not tell characters anything or change their memories.'),
+            h('label', { style: { display: 'grid', gap: 4, marginBottom: 12 } }, 'Scene heading',
+              h('input', { 'aria-label': 'Scene heading', value: title, maxLength: 160, disabled: saving,
+                onChange: event => { setTitle(event.target.value); command.current = null; }, style: { font: 'inherit', padding: 6 } })),
+            error && h('p', { role: 'alert' }, error),
+            h(Button, { type: 'submit', variant: 'primary', disabled: saving || !basis || !title.trim() }, 'Add scene heading'))));
+    }
+
+    function MemoryControls({ sessionId, busy, openNextEpisode, unsent, memoryConfigured }) {
       const [state, setState] = useState(null);
       const [open, setOpen] = useState(false);
       const [selected, setSelected] = useState('');
@@ -319,7 +573,7 @@ window.__ModuleLoader__.load({
             h(Button, { size: 'sm', variant: 'outline', disabled: locked || !date || date === episode.date,
               onClick: () => { void perform('memory-date', { date }); } }, 'Set date')),
           h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 } },
-            h(Button, { variant: 'primary', disabled: locked || !episode.date || !episode.canMemorize,
+            h(Button, { variant: 'primary', disabled: locked || !episode.date || !episode.canMemorize || !memoryConfigured,
               onClick: () => { void perform('memory-memorize', {}); } }, episode.status === 'unmemorized' ? 'Memorize' : 'Memorize again'),
             action === 'memory-memorize' && h(Button, { variant: 'outline',
               onClick: () => operation.current?.abort() }, 'Cancel memorization'),
@@ -327,6 +581,7 @@ window.__ModuleLoader__.load({
               onClick: () => { void perform('memory-next', { label: current.label }); } }, 'End and open next episode'),
             state.ended && h(Button, { variant: 'outline', onClick: () => { void openNext(); } }, 'Open current episode')),
           action === 'memory-memorize' && h('p', { role: 'status' }, 'Forming memories…'),
+          !memoryConfigured && h('p', null, 'Choose a reflection model in Models before memorizing.'),
           notice && h('p', { role: 'status' }, notice),
           h('div', { style: { maxHeight: 220, overflowY: 'auto', marginTop: 12 } },
             ...episode.memories.map(character => h('section', { key: character.characterId },
@@ -557,6 +812,7 @@ window.__ModuleLoader__.load({
       ctx.effect(() => ctx.inputTriggers.registerSource({
         trigger: '@', name: 'Doxvelt characters', order: -10,
         async candidates(session, { query }) {
+          if (episodeSessions.get(session.sessionId) !== true) return [];
           return castFor(session.sessionId).filter(actor => [actor.token, actor.name].some(value => value.toLowerCase().startsWith(query.toLowerCase())))
             .map(actor => ({ name: actor.token, description: actor.token === actor.name ? "Doxvelt character" : actor.name }));
         },
@@ -564,12 +820,14 @@ window.__ModuleLoader__.load({
       }));
 
       function match(session, line) {
+        if (episodeSessions.get(session.sessionId) !== true) return undefined;
         const mode = modes.find(name => new RegExp('^/' + name + '(?:\\s|$)').test(line));
         return mode ? claim(session, mode) : undefined;
       }
       ctx.effect(() => ctx.inputTriggers.registerSource({
         trigger: '/', name: 'Doxvelt turns', order: -10,
-        async candidates(_session, { query }) {
+        async candidates(session, { query }) {
+          if (episodeSessions.get(session.sessionId) !== true) return [];
           return modes.filter(name => name.startsWith(query)).map(name => ({ name, description: 'Doxvelt turn' }));
         },
         onPick: ({ session, candidate }) => ({ claim: claim(session, candidate.name) }),
@@ -605,7 +863,9 @@ window.__ModuleLoader__.load({
         },
       }));
       ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({ name: 'conversation.chat.node', key: kind },
-        props => props.node.data.saved
+        props => props.node.data.sceneHeading ? h('h3', { 'data-doxvelt-scene': props.node.data.id,
+          style: { fontSize: 'inherit', margin: '16px 0 8px', fontWeight: 600 } }, props.node.data.title)
+          : props.node.data.saved
           ? h(SavedTurn, { turn: props.node.data, sessionId: props.sessionId,
             openEpisodeSession: (selection, keepDraft) => openEpisodeSession(props.sessionId, selection, keepDraft) })
           : h(Turn, props)));
@@ -623,6 +883,6 @@ window.__ModuleLoader__.load({
       }, Routing));
     }
 
-    return { inject: ['inputTriggers', 'uiConversation', 'slots', 'sessions', 'conversation', 'workspaces', 'uiWorkspace'], apply };
+    return { inject: ['inputTriggers', 'uiConversation', 'slots', 'sessions', 'conversation', 'workspaces', 'uiWorkspace'], apply, parseDraft, formatDraft };
   },
 });

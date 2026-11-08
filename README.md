@@ -5,7 +5,31 @@ simulations. Choose who acts and who hears each turn; play their words yourself
 or optionally ask a model for a draft. Characters have subjective knowledge,
 beliefs and memories. No Doxvelt account is required.
 
-## DSH alpha quick start
+## DSH Desktop
+
+The current development checkout runs as a plugin in the normal DSH desktop
+application. Activate it for any workspace, build a reusable collection of
+worlds, scenarios, characters and formats, and open episodes as DSH chats.
+Doxvelt data stays in that workspace. Manual play needs no model configuration.
+
+Install this checkout's dependencies with `bun install --frozen-lockfile`, obtain
+[Reverie 0.2.0](https://github.com/memrok-com/reverie/releases/tag/v0.2.0), and fully
+quit DSH after its first launch. Then install the desktop bundle on Windows:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-dsh.ps1 -ReverieExecutable "C:\path\to\reverie-engine.exe"
+```
+
+Reopen DSH, choose a workspace, and select **Activate Doxvelt for this workspace**.
+**New episode** creates missing collection objects inline. **Models** uses DSH's
+existing provider connections. The Perform/Generate control takes one click;
+compact audience notation uses `#Mara` and `#all`.
+
+See [workspace setup, authoring, play and recovery](docs/WORKSPACES.md). This is
+development behavior after the published web alpha, tested with the installed
+DSH 0.2.2-rc.1 desktop host and Reverie 0.2.0 on Windows.
+
+## Earlier Web alpha
 
 The [v0.1.0-alpha.1 prerelease](https://github.com/doxvelt/engine/releases/tag/v0.1.0-alpha.1)
 uses the stock DeepSeek Harness composer and transcript. It is a source-run alpha,

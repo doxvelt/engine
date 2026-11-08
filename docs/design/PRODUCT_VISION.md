@@ -4,6 +4,20 @@ Doxvelt is a local-first, chat-based roleplaying game for one player and a small
 
 ## Play an episode
 
+The maintained host direction is the normal DSH desktop application. A workspace
+can activate Doxvelt and owns a reusable collection of worlds, scenarios,
+characters and formats, plus its local saved play and memory. Starting an episode
+can create missing collection objects inline. Each new story pins its selected
+source and keeps independent experiences. DSH owns workspace navigation, chat
+logs, editing primitives and provider credentials. See [workspace play](../WORKSPACES.md).
+
+Perform and Generate use the native segmented control and preserve separate
+unsent prose. Opening notation uses `@character` and `#audience`, including
+`#all`, without requiring `to` or `|`. Scene headings organize stretches of
+turns within an episode; they are player-only annotations and supply no actor
+knowledge or memory source. Scenarios retain their starting-premise meaning.
+Memorize does not close a chat, and play can continue after memorizing.
+
 Stage is one continuous transcript and one composer. A typical episode has two to four characters, including the one the player usually plays. On each turn, the player can **Perform** by writing the contribution for a chosen character, or **Generate** by choosing an actor. An actor pairs a character with a model configuration. Several configurations can play the same character. Stage offers them as distinct actors and records the configuration used for a generated turn. The character keeps the same identity, perceptions, and memories.
 
 The player can limit who receives a performance. A generated performance can also choose its audience within the player's routing constraints. Each turn shows who spoke and who received it. A stage whisper privately directs the selected actor and is recorded separately from the performance. The actor's whisper and knowledge are distinct from what the audience receives.

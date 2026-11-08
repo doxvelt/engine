@@ -1,6 +1,7 @@
 {
-  "name": "@doxvelt/dsh-gui-spike",
-  "version": "0.0.0",
+  "name": "@doxvelt/dsh",
+  "version": "0.1.0-alpha.1",
+  "description": "Doxvelt workspace collections, episodes and Reverie memory inside DSH",
   "private": true,
   "type": "module",
   "exports": {
@@ -8,6 +9,7 @@
     "./client": "./client.js"
   },
   "dsh": {
-    "client": { "platform": "web" }
+    "client": { "platform": "web" },
+    "bundle": { "patch": "./cordis.patch.yml" }
   }
 }

@@ -175,15 +175,15 @@ try {
     await composer.fill(input);
     await composer.press('Enter');
     await page.locator('[data-doxvelt-turn]').getByText(performance, { exact: false }).waitFor();
-    await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd().endsWith('|'));
+    await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd().match(/^\/(perform|generate) @\S+ (?:#\S+ ?)+$/));
   }
 
   browser = await chromium.launch({ executablePath: chrome, headless: true, chromiumSandbox: true });
   const url = await launch();
   const page = await openEpisode(url);
-  await play(page, '/perform @Corin to @Nell | ' + privateLine, privateLine);
-  await play(page, '/generate @Nell to @Corin | Watch the key.', performances['nell-route'].text);
-  await play(page, '/generate @Mara to @Corin | Watch the far bank.', performances['mara-route'].text);
+  await play(page, '/perform @Corin #Nell ' + privateLine, privateLine);
+  await play(page, '/generate @Nell #Corin Watch the key.', performances['nell-route'].text);
+  await play(page, '/generate @Mara #Corin Watch the far bank.', performances['mara-route'].text);
   assert.deepEqual(calls.map(call => call.model), ['nell-route', 'mara-route']);
   assert.match(JSON.stringify(calls[0].messages), /silver key under the ferry rope/);
   assert.doesNotMatch(JSON.stringify(calls[1].messages), /silver key under the ferry rope|I will guard the key|Watch the key/);
@@ -227,7 +227,7 @@ try {
   await page.getByLabel('Story path').selectOption({ label: 'Original' });
   await turns.getByText(performances['mara-route'].text, { exact: false }).waitFor();
   assert.equal(await turns.count(), 3);
-  const typed = '/perform @Corin to @Nell | Unsent continuation after the edit.';
+  const typed = '/perform @Corin #Nell Unsent continuation after the edit.';
   await page.locator('[contenteditable="true"]').first().fill(typed);
   await turns.filter({ hasText: privateLine }).getByRole('button', { name: 'Edit turn', exact: true }).click();
   const corrected = 'I left the silver key under the old ferry rope.';
@@ -285,7 +285,7 @@ try {
   assert.doesNotMatch(JSON.stringify(calls.at(-1).messages), /under the ferry rope|Watch the key|I will guard the key|The far bank is quiet/);
 
   const groupLine = 'Nell and Mara, the ferryman is waiting.';
-  await play(page, '/perform @Corin to @Nell, @Mara | ' + groupLine, groupLine);
+  await play(page, '/perform @Corin #Nell #Mara ' + groupLine, groupLine);
   assert.match(await turns.last().innerText(), /Corin → (Mara, Nell|Nell, Mara)/);
   const audience = page.getByLabel('Audience', { exact: true });
   assert.match(await audience.locator('option:checked').textContent(), /Mara \+ Nell|Nell \+ Mara/);
@@ -295,17 +295,17 @@ try {
   await page.keyboard.insertText('The crossing is clear for everyone.');
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await turns.getByText('The crossing is clear for everyone.', { exact: true }).waitFor();
-  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/perform @Corin to all |');
+  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/perform @Corin #all');
   assert.match(await turns.last().innerText(), /Corin → (Mara, Nell|Nell, Mara)/);
 
-  await page.getByLabel('Action', { exact: true }).selectOption('generate');
+  await page.getByRole('tab', { name: 'Generate', exact: true }).click();
   await page.getByLabel('Actor', { exact: true }).selectOption('Nell');
   await audience.selectOption({ label: 'Actor chooses' });
   await page.getByLabel('Audience limit', { exact: true }).selectOption('Corin');
-  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/generate @Nell to actor among @Corin |');
-  await composer.fill('/generate @Nell to actor among @Mara | ');
+  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/generate @Nell #actor:Corin');
+  await composer.fill('/generate @Nell #actor:Mara ');
   assert.equal(await page.getByLabel('Audience limit', { exact: true }).inputValue(), 'Mara');
-  await composer.fill('/generate @Nell to actor among @Corin | ' + limitWhisper);
+  await composer.fill('/generate @Nell #actor:Corin ' + limitWhisper);
   const beforeLimitedTurn = await turns.count();
   await composer.press('Enter');
   await page.getByText('Generation did not produce a valid turn.', { exact: false }).waitFor();
@@ -313,7 +313,7 @@ try {
   assert.match(await composer.innerText(), /within the audience limit/);
   await composer.press('Enter');
   await turns.getByText(limitedPerformance, { exact: true }).waitFor();
-  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/generate @Nell to actor among @Corin |');
+  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/generate @Nell #actor:Corin');
   assert.equal(limitAttempts, 2);
   assert.deepEqual(providerErrors, []);
   assert.match(await turns.last().innerText(), /Nell → Corin/);
@@ -332,12 +332,12 @@ try {
   const picker = page.getByLabel('Actor', { exact: true });
   await picker.selectOption({ label: 'Nell · Careful' });
   await page.getByLabel('Audience', { exact: true }).selectOption('Corin');
-  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/generate @Nell#careful to @Corin |');
-  await play(page, '/generate @Nell#careful to @Corin | Count the lights.', careful);
+  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/generate @Nell#careful #Corin');
+  await play(page, '/generate @Nell#careful #Corin Count the lights.', careful);
   assert.equal(calls.at(-1).model, 'nell-careful-route');
   assert.match(JSON.stringify(calls.at(-1).messages), /far bank is still in sight/);
   assert.equal(await picker.inputValue(), 'Nell#careful');
-  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/generate @Nell#careful to @Corin |');
+  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/generate @Nell#careful #Corin');
   await turns.filter({ hasText: limitedRevision }).getByRole('button', { name: 'Edit turn', exact: true }).click();
   await page.getByText('Next turn direction', { exact: true }).click();
   assert.equal(await page.getByLabel('Next actor', { exact: true }).inputValue(), 'Nell#careful');
@@ -412,8 +412,8 @@ try {
   await authoredComposer.press('Enter');
   await authoredTurns.getByText(sharedAside, { exact: true }).waitFor();
   assert.match(await authoredTurns.first().innerText(), /Corin → Joss, Nell/);
-  await openedSource.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/perform @Corin to @Joss, @Nell |');
-  await play(openedSource, '/generate @Mara to @Corin | Check the far bank.', performances['mara-route'].text);
+  await openedSource.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/perform @Corin #Joss #Nell');
+  await play(openedSource, '/generate @Mara #Corin Check the far bank.', performances['mara-route'].text);
   assert.doesNotMatch(JSON.stringify(calls.at(-1).messages), /violet parcel/);
   const sourceStore = await openBranchStore(path.join(authored, 'doxvelt.sqlite')).open();
   try {

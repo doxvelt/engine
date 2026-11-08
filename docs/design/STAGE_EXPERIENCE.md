@@ -1,5 +1,11 @@
 # Stage Experience
 
+> Current DSH host and authoring behavior follows [Workspace play](../WORKSPACES.md)
+> and [Product vision](PRODUCT_VISION.md): workspace activation and collections,
+> native Perform/Generate segments, `@character #audience` opening notation,
+> and player-only scene headings. These replace the older study's reversed
+> actor/audience markers below. Different audiences within one turn are deferred.
+
 > Approved correction: [Actor Knowledge](ACTOR_KNOWLEDGE.md) supersedes older
 > presence-derived observation and selective-context targets. All legitimate
 > branch-relative knowledge is supplied upfront; outgoing recipients grant no

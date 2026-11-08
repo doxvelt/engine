@@ -78,6 +78,7 @@ export type LocalApiOptions = {
   actorTurnRuntimes?: ReadonlyMap<string, ActorTurnRuntime>;
   actorConfigurations?: readonly ActorConfiguration[];
   episodeMemory?: EpisodeMemory;
+  sceneHeadings?: import("../store/scene-headings.ts").SceneHeadingStore;
   allowedOrigins?: readonly string[];
 };
 export function createLocalApiServer(options: LocalApiOptions = {}) {
@@ -211,6 +212,7 @@ export async function handleLocalApiRequest(
         scenarioName: scenario?.name || simulation.scenarioId || "Stage",
         branch: projection.branch,
         transcript: projection.transcript,
+        ...(options.sceneHeadings ? { sceneHeadings: options.sceneHeadings.list(store, query(url, simulation)) } : {}),
         episodes: projection.episodeClosures.map(({ episode }, index) => ({
           id: episode.id, label: episode.label || "Episode " + (index + 1),
         })),
@@ -224,6 +226,10 @@ export async function handleLocalApiRequest(
         })),
       };
       return send(response, 200, result);
+    }
+    if (method === "POST" && parts[2] === "scene-headings" && parts.length === 3 && options.sceneHeadings) {
+      const body = await bodyOf(request);
+      return send(response, 200, { heading: options.sceneHeadings.create(store, envelope(body, ownerScope, simulationId), required(body, "title")) });
     }
     if (method === "GET" && parts[2] === "actors")
       return send(response, 200, {

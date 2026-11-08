@@ -6,7 +6,8 @@ import type {
   BeliefRecord,
   CompiledWorkspace,
   LineRecordContext,
-  SourceFile
+  SourceFile,
+  WorkspaceSource
 } from "./types.ts";
 
 const MENTION_PATTERN = /@([a-zA-Z0-9_-]+)/g;
@@ -20,7 +21,11 @@ const STRENGTHS = new Map([
 ]);
 
 export async function compileWorkspace(workspacePath: string): Promise<CompiledWorkspace> {
-  const source = await readWorkspaceSource(workspacePath);
+  return compileWorkspaceSource(await readWorkspaceSource(workspacePath));
+}
+
+/** Compile the exact authored snapshot reviewed by a host. */
+export function compileWorkspaceSource(source: WorkspaceSource): CompiledWorkspace {
   const records = {
     sourceRoot: source.root,
     models: source.models.map(toAssetRecord("model")),

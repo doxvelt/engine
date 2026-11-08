@@ -18,6 +18,7 @@ async function composerFixture(carried = "") {
   let editor = "";
   let writes = 0;
   let refuseInsertion = false;
+  let tree: Element;
   const bindings = {
     window: { __ModuleLoader__: { load: (definition: { factory: (require: (name: string) => unknown) => unknown }) =>
       definition.factory(name => name === "react" ? {
@@ -57,6 +58,7 @@ async function composerFixture(carried = "") {
   const openPath = row.props.openEpisodeSession as (selection: unknown, keepDraft: boolean) => Promise<void>;
   await openPath({ simulationId: "story" }, true);
   const actions = {
+    setDraft: (text: string) => { editor = snapshot.draft = text; },
     captureInsertion: () => ({ start: 0, end: 0, draftRev: 0 }),
     insertText: (text: string, span: { start: number; end: number }) => {
       if (refuseInsertion) return false;
@@ -69,7 +71,7 @@ async function composerFixture(carried = "") {
   function render() {
     stateIndex = 0;
     effects.length = 0;
-    components.get("conversation.input.dock")!({
+    tree = components.get("conversation.input.dock")!({
       sessionId: "next", inputActions: actions,
       useSession: (select: (state: unknown) => unknown) => select({ openState: "open" }),
       useInput: (select: (state: unknown) => unknown) => select(snapshot),
@@ -89,6 +91,16 @@ async function composerFixture(carried = "") {
     refuse(value: boolean) { refuseInsertion = value; },
     text: () => editor,
     writes: () => writes,
+    switchMode(mode: string) {
+      function find(element: unknown): Element | undefined {
+        if (!element || typeof element !== "object" || !("props" in element)) return undefined;
+        const node = element as Element;
+        if (node.props.label === "Action") return node;
+        return (node.props.children as unknown[]).flat(Infinity).map(find).find(Boolean);
+      }
+      const control = find(tree)!;
+      (control.props.onChange as (mode: string) => void)(mode);
+    },
   };
 }
 
@@ -117,7 +129,7 @@ test("an empty saved episode gets one ready-to-type route", async () => {
   const composer = await composerFixture();
   composer.render();
   composer.frame();
-  assert.equal(composer.text(), "/perform @Corin to all | ");
+  assert.equal(composer.text(), "/perform @Corin #all ");
   assert.equal(composer.writes(), 1);
 });
 
@@ -140,4 +152,19 @@ test("unmounting cancels composer restoration before mutation", async () => {
   composer.frame();
   assert.equal(composer.text(), "");
   assert.equal(composer.writes(), 0);
+});
+
+test("the action control keeps private direction separate from the player's performance", async () => {
+  const composer = await composerFixture();
+  composer.change("/perform @Corin #Nell My spoken words.");
+  composer.render();
+  composer.switchMode("generate");
+  assert.doesNotMatch(composer.text(), /My spoken words/);
+  composer.change("/generate @Nell #Mara My private direction.");
+  composer.render();
+  composer.switchMode("perform");
+  assert.equal(composer.text(), "/perform @Corin #Nell My spoken words.");
+  composer.render();
+  composer.switchMode("generate");
+  assert.equal(composer.text(), "/generate @Nell #Mara My private direction.");
 });
