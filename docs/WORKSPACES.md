@@ -47,6 +47,9 @@ editing controls. These are normal Markdown files, also editable directly or
 through a normal harness authoring chat. Save source edits explicitly. A stale
 editor must reopen changed source before overwriting it. Source publication is
 atomic, and creating an object never overwrites an existing file.
+In activated workspaces, normal prompt assembly supplies Doxvelt's file-format
+and subjective-knowledge guidance to the authoring assistant. That guidance is
+absent from other workspaces and from character play.
 
 ```text
 your-workspace/

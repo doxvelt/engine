@@ -61,6 +61,13 @@ test("desktop host scopes activation and source writes to registered chat worksp
     assert.deepEqual(await preStep({ agent: { session: chats.get("episode") } }, next), { kind: "reject" });
     assert.deepEqual(await preStep({ agent: { session: chats.get("other") } }, next), { kind: "enter" });
     assert.equal(normalCalls, 2);
+    const assemble = listeners.get("system-prompt/assemble")!;
+    const originalPrompt = { sections: [{ name: "harness", text: "Normal harness instructions" }], contexts: [], variables: {} };
+    const authoring = await assemble(originalPrompt, { agent: { session: chats.get("author") } }, async () => originalPrompt) as typeof originalPrompt;
+    assert.match(authoring.sections.at(-1)!.text, /entities\/<id>\/IDENTITY\.md/);
+    assert.match(authoring.sections.at(-1)!.text, /do not edit or regenerate the runtime SQLite/);
+    assert.equal(await assemble(originalPrompt, { agent: { session: chats.get("other") } }, async () => originalPrompt), originalPrompt);
+    assert.equal(await assemble(originalPrompt, { agent: { session: chats.get("episode") } }, async () => originalPrompt), originalPrompt);
     const models = await (await request("workspace-models")).json();
     assert.deepEqual(models.models, [{ provider: "fixture", model: "model", label: "Fixture · Test model" }]);
     assert.equal((await request("workspace-save-models", { configuration: { version: 1, actorModel: { provider: "fixture", model: "model" } },

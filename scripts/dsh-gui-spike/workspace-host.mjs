@@ -15,6 +15,14 @@ import {
 } from '../../src/local-api/workspace-collection.ts';
 import { savedEpisodeRequest } from './saved-episode.mjs';
 
+const authoringGuide = `This workspace is a Doxvelt collection. Help the player author reusable source as ordinary Markdown files.
+Worlds go in worlds/<id>.md, starting situations in scenarios/<id>.md, and performance formats in formats/<id>.md.
+Give those files frontmatter with id and name. Character dossiers go in entities/<id>/IDENTITY.md with frontmatter id, name, kind: agent, and visibility: public (or an explicitly requested private visibility).
+Characters can also have STATE.md, SURFACE.md, BELIEFS.md, MEMORY.md and EXAMPLES.md. Keep starting knowledge subjective: :+3 at a line's end means this character takes it as true, :+1 a suspicion, :0 no stance, :-1 doubt and :-3 a firm negative belief. Untagged prose does not automatically become a belief. World and scenario source describes objective starting conditions; do not copy one character's private information into another character's knowledge.
+Relationships and access belong in connections/<id>.md; membership uses explicit :access:member tags and must not create cycles. Follow the player's creative brief and make invented additions explicit.
+Source edits apply when starting a new story. Use Doxvelt's episode, revision, date and Memorize controls for saved play; do not edit or regenerate the runtime SQLite files, scene annotations or native memory databases directly. Memorization does not end an episode. Scene headings organize the player's transcript only.
+Provider endpoints and credentials stay in DSH settings, outside authored world and character source. The player selects those configured models through Doxvelt's Models control.`;
+
 export function isEpisodeSession(session) {
   for (let index = 0; index < session.seq; index++) {
     const event = session.eventAt(index);
@@ -52,6 +60,16 @@ export async function applyWorkspaceHost(ctx, options = {}) {
     await Promise.all([...services.values()].map(closeService));
   });
   ctx.on('agent/pre-step', ({ agent }, next) => isEpisodeSession(agent.session) ? { kind: 'reject' } : next(), true);
+  ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
+    const assembly = await next();
+    const session = context.agent?.session;
+    if (!session || isEpisodeSession(session)) return assembly;
+    try {
+      const root = await registeredSessionWorkspace(ctx, session);
+      if (!await readWorkspaceConfiguration(root)) return assembly;
+    } catch { return assembly; }
+    return { ...assembly, sections: [...assembly.sections, { name: 'doxvelt-authoring', text: authoringGuide, interpolate: false }] };
+  });
 
   async function serviceFor(root, config) {
     if (disposing) throw new WorkspaceCollectionError('host-stopping', 'DSH is stopping. Reopen the workspace to continue.', 503);
