@@ -803,7 +803,7 @@ window.__ModuleLoader__.load({
               style: { display: 'block', width: '100%', boxSizing: 'border-box' },
               disabled: editLocked, onChange: event => update({ body: event.target.value }) })),
             characterSelect('Speaking character', form.speaker, form.cast, editLocked,
-              speaker => update({ speaker, editedAudience: form.editedAudience.filter(item => item !== speaker) })),
+              speaker => update({ speaker, editedAudience: form.editedAudience?.filter(item => item !== speaker) ?? null })),
             audienceSelect('Edited audience', form.speaker, form.editedAudience, editLocked,
               editedAudience => update({ editedAudience })),
             form.eligible.length > 0 && h('details', { open: retry || form.unavailable ? true : undefined },
