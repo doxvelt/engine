@@ -1,10 +1,12 @@
 import { assertExpectedBranchHead, projectBranch } from "./branch-kernel.ts";
+import { correctScopedPerformance } from "./audience-scopes.ts";
+import { canOwnTurn } from "./turn-ownership.ts";
 import { domainId, fingerprintCommand } from "./domain-rules.ts";
 import { assertRuntimeText, requiredSafeIdentifier } from "./draft-contracts.ts";
 import { DomainNotFoundError, DomainValidationError, type CorrectTurnBodyCommand, type SimulationRepository } from "./ports.ts";
-import type { CommitRecord } from "./types.ts";
+import type { CommitRecord, RuntimeEvent } from "./types.ts";
 
-export function turnCorrectionEvent(payload: CorrectTurnBodyCommand["payload"]) {
+export function turnCorrectionEvent(payload: CorrectTurnBodyCommand["payload"]): Extract<RuntimeEvent, { type: "message_body_corrected" }> {
   requiredSafeIdentifier(payload.messageVersionId, "messageVersionId");
   assertRuntimeText(payload.text, "Corrected performance");
   return { type: "message_body_corrected" as const, messageVersionId: payload.messageVersionId, text: payload.text.trim() };
@@ -27,6 +29,11 @@ export function correctTurnBody(repository: SimulationRepository, input: Omit<Co
   const turn = projection.transcript.find(item => item.messageVersionId === event.messageVersionId);
   if (!turn) throw new DomainNotFoundError("The selected turn is unavailable on this path.");
   if (turn.text === event.text) throw new DomainValidationError("Change the wording before saving a correction.");
+  if (turn.performance) {
+    const simulation = repository.getSimulation(ownerScope, simulationId)!;
+    const identities = repository.getContentRevision(ownerScope, simulation.contentRevisionId)!.compiled.entities.filter(canOwnTurn);
+    event.performance = correctScopedPerformance(turn, event.text, identities)!;
+  }
 
   const commit: CommitRecord = {
     id: domainId("commit", ownerScope, simulationId, commandId), ownerScope, simulationId,

@@ -188,8 +188,29 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
   const stage = await engineRequest(origin, stageRoute(opened));
   const cast = new Map(stage.actors.map(actor => [mention(actor), actor.id]));
   const actorId = cast.get(command.character);
-  const route = resolvePlayAudience(command.audience, command.character, [...cast.keys()], generating);
-  const text = typeof command.body === 'string' ? command.body.trim() : '';
+  const scoped = !generating && command.audienceSyntax;
+  let route;
+  if (scoped) {
+    if (command.audience === '!unset') route = { recipients: null };
+    else if (command.audience === '!all') route = { recipients: [...cast.keys()] };
+    else if (command.audience === '!self') route = { recipients: [] };
+    else if (typeof command.audience === 'string') {
+      const recipients = command.audience.split(',');
+      if (recipients.every(token => cast.has(token)) && new Set(recipients).size === recipients.length) route = { recipients };
+    }
+  } else route = resolvePlayAudience(command.audience, command.character, [...cast.keys()], generating);
+  let text = typeof command.body === 'string' ? command.body.trim() : '';
+  if (scoped) {
+    if (!['scoped-v1', 'scoped-fallback-v1'].includes(scoped) || typeof command.expectedHead !== 'string' ||
+        typeof command.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(command.requestId)) return failure('Invalid scoped performance request.', 400);
+    // Explicit legacy shorthand remains a choice; it is never a missing default.
+    text = text.replace(/^#all(?=\s|$)/, '#' + stage.actors.map(actor => actor.id).join(','))
+      .replace(/^#self(?=\s|$)/, '#' + actorId);
+    text = text.replace(/^#\[([\w-]+)\](?=\s|$)/, (original, token) => {
+      const matches = [...cast].filter(([label]) => label.toLowerCase() === token.toLowerCase());
+      return matches.length === 1 ? '#' + matches[0][1] : original;
+    });
+  }
   if (!actorId || !route || (!generating && !text)) {
     return failure('Choose a valid performer and audience, and enter a performance for Perform.', 400);
   }
@@ -198,7 +219,7 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
   }
 
   const simulation = simulationRoute(opened.simulationId);
-  const basis = { branchId: opened.branchId, expectedHead: stage.branch.headCommitId, commandId: randomUUID(),
+  const basis = { branchId: opened.branchId, expectedHead: scoped ? command.expectedHead : stage.branch.headCommitId, commandId: scoped ? command.requestId : randomUUID(),
     actorId, stageWhisperIds: [] };
   const audience = route.recipients?.map(token => cast.get(token)) ?? null;
   if (generating) {
@@ -210,9 +231,15 @@ export async function savedEpisodeRequest(origin, session, command, signal) {
       return failure('The turn was saved. Reopen the episode to see the updated transcript.', 409);
     }
   } else {
-    await engineRequest(origin, simulation + '/turns', {
-      ...basis, audience, manualText: text, knowledgePolicy: 'actor-knowledge-v1',
-    }, signal);
+    try {
+      await engineRequest(origin, simulation + '/turns', {
+        ...basis, audience, manualText: text, knowledgePolicy: 'actor-knowledge-v1',
+        ...(scoped ? { audienceSyntax: scoped } : {}),
+      }, signal);
+    } catch (error) {
+      if (scoped && [400, 404, 409].includes(error.status)) return failure(error.message, error.status);
+      throw error;
+    }
     const updated = await engineRequest(origin, stageRoute(opened), undefined, signal);
     if (!syncRows(session, episodeState(session).rows, displayRows(updated))) return failure('The turn is saved. Reopen this episode to see it.', 409);
   }
@@ -264,7 +291,8 @@ async function historicalRequest(origin, opened, command, signal) {
     ]);
     const routing = item => ({
       actor: mention(stage.actors.find(actor => actor.id === item.actorId)),
-      audience: stage.actors.filter(actor => actor.id !== item.actorId && item.audience.includes(actor.id)).map(mention),
+      audience: item.performance?.baseAudience === null ? null : stage.actors.filter(actor => actor.id !== item.actorId &&
+        (item.performance ? item.performance.baseAudience ?? [] : item.audience).includes(actor.id)).map(mention),
     });
     return Response.json({
       whisper: originInput.completeWhisper ?? '', version: turn.bodyRevisionId ?? turn.messageVersionId,
@@ -286,7 +314,7 @@ async function historicalRequest(origin, opened, command, signal) {
     return Response.json({ selection: { simulationId: opened.simulationId, branchId: result.branch.id, episodeId: opened.episodeId } });
   }
   if (command.mode === 'history-edit-next')
-    return editAndGenerateNext(origin, simulation, stage, selection, opened.simulationId, command, signal);
+    return editAndGenerateNext(origin, simulation, stage, selection, opened.simulationId, command, signal, turn.performance?.syntax);
   if (command.mode !== 'history-generate') return failure('Choose a revision action.', 400);
   const replacement = stage.actors.find(item => mention(item) === command.character);
   if (!replacement || !stage.generationActorIds?.includes(replacement.id)) return failure('Choose a character with a model.', 400);
@@ -305,7 +333,7 @@ async function historicalRequest(origin, opened, command, signal) {
   return Response.json({ selection: { simulationId: opened.simulationId, branchId: operation.outcome.branchId } });
 }
 
-async function editAndGenerateNext(origin, simulation, stage, selection, simulationId, command, signal) {
+async function editAndGenerateNext(origin, simulation, stage, selection, simulationId, command, signal, audienceSyntax) {
   const performer = stage.actors.find(actor => mention(actor) === command.speaker);
   const next = stage.actors.find(actor => mention(actor) === command.character);
   if (!performer || !next || !stage.generationActorIds?.includes(next.id)) return failure('Choose a speaking character and a next actor with a model.', 400);
@@ -315,7 +343,7 @@ async function editAndGenerateNext(origin, simulation, stage, selection, simulat
   const editedAudience = historyAudience(stage, performer.id, command.editedAudience);
   const nextAudience = historyAudience(stage, next.id, command.audience);
   const audienceLimit = command.audienceLimit === undefined ? undefined : historyAudience(stage, next.id, command.audienceLimit);
-  if (!editedAudience || nextAudience === undefined || (command.audienceLimit !== undefined && (!audienceLimit || nextAudience !== null)))
+  if (editedAudience === undefined || (editedAudience === null && !audienceSyntax) || nextAudience === undefined || (command.audienceLimit !== undefined && (!audienceLimit || nextAudience !== null)))
     return failure('Choose recipients from the cast.', 400);
   if (!Number.isSafeInteger(command.attempt) || command.attempt < 0 ||
       typeof command.whisper !== 'string' || command.whisper.length > 100_000)
@@ -325,6 +353,7 @@ async function editAndGenerateNext(origin, simulation, stage, selection, simulat
     ...selection, commandId: command.requestId, action: 'manual',
     ...(performer.id === selection.actorId ? {} : { replacementActorId: performer.id }),
     audience: editedAudience, manualText: command.body,
+    ...(audienceSyntax ? { audienceSyntax } : {}),
   }, signal);
   if (operation.status !== 'saved') return failure('The edit could not save a new path.', 422);
   const { branchId, commitId } = operation.outcome;

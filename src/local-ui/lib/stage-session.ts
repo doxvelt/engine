@@ -1,4 +1,5 @@
 import { StageHistory } from "./stage-history.ts";
+import { parsePerformance } from "../../core/audience-scopes.ts";
 import { StageRecovery, type BrowserStorage } from "./stage-recovery.ts";
 import { validFrozenRequest, validStageBuffer, type StageBuffer, type FrozenRequest } from "./stage-buffer.ts";
 import type { StageRecoveryIdentity } from "../../local-api/stage-contracts.ts";
@@ -196,9 +197,9 @@ export class StageSession {
   projection: StageProjection | null = null;
   drafts: StageDraft[] = [];
   selectedDraftId: string | null = null;
-  private modeRouting = {
+  private modeRouting: { direct: import("./stage-buffer.ts").RoutingBuffer; perform: import("./stage-buffer.ts").RoutingBuffer } = {
     direct: { actorId: "", audienceMode: "unspecified" as "all" | "selected" | "unspecified", audienceIds: [] as string[] },
-    perform: { actorId: "", audienceMode: "all" as "all" | "selected" | "unspecified", audienceIds: [] as string[] },
+    perform: { actorId: "", audienceMode: "unspecified" as "all" | "selected" | "unspecified", audienceIds: [] as string[], fallbacks: false },
   };
   private retainedReviews = new Map<string, StageDraft>();
   private editorBuffers = new Map<string, string>();
@@ -213,6 +214,8 @@ export class StageSession {
   set audienceMode(value: "all" | "selected" | "unspecified") { this.modeRouting[this.mode].audienceMode = value; }
   get audienceIds() { return this.modeRouting[this.mode].audienceIds; }
   set audienceIds(value: string[]) { this.modeRouting[this.mode].audienceIds = value; }
+  get observerFallbacks() { return this.modeRouting.perform.fallbacks ?? false; }
+  set observerFallbacks(value: boolean) { this.modeRouting.perform.fallbacks = value; }
   selectAllAudience(): void {
     this.audienceMode = "selected";
     this.audienceIds = this.availableAudience.filter(actor => actor.id !== this.actorId).map(actor => actor.id);
@@ -476,7 +479,13 @@ export class StageSession {
   async perform(): Promise<void> {
     if (!this.performance.trim() || this.busy || this.pending) return;
     const text = this.performance;
-    const input = { ...this.input(), manualText: text, stageWhisperIds: [] as string[], knowledgePolicy: ACTOR_KNOWLEDGE_POLICY } as const;
+    const input = { ...this.input(),
+      audience: this.audienceMode === "unspecified" ? null : this.audienceMode === "all" ? this.availableAudience.map(actor => actor.id) : [...this.audienceIds],
+      audienceSyntax: this.observerFallbacks ? "scoped-fallback-v1" : "scoped-v1",
+      manualText: text, stageWhisperIds: [] as string[], knowledgePolicy: ACTOR_KNOWLEDGE_POLICY } as const;
+    try {
+      parsePerformance({ text, actorId: input.actorId, audience: input.audience, syntax: input.audienceSyntax, identities: this.actors });
+    } catch (error) { this.error = error instanceof Error ? error.message : String(error); return; }
     await this.execute(async () => {
       await runLeasedMutation(this.commands, "perform", input,
         commandId => this.request("/turns", { ...input, commandId } satisfies PerformStageTurnBody),

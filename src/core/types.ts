@@ -230,6 +230,7 @@ export type MessageVersionRecord = {
   actorId: string;
   text: string;
   audience: string[];
+  performance?: import("./audience-scopes.ts").ScopedPerformance;
   provenance:
     | { mode: "manual"; operation: "turn" | "edit" | "regenerate" }
     | {
@@ -242,7 +243,7 @@ export type MessageVersionRecord = {
 
 export type RuntimeEvent =
   | { type: "message_accepted"; message: MessageVersionRecord }
-  | { type: "message_body_corrected"; messageVersionId: string; text: string }
+  | { type: "message_body_corrected"; messageVersionId: string; text: string; performance?: import("./audience-scopes.ts").ScopedPerformance }
   | {
       type: "audience_changed";
       actorId: string;
@@ -299,6 +300,7 @@ export type TranscriptTurn = {
   actorId: string;
   text: string;
   audience: string[];
+  performance?: import("./audience-scopes.ts").ScopedPerformance;
   episodeId: string | null;
   createdAt: string;
 };

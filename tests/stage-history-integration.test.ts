@@ -81,7 +81,7 @@ test("real Stage controllers preserve independent nested paths, suspended candid
   assert.equal(f.requests.length, 1, "historical manual performs no model call");
   original.history.cancel(); original.dispose();
   const first = await f.session(firstBranch);
-  first.mode = "perform"; first.actorId = "ceo"; first.performance = "ALTERNATIVE-CONTINUATION"; await first.perform();
+  first.mode = "perform"; first.actorId = "ceo"; first.audienceMode = "selected"; first.performance = "ALTERNATIVE-CONTINUATION"; await first.perform();
   const firstHead = first.projection!.branch.headCommitId;
   await first.history.open(first.projection!.transcript[1]!);
   first.history.editor!.action = "generate"; first.history.editor!.whisper = "ELEPHANT-TO-DELETE"; first.history.editor!.confirmed = true; first.history.touch();
@@ -116,7 +116,7 @@ test("real Stage controllers preserve independent nested paths, suspended candid
 
 test("failed historical work remains discoverable; retry uses captured input and discard persists separately from newer typing", async t => {
   const f = await fixture(t), s = await f.session("main");
-  s.mode = "perform"; s.actorId = "ceo"; s.performance = "Original"; await s.perform();
+  s.mode = "perform"; s.actorId = "ceo"; s.audienceMode = "selected"; s.performance = "Original"; await s.perform();
   await s.history.open(s.projection!.transcript[0]!);
   s.history.editor!.action = "generate"; s.history.editor!.whisper = "DETERMINISTIC-FAIL"; s.history.editor!.confirmed = true; s.history.touch(); await s.history.submit();
   const failed = s.history.discovery!.operations[0]!; assert.equal(failed.status, "failed");
@@ -136,6 +136,7 @@ for (const action of ["perform", "generate"] as const) {
     const f = await fixture(t), original = await f.session("main");
     original.actorId = "ceo";
     original.mode = action === "perform" ? "perform" : "direct";
+    original.audienceMode = "selected";
     original.performance = "Submitted performance"; original.direction = "Submitted direction";
     f.dropResponse(action === "perform" ? "/turns" : "/drafts");
     await original[action]();
@@ -166,7 +167,7 @@ for (const action of ["perform", "generate"] as const) {
     assert.equal(again.projection!.transcript.length, action === "perform" ? 1 : 0);
     assert.equal(f.requests.length, action === "generate" ? 1 : 0, "replay must not invoke the model twice");
     assert.equal(again.snapshot().requests.length, 0);
-    again.mode = "perform"; again.actorId = "ceo";
+    again.mode = "perform"; again.actorId = "ceo"; again.audienceMode = "selected";
     await again.perform();
     assert.equal(again.needsReconcile, false, again.error);
     assert.equal(again.projection!.transcript.length, action === "perform" ? 2 : 1);

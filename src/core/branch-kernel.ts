@@ -1,4 +1,5 @@
 import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
+import { parsePerformance, projectTurn } from "./audience-scopes.ts";
 import { branchBodyCorrections, invalidatedBodyClosures } from "./body-revisions.ts";
 import { compileWorkspace } from "./compiler.ts";
 import {
@@ -168,13 +169,23 @@ export function buildManualCommit(
 ): CommitRecord {
   const text = command.payload.text.trim();
   if (!text) throw new DomainValidationError("Turn text is empty.");
+  if (command.payload.audienceSyntax && command.payload.knowledgePolicy !== ACTOR_KNOWLEDGE_POLICY)
+    throw new DomainValidationError("Scoped authoring requires the actor-knowledge policy.");
+  const scoped = command.payload.audienceSyntax ? parsePerformance({
+    text, actorId: command.payload.actorId, audience: command.payload.audience,
+    syntax: command.payload.audienceSyntax,
+    identities: requireRevision(repository, command.ownerScope, command.simulationId).compiled.entities
+      .filter(entity => !!resolveTurnActor([entity], entity.id)),
+  }) : null;
+  if (provenance && scoped && scoped.actorId !== command.payload.actorId)
+    throw new DomainValidationError("An edited performance must retain its original actor.");
   const actor = requireActor(
     repository,
     command.ownerScope,
     command.simulationId,
-    command.payload.actorId,
+    scoped?.actorId ?? command.payload.actorId,
   );
-  const audience = normalizeAudience(actor.id, command.payload.audience);
+  const audience = scoped?.audience ?? normalizeAudience(actor.id, command.payload.audience ?? []);
   for (const audienceActorId of audience)
     requireActor(
       repository,
@@ -198,6 +209,7 @@ export function buildManualCommit(
     operation: provenance?.operation || "turn",
   });
   const events: RuntimeEvent[] = [{ type: "message_accepted", message }];
+  if (scoped) { message.performance = scoped.performance; message.audience = scoped.audience; }
   for (const change of command.payload.audienceChanges || []) {
     requireActor(
       repository,
@@ -675,6 +687,7 @@ export function projectBranch(
             actorId: event.message.actorId,
             text: event.message.text,
             audience: event.message.audience,
+            ...(event.message.performance ? { performance: event.message.performance } : {}),
             episodeId: null,
             createdAt: commit.createdAt,
           };
@@ -752,6 +765,7 @@ export function projectBranch(
     const turn = turnsByVersion.get(versionId);
     if (!turn) continue;
     turn.text = correction.text;
+    if (correction.performance) turn.performance = correction.performance;
     turn.bodyRevisionId = correction.commitId;
   }
   const activeMemories = foldMemoryOperations(memoryOperations).active;
@@ -830,9 +844,13 @@ export function inspectActorContext(
       audienceActorId,
     );
   const observedEntityIds = activeAudience.filter((item) => item !== actor.id);
-  const turns =
-    query.turns ||
-    projection.transcript.filter((turn) => turn.audience.includes(actor.id));
+  // Always project from authoritative turns, even for a caller-selected subset.
+  const selectedIds = query.turns ? new Set(query.turns.map(turn => turn.id)) : null;
+  const turns = projection.transcript.flatMap(turn => {
+    if (selectedIds && !selectedIds.has(turn.id)) return [];
+    const visible = projectTurn(turn, actor.id);
+    return visible ? [visible] : [];
+  });
   return assembleActorContext({
     simulation,
     actor,

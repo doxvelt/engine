@@ -88,11 +88,12 @@ live model quality or every provider's compatibility.
 
 ## Compact routing
 
-The controls and the opening routing notation describe the same turn:
+Perform controls select the visible composer default. Opening notation overrides
+only the current turn and does not change that default:
 
 ```text
 /perform @Corin #Mara The ferry is ready.
-/perform @Corin #Nell #Mara Look at the far bank.
+/perform @Corin #Nell,Mara Look at the far bank.
 /perform @Corin #all We should leave.
 /generate @Nell #Mara Answer her quietly.
 ```
@@ -102,9 +103,12 @@ the resulting valid performance. Each action keeps its own unsent prose when
 switching. `#self` selects only the speaker's own perception. In Generate,
 `#actor` delegates audience choice and `#actor:Corin,Mara` limits that choice.
 Several actor configurations for a character retain their attached selector,
-such as `@Nell#careful`; separate `#` tokens name audiences. Routing occupies
-the opening line before the prose. Names and tags in the performance do not
-silently widen delivery. Unknown recipients require correction. Earlier unsent
+such as `@Nell#careful`. Perform uses comma-separated lists and
+`#Mara(text)` for a span audience; closing the scope restores the base. Choose a
+default or a leading turn audience for shared prose. No default starts selected.
+Proposed `#Mara(primary|fallback)` requires the explicit observer-fallback checkbox.
+Escape literal delimiters as described in [scoped audiences](design/SCOPED_AUDIENCES.md).
+Ordinary names never widen delivery. Unknown recipients require correction. Earlier unsent
 `to … |` drafts remain readable and can be reformatted through the controls.
 DSH currently supplies completion for `@` and `/`, while `#` audiences are typed
 or chosen through the routing controls. A character whose ID is a shorthand
@@ -117,7 +121,7 @@ organize the player's transcript only. They do not enter model prompts,
 perceptions, canonical events or reflection source, and do not change memory
 eligibility. Headings persist locally, follow the originating story path and
 its descendants, and reopen with the episode. They give no character new
-knowledge. Different audiences for parts of one performance remain future work.
+knowledge. Span audiences affect only the performance text they scope.
 
 ## Host operations and recovery
 

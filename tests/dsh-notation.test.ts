@@ -64,3 +64,16 @@ test("a character named All cannot turn a private picker selection into the ever
   assert.equal(plugin.parseDraft(draft, characters).audience, "All");
   assert.equal(plugin.parseDraft("/perform @Corin #all Everyone.", characters).audience, "!all");
 });
+
+test("scoped Perform preserves turn overrides and spans while retaining the explicit composer default", () => {
+  const defaults = { audience: "Mara", audienceSyntax: "scoped-fallback-v1" };
+  const command = plugin.parseDraft('/perform @Corin #Mara,Nell Shared #Mara(secret|[unintelligible]) after', cast, defaults);
+  assert.equal(command.character, "Corin");
+  assert.equal(command.audience, "Mara", "typed turn selector must not mutate the default");
+  assert.equal(command.body, '#Mara,Nell Shared #Mara(secret|[unintelligible]) after');
+  assert.equal(plugin.formatDraft(command), '/perform @Corin #Mara,Nell Shared #Mara(secret|[unintelligible]) after');
+  assert.equal(defaults.audience, "Mara");
+  const privateTurn = plugin.parseDraft('/perform @Nell #Nell(private thought)', cast, { audience: '!unset', audienceSyntax: 'scoped-v1' });
+  assert.equal(privateTurn.audience, '!unset');
+  assert.equal(privateTurn.body, '#Nell(private thought)');
+});

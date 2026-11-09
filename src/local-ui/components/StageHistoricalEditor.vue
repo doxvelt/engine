@@ -26,7 +26,10 @@
       <template #content>
         <div class="max-h-72 w-64 space-y-3 overflow-y-auto p-4">
           <UCheckbox v-if="history.editor.action === 'generate'" v-model="history.editor.propose" label="Request a fresh audience proposal" @update:model-value="history.touch()" />
-          <UCheckboxGroup v-model="history.editor.audience" :items="audienceItems" :disabled="history.editor.action === 'generate' && history.editor.propose" @update:model-value="history.touch()" />
+          <UCheckbox v-if="history.editor.action === 'manual' && history.editor.audienceSyntax" :model-value="history.editor.audience !== null" label="Use a base audience for shared text" @update:model-value="history.setAudience($event ? [] : null)" />
+          <UCheckboxGroup :model-value="history.editor.audience ?? []" :items="audienceItems" :disabled="history.editor.action === 'generate' && history.editor.propose" @update:model-value="history.setAudience($event)" />
+          <UButton v-if="history.editor.audience === null" color="neutral" variant="link" :disabled="history.editor.action === 'generate' && history.editor.propose" @click="history.setAudience([])">Only the actor</UButton>
+          <p v-if="history.editor.action === 'manual' && history.editor.audience === null" class="text-xs">No base selected. Shared text needs a leading turn audience or an explicit base selection.</p>
           <p class="text-xs">The actor also perceives their own turn.</p>
         </div>
       </template>

@@ -79,8 +79,22 @@ async function composerFixture(carried = "") {
     });
     return effects.map(effect => effect()).filter((cleanup): cleanup is () => void => typeof cleanup === "function");
   }
+  function control(label: string): Element {
+    function find(element: unknown): Element | undefined {
+      if (!element || typeof element !== "object" || !("props" in element)) return undefined;
+      const node = element as Element;
+      if (node.props.label === label || node.props['aria-label'] === label) return node;
+      return (node.props.children as unknown[]).flat(Infinity).map(find).find(Boolean);
+    }
+    return find(tree)!;
+  }
   return {
     render,
+    value: (label: string) => control(label).props.value,
+    select(label: string, value: string) {
+      const node = control(label);
+      (node.props.onChange as (input: unknown) => void)(node.props['aria-label'] ? { target: { value } } : value);
+    },
     frame() {
       const callbacks = [...frames.values()];
       frames.clear();
@@ -125,11 +139,11 @@ test("pending restoration preserves newer player input and leaves submitting inp
   }
 });
 
-test("an empty saved episode gets one ready-to-type route", async () => {
+test("an empty saved episode gets one ready-to-type route without an implicit audience", async () => {
   const composer = await composerFixture();
   composer.render();
   composer.frame();
-  assert.equal(composer.text(), "/perform @Corin #all ");
+  assert.equal(composer.text(), "/perform @Corin ");
   assert.equal(composer.writes(), 1);
 });
 
@@ -167,4 +181,17 @@ test("the action control keeps private direction separate from the player's perf
   composer.render();
   composer.switchMode("generate");
   assert.equal(composer.text(), "/generate @Nell #Mara My private direction.");
+});
+
+test("DSH's visible default survives typed actor and turn overrides and is retained for the next performance", async () => {
+  const composer = await composerFixture();
+  composer.render(); composer.frame(); composer.render();
+  assert.equal(composer.value("Default audience"), "!unset");
+  composer.select("Default audience", "Mara");
+  composer.change("/perform @Nell #Corin Only this turn."); composer.render();
+  assert.equal(composer.value("Default audience"), "Mara");
+  assert.equal(composer.value("Character"), "Corin");
+  composer.change(""); composer.render(); composer.frame(); composer.render();
+  assert.equal(composer.text(), "/perform @Corin ");
+  assert.equal(composer.value("Default audience"), "Mara");
 });

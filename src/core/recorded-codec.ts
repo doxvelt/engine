@@ -1,5 +1,6 @@
 import { decodeAlternativeCommand } from "./saved-alternatives.ts";
 import { ACTOR_KNOWLEDGE_POLICY } from "./types.ts";
+import { assertAudienceSyntax, validateScopedPerformance } from "./audience-scopes.ts";
 import { DomainValidationError } from "./ports.ts";
 import { decodeAcceptDraftReceipt } from "./draft-contracts.ts";
 import type { ContentRevisionRecord } from "./types.ts";
@@ -220,12 +221,16 @@ function decodeManualPayload(value: unknown, sibling: boolean): void {
   const payload = record(value, "manual turn payload");
   exact(payload, ["actorId", "text", "audience"], [
     "logicalMessageId", "operation", "audienceChanges", "accessChanges",
-    "stageWhisper", "stageWhisperIds", ...(!sibling ? ["knowledgePolicy"] : []),
+    "stageWhisper", "stageWhisperIds", "audienceSyntax", ...(!sibling || Object.hasOwn(payload, "audienceSyntax") ? ["knowledgePolicy"] : []),
   ]);
   if (Object.hasOwn(payload, "knowledgePolicy"))
     enumString(payload.knowledgePolicy, "manual knowledge policy", [ACTOR_KNOWLEDGE_POLICY]);
   strings(payload, ["actorId", "text"]);
-  stringArray(payload.audience, "audience");
+  if (Object.hasOwn(payload, "audienceSyntax")) {
+    assertAudienceSyntax(payload.audienceSyntax);
+    if (payload.knowledgePolicy !== ACTOR_KNOWLEDGE_POLICY) throw new DomainValidationError("Scoped authoring requires actor knowledge.");
+  }
+  if (payload.audience !== null || !payload.audienceSyntax) stringArray(payload.audience, "audience");
   if (payload.logicalMessageId !== undefined)
     string(payload.logicalMessageId, "logicalMessageId");
   if (payload.operation !== undefined)
@@ -514,7 +519,8 @@ function decodeRuntimeEvent(value: unknown): void {
     exact(event, ["type", "message"]);
     decodeMessage(event.message);
   } else if (type === "message_body_corrected") {
-    exact(event, ["type", "messageVersionId", "text"]);
+    exact(event, ["type", "messageVersionId", "text"], ["performance"]);
+    if (Object.hasOwn(event, "performance")) validateScopedPerformance(event.performance);
     strings(event, ["messageVersionId", "text"]);
   } else if (type === "audience_changed") {
     exact(event, ["type", "actorId", "action", "reason"]);
@@ -548,7 +554,8 @@ function decodeMessage(value: unknown): void {
   const message = record(value, "message");
   exact(message, [
     "id", "logicalMessageId", "actorId", "text", "audience", "provenance",
-  ]);
+  ], ["performance"]);
+  if (Object.hasOwn(message, "performance")) validateScopedPerformance(message.performance);
   strings(message, ["id", "logicalMessageId", "actorId", "text"]);
   stringArray(message.audience, "message audience");
   const provenance = record(message.provenance, "message provenance");

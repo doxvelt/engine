@@ -23,7 +23,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-dsh.ps1 
 Reopen DSH, choose a workspace, and select **Activate Doxvelt for this workspace**.
 **New episode** creates missing collection objects inline. **Models** uses DSH's
 existing provider connections. The Perform/Generate control takes one click;
-compact audience notation uses `#Mara` and `#all`.
+compact audience notation uses `#Mara` and `#all`. Perform also supports
+[span audiences](docs/design/SCOPED_AUDIENCES.md), such as `#Mara(text)`, with an
+explicit composer default and proposed observer fallbacks behind an opt-in.
 
 See [workspace setup, authoring, play and recovery](docs/WORKSPACES.md). This is
 development behavior after the published web alpha, tested with the installed

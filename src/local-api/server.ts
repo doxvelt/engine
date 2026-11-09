@@ -1,5 +1,6 @@
 import { createSavedAlternative, discoverSavedAlternatives, originatingInput, type HistoricalSelection } from "../core/saved-alternatives.ts";
 import { ACTOR_KNOWLEDGE_POLICY, DEFAULT_ACTOR_PROFILE, type RuntimeProfileRef } from "../core/types.ts";
+import { assertAudienceSyntax } from "../core/audience-scopes.ts";
 import { correctTurnBody } from "../core/turn-correction.ts";
 import { ROUTING_POLICY, routingInput } from "../core/candidate-routing.ts";
 import { navigationToken } from "../application/simulation-collection.ts";
@@ -305,6 +306,12 @@ export async function handleLocalApiRequest(
       if (Object.hasOwn(body, "knowledgePolicy") && body.knowledgePolicy !== ACTOR_KNOWLEDGE_POLICY)
         throw new HttpError(400, "Unsupported manual knowledge policy.");
       const knowledge = body.knowledgePolicy === ACTOR_KNOWLEDGE_POLICY;
+      let audienceSyntax: import("../core/audience-scopes.ts").AudienceSyntax | undefined;
+      if (Object.hasOwn(body, "audienceSyntax")) {
+        assertAudienceSyntax(body.audienceSyntax);
+        audienceSyntax = body.audienceSyntax;
+        if (!knowledge) throw new HttpError(400, "Scoped authoring requires actor-knowledge-v1.");
+      }
       const base = envelope(body, ownerScope, simulationId);
       if (optional(body, "modelId"))
         throw new HttpError(
@@ -325,7 +332,7 @@ export async function handleLocalApiRequest(
         head: base.expectedHead,
       };
       const audience =
-        body.audience === undefined
+        audienceSyntax && body.audience == null ? null : body.audience === undefined
           ? projectBranch(store, q)
               .audience.filter((item) => item.status === "active")
               .map((item) => item.actorId)
@@ -340,7 +347,7 @@ export async function handleLocalApiRequest(
       const actorContext = knowledge ? null : inspectActorContext(store, {
         ...q,
         actorId,
-        audience,
+        audience: audience ?? [],
         stageWhispers: whispers.filter((whisper) =>
           stageWhisperIds.includes(String(whisper.id)),
         ),
@@ -351,6 +358,7 @@ export async function handleLocalApiRequest(
           actorId,
           text,
           audience,
+          ...(audienceSyntax ? { audienceSyntax } : {}),
           ...(knowledge ? { knowledgePolicy: ACTOR_KNOWLEDGE_POLICY } : {}),
           stageWhisper: optional(body, "whisperText") || null,
           stageWhisperIds,

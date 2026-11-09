@@ -4,7 +4,7 @@ import type { BranchRecord, CommitRecord } from "./types.ts";
 
 /** A branch inherits corrections to turns in its prefix, even when it diverges before the correction was recorded. */
 export function branchBodyCorrections(repository: Pick<SimulationRepository, "getBranch" | "getCommit">, branch: BranchRecord) {
-  const corrections = new Map<string, { text: string; commitId: string }>();
+  const corrections = new Map<string, { text: string; commitId: string; performance?: import("./audience-scopes.ts").ScopedPerformance }>();
   const visited = new Set<string>();
   let current: BranchRecord | null = branch;
   while (current && current.origin.kind !== "root") {
@@ -15,7 +15,8 @@ export function branchBodyCorrections(repository: Pick<SimulationRepository, "ge
       const commit = repository.getCommit(ownerScope, simulationId, domainId("commit", ownerScope, simulationId, origin.commandId));
       const correction = commit?.events.find(event => event.type === "message_body_corrected");
       if (commit && correction && !corrections.has(correction.messageVersionId))
-        corrections.set(correction.messageVersionId, { text: correction.text, commitId: commit.id });
+        corrections.set(correction.messageVersionId, { text: correction.text, commitId: commit.id,
+          ...(correction.performance ? { performance: correction.performance } : {}) });
     }
     current = repository.getBranch(ownerScope, simulationId, origin.sourceBranchId);
   }

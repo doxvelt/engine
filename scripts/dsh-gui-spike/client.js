@@ -8,21 +8,62 @@ window.__ModuleLoader__.load({
     const castFor = sessionId => casts.get(sessionId) ?? fixtureCast;
     const modes = ['perform', 'generate'];
     const kind = 'doxvelt-performance';
-    const defaultRoute = { mode: 'perform', character: 'Corin', audience: '!all' };
+    const defaultRoute = { mode: 'perform', character: 'Corin', audience: '!unset', audienceSyntax: 'scoped-v1' };
     const routes = new Map();
+    const performDefaults = new Map();
+    function performRoute(sessionId) {
+      if (!performDefaults.has(sessionId)) {
+        let saved;
+        try { saved = JSON.parse(localStorage.getItem('doxvelt:audience-default:' + sessionId)); } catch { /* no saved default */ }
+        performDefaults.set(sessionId, saved && typeof saved.audience === 'string' && typeof saved.character === 'string' &&
+          ['scoped-v1', 'scoped-fallback-v1'].includes(saved.audienceSyntax) ? saved : { ...defaultRoute });
+      }
+      return performDefaults.get(sessionId);
+    }
     const sceneListeners = new Map();
     const carryDrafts = new Map();
     const episodeSessions = new Map();
     const modeDrafts = new Map();
+    function pendingPerformance(sessionId) {
+      try {
+        const pending = JSON.parse(localStorage.getItem('doxvelt:scoped-perform:' + sessionId));
+        if (!pending || !pending.input || !pending.command) return null;
+        const keys = ['mode', 'character', 'actor', 'audience', 'audienceSyntax', 'body'];
+        if (Object.keys(pending.input).length !== keys.length || keys.some(key => typeof pending.input[key] !== 'string') ||
+            pending.input.mode !== 'perform' || !['scoped-v1', 'scoped-fallback-v1'].includes(pending.input.audienceSyntax)) return null;
+        const { requestId, expectedHead, ...input } = pending.command;
+        return typeof requestId === 'string' && typeof expectedHead === 'string' && JSON.stringify(input) === JSON.stringify(pending.input) ? pending : null;
+      } catch { return null; }
+    }
 
     async function submit(sessionId, command, signal) {
       try {
+        const pendingKey = 'doxvelt:scoped-perform:' + sessionId;
+        if (command.mode === 'perform' && command.audienceSyntax) {
+          // Persist the exact request before transmission. A response loss must
+          // never append another occurrence after a default change or restart.
+          const saved = localStorage.getItem(pendingKey);
+          if (saved) {
+            const pending = pendingPerformance(sessionId);
+            if (!pending) return { kind: 'error', text: 'The saved pending performance is invalid. Keep your text and review browser recovery before submitting.' };
+            if (JSON.stringify(pending.input) !== JSON.stringify(command))
+              return { kind: 'error', text: 'Retry the pending performance before submitting different text or defaults. Your new text remains unsent.' };
+            command = pending.command;
+          } else {
+            const status = await submit(sessionId, { mode: 'scene-status' }, signal);
+            if (status.kind !== 'success') return status;
+            const frozen = { ...command, requestId: crypto.randomUUID(), expectedHead: status.result.expectedHead };
+            localStorage.setItem(pendingKey, JSON.stringify({ input: command, command: frozen }));
+            command = frozen;
+          }
+        }
         const response = await fetch('/api/doxvelt-fixture', {
           method: 'POST', signal,
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ sessionId, ...command }),
         });
         const result = await response.json();
+        if (command.mode === 'perform' && command.audienceSyntax && (response.ok || response.status === 400 || response.status === 409)) localStorage.removeItem(pendingKey);
         if (response.ok && command.mode === 'saved') episodeSessions.set(sessionId, result.workspace ? Boolean(result.opened) : true);
         if (response.ok && result.opened?.cast) casts.set(sessionId, result.opened.cast);
         if (response.ok && ['perform', 'generate', 'correct'].includes(command.mode)) void sceneListeners.get(sessionId)?.();
@@ -45,7 +86,15 @@ window.__ModuleLoader__.load({
       });
     }
 
-    function parseDraft(draft, cast) {
+    function parseDraft(draft, cast, defaults) {
+      if (defaults?.audienceSyntax) {
+        const scoped = /^\/perform\s+@([\w-]+)(?:[ \t]|\r?\n|$)([\s\S]*)$/i.exec(draft.trimStart());
+        if (scoped && !/^to\s+[^|]+\|/.test(scoped[2])) {
+          const character = cast.find(actor => actor.token.toLowerCase() === scoped[1].toLowerCase())?.token;
+          return { mode: 'perform', character, actor: character, audience: defaults.audience ?? '!unset',
+            audienceSyntax: defaults.audienceSyntax, body: scoped[2] };
+        }
+      }
       const compact = /^\/(perform|generate)\s+@([\w-]+)(?:#([a-z0-9-]+))?\s+(#[\s\S]*)$/i.exec(draft.trimStart());
       if (compact) {
         const resolve = name => cast.find(actor => actor.token.toLowerCase() === name.toLowerCase())?.token;
@@ -111,7 +160,7 @@ window.__ModuleLoader__.load({
         name: mode,
         token: '/' + mode + ' ',
         submit(args) {
-          const command = parseDraft('/' + mode + ' ' + args, castFor(session.sessionId));
+          const command = parseDraft('/' + mode + ' ' + args, castFor(session.sessionId), mode === 'perform' ? performRoute(session.sessionId) : undefined);
           if (!command?.actor || !command.audience) {
             return Promise.resolve({ kind: 'error', text: 'Choose a valid actor and audience, such as @Corin #Mara or @Corin #all, followed by your words.' });
           }
@@ -120,7 +169,8 @@ window.__ModuleLoader__.load({
       };
     }
 
-    function formatDraft({ mode, character, actor, audience, body = '' }) {
+    function formatDraft({ mode, character, actor, audience, audienceSyntax, body = '' }) {
+      if (mode === 'perform' && audienceSyntax) return '/perform @' + character + ' ' + body;
       const recipients = audience.startsWith('!actor:') ? '#actor:' + audience.slice(7)
         : audience.startsWith('!') ? '#' + audience.slice(1) : audience.split(',').map(token => /^(all|self|actor)$/i.test(token) ? '#[' + token + ']' : '#' + token).join(' ');
       return '/' + mode + ' @' + (mode === 'generate' ? actor : character) + ' ' + recipients + ' ' + body;
@@ -134,13 +184,17 @@ window.__ModuleLoader__.load({
       values.character = selected?.character;
       values.actor = selected?.token;
       const delegated = values.audience === '!actor' || values.audience?.startsWith('!actor:');
-      if (!values.audience || (delegated && values.mode === 'perform')) values.audience = '!all';
-      else if (!['!all', '!self', '!actor'].includes(values.audience)) {
+      if (values.mode === 'generate' && values.audience === '!unset') values.audience = '!actor';
+      if (!values.audience || (delegated && values.mode === 'perform')) values.audience = values.mode === 'perform' ? '!unset' : '!actor';
+      else if (!['!all', '!self', '!actor', '!unset'].includes(values.audience)) {
         const selected = (delegated ? values.audience.slice(7) : values.audience).split(',');
         const recipients = cast.filter(actor => actor.token !== values.character && selected.includes(actor.token));
         const group = recipients.map(actor => actor.token).join(',');
-        values.audience = group ? (delegated ? '!actor:' : '') + group : '!self';
+        values.audience = values.mode === 'perform' && selected.some(token => !cast.some(actor => actor.token === token)) ? '!unset'
+          : group ? (delegated ? '!actor:' : '') + group : '!self';
       }
+      if (values.mode === 'perform') values.audienceSyntax ??= 'scoped-v1';
+      else delete values.audienceSyntax;
       return values;
     }
 
@@ -149,7 +203,8 @@ window.__ModuleLoader__.load({
       const phase = useInput(state => state.phase);
       const openState = useSession(state => state.openState);
       const cast = castFor(sessionId);
-      const command = parseDraft(draft, cast);
+      const composerRoute = supportedRoute({ ...performRoute(sessionId) }, cast);
+      const command = parseDraft(draft, cast, composerRoute);
       const busy = phase === 'submitting' || phase === 'sending' || phase === 'adjudicating';
       const [saved, setSaved] = useState({ workspace: { loading: true }, simulations: [], opened: null, branches: [], episodes: [] });
       const [opening, setOpening] = useState(false);
@@ -192,7 +247,8 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         if (command?.actor && command.audience) {
           const { mode, character, actor, audience } = command;
-          routes.set(sessionId, { mode, character, actor, audience });
+          if (!command.audienceSyntax) routes.set(sessionId, { mode, character, actor, audience });
+          else if (!routes.has(sessionId)) routes.set(sessionId, composerRoute);
         } else if (!draft && !busy && openState === 'open' && (!saved.workspace || saved.opened)) {
           // Let the stock composer restore focus after its submit transaction first.
           const selection = inputActions.captureInsertion();
@@ -238,12 +294,18 @@ window.__ModuleLoader__.load({
           if (!buffers) modeDrafts.set(sessionId, buffers = new Map());
           buffers.set(command.mode, { ...command });
           values = buffers.get(change.mode) ?? { ...values, body: '' };
+          if (change.mode === 'perform') values = { ...composerRoute, ...values, audience: composerRoute.audience, audienceSyntax: composerRoute.audienceSyntax, mode: 'perform' };
         }
         const route = supportedRoute(values, cast);
+        if (route.mode === 'perform') {
+          const next = supportedRoute({ ...composerRoute, ...change, mode: 'perform' }, cast);
+          performDefaults.set(sessionId, next); routes.set(sessionId, next);
+          try { localStorage.setItem('doxvelt:audience-default:' + sessionId, JSON.stringify(next)); } catch { /* explicit in-memory selection remains visible */ }
+        }
         if (route.character && route.audience) inputActions.setDraft(formatDraft(route));
       }
       function select(label, value, options, onChange, displayName) {
-        const labels = { '!all': 'Everyone', '!self': 'Only self', '!actor': 'Actor chooses' };
+        const labels = { '!all': 'Everyone', '!self': 'Only self', '!actor': 'Actor chooses', '!unset': 'No default selected' };
         const optionLabel = option => label === 'Audience limit' && option === '!all' ? 'No limit'
           : (Object.hasOwn(labels, option) ? labels[option] : undefined) ?? option.split(',').map(token => cast.find(actor => actor.token === token)?.name ?? token).join(' + ');
         if (options.length === 2) return h(SegmentedTabs, { label, value: value ?? '',
@@ -257,6 +319,7 @@ window.__ModuleLoader__.load({
       }
 
       const unsent = Boolean((command?.body ?? draft).trim());
+      const pending = pendingPerformance(sessionId);
       if (saved.workspace && !saved.opened) return h('div', { style: { padding: '0 8px 8px', fontSize: 13 } },
         saved.workspace.loading ? (error && h('span', { role: 'alert' }, error))
           : !saved.workspace.active ? h(Button, { size: 'sm', variant: 'outline', disabled: opening || busy,
@@ -283,9 +346,9 @@ window.__ModuleLoader__.load({
       const groups = recipients.length <= 4
         ? recipients.flatMap((first, index) => recipients.slice(index + 1).map(second => first + ',' + second))
         : [];
-      const audience = command?.audience?.startsWith('!actor:') ? '!actor' : command?.audience;
+      const audience = command?.audienceSyntax ? composerRoute.audience : command?.audience?.startsWith('!actor:') ? '!actor' : command?.audience;
       const limit = command?.audience?.startsWith('!actor:') ? command.audience.slice(7) : '!all';
-      const fixed = ['!all', '!self', ...recipients, ...groups];
+      const fixed = ['!unset', '!all', '!self', ...recipients, ...groups];
       const limits = ['!all', ...recipients, ...groups];
       if (audience && audience !== '!actor' && !fixed.includes(audience)) fixed.push(audience);
       if (!limits.includes(limit)) limits.push(limit);
@@ -296,10 +359,17 @@ window.__ModuleLoader__.load({
           items: (cast.some(actor => actor.canGenerate) ? modes : ['perform']).map(mode => ({
             value: mode, label: mode === 'perform' ? 'Perform' : 'Generate', disabled: busy || opening,
           })) }),
-        select(command?.mode === 'generate' ? 'Actor' : 'Character', command?.actor, available.map(item => item.token), actor => {
+        select(command?.mode === 'generate' ? 'Actor' : 'Character', command?.audienceSyntax ? composerRoute.actor : command?.actor, available.map(item => item.token), actor => {
           update({ actor, character: available.find(item => item.token === actor).character });
         }, token => available.find(item => item.token === token)?.name),
-        select('Audience', audience, command?.mode === 'generate' ? [...fixed, '!actor'] : fixed, audience => update({ audience })),
+        select(command?.mode === 'perform' ? 'Default audience' : 'Audience', audience, command?.mode === 'generate' ? [...fixed.filter(item => item !== '!unset'), '!actor'] : fixed, audience => update({ audience })),
+        command?.mode === 'perform' && h('label', null, h('input', { type: 'checkbox', checked: composerRoute.audienceSyntax === 'scoped-fallback-v1',
+          disabled: busy || opening, onChange: event => update({ audienceSyntax: event.target.checked ? 'scoped-fallback-v1' : 'scoped-v1' }) }), ' Proposed observer fallbacks'),
+        command?.mode === 'perform' && h('small', null, '#Mara,Nell sets this turn; #Mara(text) scopes a span. The default stays unchanged.'),
+        pending && h('button', { type: 'button', disabled: busy || opening, onClick: async () => {
+          const outcome = await submit(sessionId, pending.input);
+          if (outcome.kind !== 'success') setError(outcome.text); else setError('');
+        } }, 'Retry pending performance'),
         audience === '!actor' && select('Audience limit', limit, limits, value => update({ audience: value === '!all' ? '!actor' : '!actor:' + value })),
         h('select', {
           'aria-label': 'Saved episode',
@@ -678,20 +748,22 @@ window.__ModuleLoader__.load({
       }
 
       function audienceSelect(label, character, audience, disabled, onChange, onLimit) {
-        const selected = audience ?? form.audienceLimit ?? [];
+        const selected = audience ?? (onLimit ? form.audienceLimit : null) ?? [];
         return h('fieldset', { disabled, 'aria-label': label },
           h('legend', null, label),
           onLimit && h('label', null, h('input', { type: 'checkbox', checked: audience === null,
             onChange: event => onChange(event.target.checked ? null : selected) }), ' Actor chooses'),
+          !onLimit && audience === null && h('button', { type: 'button', onClick: () => onChange([]) }, 'Use actor-only base'),
           ...form.cast.filter(item => item.token !== character).map(item => h('label', { key: item.token, style: { marginLeft: 8 } },
             h('input', { type: 'checkbox', checked: selected.includes(item.token),
               onChange: event => {
                 const recipients = event.target.checked ? [...selected, item.token] : selected.filter(value => value !== item.token);
-                (audience === null ? onLimit : onChange)(recipients);
+                (audience === null && onLimit ? onLimit : onChange)(recipients);
               } }),
             ' ', item.name)),
           audience === null && h('small', { style: { display: 'block' } },
-            selected.length ? 'The actor can choose among the checked characters.' : 'No limit. Check characters to limit the choice.'));
+            !onLimit ? 'No base selected. Shared text needs a turn audience or an explicit base selection.'
+              : selected.length ? 'The actor can choose among the checked characters.' : 'No limit. Check characters to limit the choice.'));
       }
 
       function generationFields(prefix) {
@@ -712,8 +784,9 @@ window.__ModuleLoader__.load({
       }
 
       const editLocked = busy || Boolean(retry);
-      const routingChanged = form && (form.speaker !== form.originalActor || form.editedAudience.length !== form.originalAudience.length ||
-        form.editedAudience.some(item => !form.originalAudience.includes(item)));
+      const routingChanged = form && (form.speaker !== form.originalActor ||
+        (form.editedAudience === null || form.originalAudience === null ? form.editedAudience !== form.originalAudience
+          : form.editedAudience.length !== form.originalAudience.length || form.editedAudience.some(item => !form.originalAudience.includes(item))));
       const validText = Boolean(form?.body.trim());
       return h('article', { 'data-doxvelt-turn': turn.id, style: { padding: '0.6rem 0' } },
         h('strong', null, turn.character), ' → ', turn.audience || 'Self',
@@ -730,7 +803,7 @@ window.__ModuleLoader__.load({
               style: { display: 'block', width: '100%', boxSizing: 'border-box' },
               disabled: editLocked, onChange: event => update({ body: event.target.value }) })),
             characterSelect('Speaking character', form.speaker, form.cast, editLocked,
-              speaker => update({ speaker, editedAudience: form.editedAudience.filter(item => item !== speaker) })),
+              speaker => update({ speaker, editedAudience: form.editedAudience?.filter(item => item !== speaker) ?? null })),
             audienceSelect('Edited audience', form.speaker, form.editedAudience, editLocked,
               editedAudience => update({ editedAudience })),
             form.eligible.length > 0 && h('details', { open: retry || form.unavailable ? true : undefined },
@@ -801,7 +874,7 @@ window.__ModuleLoader__.load({
         const next = await ctx.sessions.create(workspaceId ? { workspaceId } : { cwd });
         const result = await submit(next, { mode: 'open-saved', ...selection });
         if (result.kind !== 'success') throw new Error(result.text);
-        routes.set(next, routes.get(sessionId) ?? defaultRoute);
+        routes.set(next, { ...defaultRoute }); performDefaults.set(next, { ...defaultRoute });
         if (keepDraft) {
           const binding = ctx.sessions.binding(sessionId);
           const draft = binding && ctx.conversation.input.for(binding.ctx).snapshot.draft;

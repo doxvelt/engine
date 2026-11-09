@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { projectTurn } from "./audience-scopes.ts";
 import { invalidatedBodyClosures } from "./body-revisions.ts";
 import {
   assertExpectedBranchHead,
@@ -262,11 +263,11 @@ async function generate(
       (p) => p.actorId === actor.id && openIds.has(p.sourceCommitId),
     );
     if (!perceptions.length) continue;
-    const accessibleTurns = turns.filter((turn) =>
-      perceptions.some(
-        (p) => p.sourceMessageVersionId === turn.messageVersionId,
-      ),
-    );
+    const accessibleTurns = turns.flatMap(turn => {
+      if (!perceptions.some(p => p.sourceMessageVersionId === turn.messageVersionId)) return [];
+      const visible = projectTurn(turn, actor.id);
+      return visible ? [visible] : [];
+    });
     const context = inspectActorContext(repository, {
       ownerScope: job.ownerScope,
       simulationId: job.simulationId,

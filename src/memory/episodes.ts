@@ -4,6 +4,7 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { projectBranch } from "../core/branch-kernel.ts";
+import { projectTurn } from "../core/audience-scopes.ts";
 import { canHoldEpisodeMemory } from "../core/domain-rules.ts";
 import { DomainNotFoundError, DomainValidationError, type SimulationRepository } from "../core/ports.ts";
 import type { ProjectionQuery } from "../core/types.ts";
@@ -100,15 +101,19 @@ export class EpisodeMemory {
       const label = episode?.label ?? "Episode " + (index + 1);
       const sources = actors.filter(canHoldEpisodeMemory).flatMap(actor => {
         const seen = perceptions.get(actor.id);
-        const messages = turns.filter(turn => seen?.has(turn.messageVersionId ?? turn.id)).map(turn => ({
+        const messages = turns.flatMap(turn => {
+          if (!seen?.has(turn.messageVersionId ?? turn.id)) return [];
+          const perceived = projectTurn(turn, actor.id);
+          if (!perceived) return [];
+          return [{
           id: turn.messageVersionId ?? turn.id,
           role: turn.actorId === actor.id ? "assistant" as const : "user" as const,
           text: JSON.stringify({
             speaker: labelFor(turn.actorId),
-            recipients: turn.audience.filter(id => id !== turn.actorId).map(labelFor),
-            performance: turn.text,
+            ...(turn.performance ? {} : { recipients: turn.audience.filter(id => id !== turn.actorId).map(labelFor) }),
+            performance: perceived.text,
           }),
-        }));
+        }]; });
         return messages.length ? [{ characterId: actor.id, name: actor.name,
           observation: { foundation: "The remembering character is " + actor.name + ".", messages } }] : [];
       });
@@ -257,9 +262,11 @@ function namedReflection(request: ReflectionRequest, source: Source, prior: Publ
       impressions: character.impressions.map(({ text }) => text) }] : [];
   });
   const system = request.system.split("\n");
+  const scoped = source.observation.messages.some(message => !Object.hasOwn(JSON.parse(message.text), "recipients"));
   system.splice(0, 3,
     "Form subjective long-term memories for the named remembering character. Write in first person and use the supplied labels for other characters.",
-    "Each played message contains a JSON record of the speaker, recipients, and performance. Use those roles for attribution. An opaque handle is that character's supplied label. Host user and assistant labels distinguish other characters and self. The human may play any character.",
+    scoped ? "Each played message contains a JSON record of the speaker and performance as perceived by the remembering character. Speech records a claim being made, not established truth. Host user and assistant labels distinguish other characters and self. The human may play any character."
+      : "Each played message contains a JSON record of the speaker, recipients, and performance. Use those roles for attribution. An opaque handle is that character's supplied label. Host user and assistant labels distinguish other characters and self. The human may play any character.",
     "Earlier memories are background for interpretation. Source message and episode aliases belong to the current episode. Cite current evidence for each new memory or impression.");
   return { ...request, system: system.join("\n"), input: { nativeEpisode: request.input, earlierSubjectiveMemory: previous } };
 }

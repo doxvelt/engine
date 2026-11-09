@@ -57,7 +57,8 @@ export type GenerateStageDraftBody = {
 
 export type PerformStageTurnBody = {
   commandId: string; branchId: string; expectedHead: string; actorId: string;
-  audience: string[]; manualText: string; stageWhisperIds: string[];
+  audience: string[] | null; manualText: string; stageWhisperIds: string[];
+  audienceSyntax?: import("../core/audience-scopes.ts").AudienceSyntax;
   knowledgePolicy: typeof import("../core/types.ts").ACTOR_KNOWLEDGE_POLICY;
 };
 

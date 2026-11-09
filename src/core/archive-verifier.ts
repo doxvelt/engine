@@ -1,5 +1,6 @@
 import { decodeAlternativeCommand, assertSupportedHistoricalEffects, originatingInput, resolveHistoricalSelection } from "./saved-alternatives.ts";
 import { ACTOR_KNOWLEDGE_POLICY, DEFAULT_ACTOR_PROFILE } from "./types.ts";
+import { assertAudienceSyntax, correctScopedPerformance, parsePerformance, projectTurn, validateScopedPerformance } from "./audience-scopes.ts";
 import { branchBodyCorrections, invalidatedBodyClosures } from "./body-revisions.ts";
 import { turnCorrectionEvent } from "./turn-correction.ts";
 import { createHash } from "node:crypto";
@@ -821,7 +822,7 @@ function validateTurnInput(
   assertExactInput(commandId, input.payload, [
     "actorId", "text", "audience",
     "audienceChanges?", "accessChanges?", "stageWhisper?",
-    "stageWhisperIds?", ...(!sibling ? ["knowledgePolicy?"] : []),
+    "stageWhisperIds?", "audienceSyntax?", ...(!sibling || input.payload.audienceSyntax ? ["knowledgePolicy?"] : []),
   ]);
   const messageEvents = commit.events.filter(
     (event) => event.type === "message_accepted",
@@ -829,14 +830,22 @@ function validateTurnInput(
   if (messageEvents.length !== 1 || messageEvents[0]?.type !== "message_accepted")
     throw invalidCommandResult(commandId, "turn message mismatch");
   const message = messageEvents[0].message;
-  const actorId = requiredInputString(commandId, input.payload, "actorId");
+  let actorId = requiredInputString(commandId, input.payload, "actorId");
   const text = requiredInputString(commandId, input.payload, "text").trim();
-  const requestedAudience = inputStringArray(
+  const requestedAudience = input.payload.audience === null && input.payload.audienceSyntax ? null : inputStringArray(
     commandId,
     input.payload.audience,
     "audience",
   );
-  const audience = normalizeAudience(actorId, requestedAudience);
+  let scoped: ReturnType<typeof parsePerformance> | null = null;
+  if (input.payload.audienceSyntax) {
+    assertAudienceSyntax(input.payload.audienceSyntax);
+    if (input.payload.knowledgePolicy !== ACTOR_KNOWLEDGE_POLICY) throw invalidCommandResult(commandId, "scoped knowledge policy mismatch");
+    scoped = parsePerformance({ text, actorId, audience: requestedAudience,
+      syntax: input.payload.audienceSyntax, identities: archive.contentRevision.compiled.entities.filter(entity => !!resolveTurnActor([entity], entity.id)) });
+    actorId = scoped.actorId;
+  }
+  const audience = scoped?.audience ?? normalizeAudience(actorId, requestedAudience ?? []);
   requireArchiveActor(archive, commandId, actorId);
   for (const audienceActorId of audience)
     requireArchiveActor(archive, commandId, audienceActorId);
@@ -870,6 +879,7 @@ function validateTurnInput(
       ),
     operation: operation as "turn" | "edit" | "regenerate",
   });
+  if (scoped) { expectedMessage.performance = scoped.performance; expectedMessage.audience = scoped.audience; }
   if (
     stableStringify(expectedMessage) !== stableStringify(message)
   )
@@ -1241,7 +1251,7 @@ function validateClosureIntegrity(
   const memories = new Map(closure.memories.map((memory) => [memory.id, memory]));
   const expectedMemoryActors = archive.contentRevision.compiled.entities
     .filter(canHoldEpisodeMemory)
-    .filter((entity) => openTurns.some((turn) => turn.message.audience.includes(entity.id)))
+    .filter((entity) => openTurns.some((turn) => !!projectTurn(turn.message, entity.id)))
     .map((entity) => entity.id);
   if (
     stableStringify(closure.memories.map((memory) => memory.actorId)) !==
@@ -1252,7 +1262,7 @@ function validateClosureIntegrity(
   for (const memory of closure.memories) {
     const actor = entities.get(memory.actorId);
     const expectedSourceTurnIds = openTurns
-      .filter((turn) => turn.message.audience.includes(memory.actorId))
+      .filter((turn) => !!projectTurn(turn.message, memory.actorId))
       .map((turn) => turn.message.id);
     const expectedPerceptions = projectPerceptions(
       openTurns.map((turn) => turn.commit),
@@ -1662,7 +1672,8 @@ function validateRuntimeEvent(value: unknown): void {
     exact(value, ["type", "message"], "message event");
     validateMessage(value.message);
   } else if (value.type === "message_body_corrected") {
-    exact(value, ["type", "messageVersionId", "text"], "turn correction event");
+    exact(value, ["type", "messageVersionId", "text", ...(Object.hasOwn(value, "performance") ? ["performance"] : [])], "turn correction event");
+    if (Object.hasOwn(value, "performance")) validateScopedPerformance(value.performance);
     stringsOf(value, ["messageVersionId", "text"], "turn correction event");
   } else if (value.type === "audience_changed") {
     exact(value, ["type", "actorId", "action", "reason"], "audience event");
@@ -1691,8 +1702,10 @@ function validateRuntimeEvent(value: unknown): void {
 }
 
 function validateMessage(value: unknown): void {
-  exact(value, ["id", "logicalMessageId", "actorId", "text", "audience", "provenance"], "message");
+  exact(value, ["id", "logicalMessageId", "actorId", "text", "audience", "provenance",
+    ...(isRecord(value) && Object.hasOwn(value, "performance") ? ["performance"] : [])], "message");
   const item = value as Record<string, unknown>;
+  if (Object.hasOwn(item, "performance")) validateScopedPerformance(item.performance);
   stringsOf(item, ["id", "logicalMessageId", "actorId", "text"], "message");
   stringArray(item.audience, "message audience");
   const provenance = item.provenance as Record<string, unknown>;
@@ -2304,6 +2317,11 @@ function validateTurnCorrection(archive: SimulationArchive, command: CorrectTurn
     getCommit: (_owner, _simulation, id) => archive.commits.find(item => item.id === id) ?? null,
   }, source);
   const previous = corrections.get(event.messageVersionId)?.text ?? target.message.text;
+  if (target.message.performance) {
+    event.performance = correctScopedPerformance({ ...target.message,
+      performance: corrections.get(event.messageVersionId)?.performance ?? target.message.performance }, event.text,
+      archive.contentRevision.compiled.entities.filter(entity => !!resolveTurnActor([entity], entity.id)))!;
+  }
   if (previous === event.text || event.text !== command.payload.text ||
       command.branchId !== domainId("correction_branch", ownerScope, simulationId, commandId) ||
       branch.id !== command.branchId || branch.name !== "correction" || branch.headCommitId !== commit.id ||
@@ -2333,7 +2351,7 @@ function validateSavedAlternative(archive: SimulationArchive, item: SimulationAr
     throw new Error("Historical input/origin receipt mismatch.");
   const actorId = r.replacementActorId ?? r.actorId;
   requireArchiveActor(archive, r.commandId, actorId);
-  const audience = p.generated?.audience ?? normalizeAudience(actorId, r.audience!);
+  const audience = p.generated?.audience ?? normalizeAudience(actorId, r.audience ?? []);
   for (const id of audience) requireArchiveActor(archive, r.commandId, id);
   if (p.generated) {
     const receipt = p.generated, routing = receipt.routing!;
@@ -2354,6 +2372,12 @@ function validateSavedAlternative(archive: SimulationArchive, item: SimulationAr
       sourceArtifactDigest: p.generated.generatedArtifact.digest, finalTextSource: "generated_verbatim" as const },
   } : buildManualMessage({ ownerScope: r.ownerScope, simulationId: r.simulationId, commandId: r.commandId,
     actorId, text: r.manualText!.trim(), audience, logicalMessageId: r.logicalMessageId, operation: "edit" });
+  if (r.audienceSyntax) {
+    const scoped = parsePerformance({ text: r.manualText!, actorId, audience: r.audience,
+      syntax: r.audienceSyntax, identities: archive.contentRevision.compiled.entities.filter(entity => !!resolveTurnActor([entity], entity.id)) });
+    if (scoped.actorId !== actorId) throw new Error("Historical scoped performer changed.");
+    message.performance = scoped.performance; message.audience = scoped.audience;
+  }
   const events: RuntimeEvent[] = [{ type: "message_accepted", message }];
   if (p.generated) events.push({ type: "stage_whisper_consumed", whisperId: domainId("alternative_input", domainId("saved_alternative", r.ownerScope, r.simulationId, r.commandId)), targetActorId: actorId, text: p.completeWhisper! });
   if (commit.id !== domainId("commit", r.ownerScope, r.simulationId, r.commandId) || commit.kind !== "turn" ||
