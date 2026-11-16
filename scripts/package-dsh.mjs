@@ -50,15 +50,17 @@ await copyFile(path.join(root, 'api/target/release/doxvelt-api.exe'), path.join(
 const meta = path.join(staging, 'bundle.json');
 run('bun', ['scripts/bundle-dsh.mjs', path.join(directory, 'host.mjs'), meta], { cwd: root, stdio: 'inherit' });
 const metafile = JSON.parse(await readFile(meta, 'utf8'));
-for (const output of Object.values(metafile.outputs)) {
-  if (output.imports.some(item => item.external && !item.path.startsWith('node:'))) throw new Error('Release host has an unbundled dependency.');
+for (const module of [...Object.values(metafile.inputs), ...Object.values(metafile.outputs)]) {
+  if (module.imports.some(item => item.external && !item.path.startsWith('node:'))) throw new Error('Release host has an unbundled dependency.');
 }
 await packageNotices(root, directory, metafile);
 await writeFile(path.join(directory, 'package.json'), JSON.stringify({ ...plugin, os: [pin.platform], cpu: [pin.arch],
   engines: { node: '>=24' }, exports: { '.': './host.mjs', './client': './client.js' } }, null, 2) + '\n');
 for (const filename of ['client.js', 'cordis.patch.yml']) await copyFile(path.join(root, 'scripts/dsh-gui-spike', filename), path.join(directory, filename));
 await copyFile(path.join(root, 'scripts/install-dsh-package.ps1'), path.join(directory, 'install.ps1'));
-await copyFile(path.join(root, 'README.md'), path.join(directory, 'README.md'));
+const guide = (await readFile(path.join(root, 'README.md'), 'utf8')).replace(/\]\((docs\/WORKSPACES\.md|CONTRIBUTING\.md)\)/g,
+  (_match, filename) => `](https://github.com/doxvelt/engine/blob/${commit}/${filename})`);
+await writeFile(path.join(directory, 'README.md'), guide);
 await writeFile(path.join(directory, 'release.json'), JSON.stringify({ version: source.version, sourceCommit: commit, dirty, ...pin }, null, 2) + '\n');
 const sums = [];
 async function hashTree(folder) {

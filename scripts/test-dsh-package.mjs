@@ -60,6 +60,8 @@ const session = { id: 'package-check', header: { cwd: workspace }, get seq() { r
 const dispose = [];
 let endpoint;
 let reflections = 0;
+let generations = 0;
+let recalled = false;
 const memoryText = 'I remember the packaged ferry crossing.';
 const context = {
   on(name, callback) { if (name === 'dispose') dispose.push(callback); },
@@ -69,11 +71,21 @@ const context = {
   connection: { fetch: { register(value) { endpoint = value; } } },
   llm: {
     listProviders: () => [{ id: 'scripted', name: 'Scripted verification' }],
-    async listModels() { return [{ id: 'memory', name: 'Memory' }]; },
-    async *stream() {
+    async listModels() { return [{ id: 'memory', name: 'Memory' }, { id: 'actor', name: 'Actor' }]; },
+    async *stream(request) {
+      if (request.model === 'actor') {
+        generations++;
+        recalled = JSON.stringify(request).includes(memoryText);
+        yield { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'packaged-turn', name: 'doxvelt_turn',
+          arguments: JSON.stringify({ text: 'I remember the crossing.', audience: [] }) } };
+        yield { type: 'usage', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } };
+        yield { type: 'finish', reason: { kind: 'tool-calls' } };
+        return;
+      }
       reflections++;
       const text = JSON.stringify({ memories: [{ gist: memoryText, detail: '', feeling: 'Trust', cues: ['ferry'], salience: 0.9, confidence: 0.8, sourceMessageIds: ['m1'] }], impressions: [] });
       yield { type: 'text-delta', index: 0, text };
+      yield { type: 'usage', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } };
       yield { type: 'finish', reason: { kind: 'stop' } };
     },
   },
@@ -96,11 +108,11 @@ try {
   const source = await command('collection-read', { path: file.path });
   await command('collection-save', { source: { path: file.path, text: source.text + '\nThe river is wide.\n', expectedRevision: file.revision } });
   collection = await command('collection');
-  await command('workspace-save-models', { configuration: { version: 1, reflectionModel: { provider: 'scripted', model: 'memory' } }, expectedRevision: collection.configurationRevision });
+  await command('workspace-save-models', { configuration: { version: 1, actorModel: { provider: 'scripted', model: 'actor' }, reflectionModel: { provider: 'scripted', model: 'memory' } }, expectedRevision: collection.configurationRevision });
   const started = await command('create-story', { setup: { operationId: 'packaged-story', collectionRevision: collection.revision,
     worldId: 'river', scenarioId: 'ferry', formatId: 'script', characterIds: ['corin'], date: '2000-03-01' } });
   await command('open-saved', { simulationId: started.simulationId });
-  await command('perform', { character: 'corin', audience: 'corin', body: 'The ferry is ready.' });
+  await command('perform', { character: 'corin', audience: '!self', body: 'The ferry is ready.' });
   assert.equal(reflections, 0, 'Manual setup/play must not call a model');
   await command('memory-memorize', { slot: 'first' });
   assert.equal(reflections, 1, 'Bundled Reverie receives reflection through the host');
@@ -110,11 +122,14 @@ try {
   events.length = 0;
   await command('open-saved', { simulationId: started.simulationId });
   const nextMemory = await command('memory-status');
-  const current = nextMemory.episodes.find(episode => episode.slot === 'current');
-  await command('memory-date', { slot: current?.slot ?? 'current', date: '2000-03-02' });
+  const current = nextMemory.episodes.find(episode => episode.episodeId === null);
+  await command('memory-date', { slot: current.slot, date: '2000-03-02' });
   assert.equal(reflections, 1, 'Reopening published memory makes no new model calls');
+  await command('generate', { character: 'corin', audience: '!self', body: 'Remember the ferry crossing.' });
+  assert.equal(generations, 1);
+  assert.ok(recalled, 'A later episode receives recalled memory from bundled Reverie');
   assert.ok((await readdir(path.join(workspace, '.doxvelt'))).length > 0);
-  console.log('Passed release ZIP checksum, clean provenance, installation/reinstallation, damaged-update rejection, source authoring, manual play and bundled native memory.');
+  console.log('Passed release ZIP checksum, clean provenance, installation/reinstallation without toolchains, damaged-update rejection, source authoring, manual/model play and bundled memory formation/recall.');
   console.log(`Isolated package evidence: ${root}`);
 } finally {
   for (const close of dispose) await close();

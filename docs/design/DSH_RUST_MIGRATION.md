@@ -145,6 +145,16 @@ The failures are retired TypeScript reference tests: 11 SQLite cleanup locks, on
 directory rename denied on Windows, and one WAL-lock timeout expectation. Maintained
 native API/CLI, workspace, memory and browser checks pass. The full suite is not green.
 
+Release-candidate verification (2026-11-16): Linux CI passes the complete check.
+Windows passes all 43 Rust tests and 61 focused native, workspace, detached-bundle
+and real-Reverie checks. The extracted self-contained plugin passes installation,
+reinstallation, damaged-update rejection, manual/model play and later-episode
+memory recall, and the actual DSH 0.2.2-rc.3 desktop browser flow passes through
+restart and four viewport sizes. A fresh concurrent Windows reference run reported
+480 passed, 14 failed and 6 skipped; the additional source-save failure passed its
+focused rerun and desktop flow. Reference SQLite cleanup/locking and filesystem
+test failures remain Windows-specific limitations, not a claimed green full run.
+
 ## Replacement and verification
 
 Keep behavior tests while replacing their obsolete framework bindings. Remove
