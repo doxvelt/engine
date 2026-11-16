@@ -11,9 +11,8 @@ The desktop package includes the Doxvelt plugin, native simulation engine and
 Reverie memory engine. You need DSH Desktop; you do not need Node.js, Bun, Rust,
 a source checkout or a separate Reverie installation.
 
-The next desktop release is **v0.2.0-alpha.1**. It is being prepared and is not
-published yet. The older v0.1.0-alpha.1 is a source-run web alpha and does not
-contain this desktop package. Once the desktop release is published:
+Install **v0.2.0-alpha.1** using the steps below. The older v0.1.0-alpha.1 is a
+source-run web alpha and does not contain this desktop package.
 
 1. Install **DSH Desktop 0.2.2-rc.3**. The
    [official desktop download](https://deepseek.com/harness/) tracks DSH's current
@@ -59,6 +58,10 @@ stories and memory stay in each workspace's `.doxvelt` directory; model
 connections stay in DSH. Back up the complete workspace before upgrading an
 alpha. Simulation archives currently exclude the local Reverie memory catalog
 and scene headings, so an archive alone is not a full workspace backup.
+
+Before sharing an exported package, inspect legacy model files and compiled
+content for credentials. Known redaction gaps are tracked in
+[#53](https://github.com/doxvelt/engine/issues/53).
 
 The package supports Windows x64 and the stated DSH version. Other platforms
 currently require a source build. For source setup, checks, developer linking,
