@@ -1,5 +1,10 @@
 # Living Library adoption plan
 
+> Host/API correction (2026-11-09): [DSH and Rust migration](DSH_RUST_MIGRATION.md)
+> supersedes the Nuxt/Nuxt UI and TypeScript-only API choices below. DSH is
+> the UI host and Rust owns HTTP transport. Older baseline descriptions are historical.
+
+
 > Approved correction: [Actor Knowledge](ACTOR_KNOWLEDGE.md) supersedes older
 > presence-derived observation and selective-context targets. All legitimate
 > branch-relative knowledge is supplied upfront; outgoing recipients grant no

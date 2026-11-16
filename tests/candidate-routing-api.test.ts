@@ -9,7 +9,7 @@ import { createLocalApiServer } from "../src/local-api/server.ts";
 import type { RunActorTurnRequest } from "../src/agent-runtime/contracts.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
 import { ACTOR_KNOWLEDGE_POLICY, type StageDraft } from "../src/local-api/stage-contracts.ts";
-import { StageSession } from "../src/local-ui/lib/stage-session.ts";
+import { StageSession } from "../src/client/stage/stage-session.ts";
 import { DeterministicFakeRuntime } from "./helpers/deterministic-fake-runtime.ts";
 
 /** Exercise the actual server request listener without binding a network socket. */

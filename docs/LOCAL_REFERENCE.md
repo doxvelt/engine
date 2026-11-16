@@ -30,6 +30,9 @@ This connection gives @jade access to @mafia knowledge. :access:member
 ## CLI
 
 Stage is the visual play surface. The CLI also supports automation and inspection; Studio handles source authoring.
+The CLI forwards its arguments to the Rust engine. Build it with `bun run api:build`
+first, or set `DOXVELT_API_EXECUTABLE` to a compatible native binary. Its Node process
+only handles transport, output and optional provider credentials.
 
 Create a demo workspace:
 
@@ -84,10 +87,10 @@ There is no prompt-only fallback or automatic repair call. Explicit Retry repeat
 the saved prompt/context and output contract. Existing legacy unrouted text requests
 retain their text behavior. Manual Perform remains available without inference.
 
-Ordinary `bun start` (or `bun run dev`) creates the private editable configuration automatically. Manual
+The standalone `bun run api` command creates the private editable configuration automatically. Manual
 Perform works with no configuration and makes no model request.
 
-Edit the existing `.doxvelt/inference.json` in your editor, then restart with `bun start`.
+Edit the existing `.doxvelt/inference.json` in your editor, then restart with `bun run api`.
 The optional `bun run inference:setup` command exclusively creates the same skeleton
 when no file exists; it is never a launch prerequisite.
 
@@ -123,7 +126,7 @@ or empty key selects the existing keyless transport (which sends a fixed placeho
 Bearer key). Model IDs are opaque and sent exactly as entered, including colons and
 quantization suffixes. Configuration is validated locally; **configured does not
 mean connection-verified**. Restart `bun start` after editing configuration.
-To return to manual play, clear both `baseUrl` and `modelId` and restart `bun start`;
+To return to manual play, clear both `baseUrl` and `modelId` and restart `bun run api`;
 remove explicit `--runtime-base-url` and `--runtime-model` overrides if used.
 
 This file is plaintext. On POSIX it must be owned by the current user with no group
@@ -133,7 +136,7 @@ On Windows, restrict its ACL to your user using Windows file security settings;
 POSIX permission checks do not enforce Windows ACLs. Keep the file out of shared
 folders, backups and authored content packages. Git ignore is not encryption.
 
-Direct `bun run api` and `bun run dev` use the same resolver, with no home-directory,
+The standalone `bun run api` uses this resolver, with no home-directory,
 workspace, profile or credential-store discovery:
 
 | Setting | Precedence / behavior |
@@ -148,27 +151,14 @@ The endpoint and model must be configured together. Sizing fields are positive
 integers up to 1000000, with output no larger than context. URLs must be HTTP(S)
 without embedded credentials, query or fragment. CLI values must be nonempty;
 unknown options, missing values and duplicate singleton options are errors. There
-is no API-key CLI option. Bun's normal dotenv loading can populate the **API's**
-environment; the UI gets an allowlisted environment and an intentionally empty
-dotenv file, never the runtime key or configuration file. Ambient Nuxt variables
-are intentionally not forwarded by `dev`.
+is no API-key CLI option. These settings belong to the standalone API host.
+The DSH UI uses models and credentials selected through DSH's existing settings.
 
-Supported API options (also forwarded by `dev`): `--host`, `--port`, `--db`,
+Supported standalone API options: `--host`, `--port`, `--db`,
 repeatable/comma-separated `--origin`, `--runtime-config`, `--runtime-base-url`,
 `--runtime-model`, `--runtime-context-window`, `--runtime-max-tokens`.
-`start` and `dev` also accept `--ui-port` (default 3000; API default 8787). It supplies the
-matching UI API URL and allowed UI origins. For example:
-
-```sh
-bun run dev -- --port 8788 --ui-port 3001 --runtime-max-tokens 512
-```
-
-Startup checks that both requested ports can be bound before launching children.
-Either child's exit or startup failure stops its sibling. SIGINT and SIGTERM
-trigger process-tree cleanup, with a 1.5-second grace period then forced termination
-(POSIX process groups; Windows `taskkill /T /F`). Nuxt startup is bounded to 90
-seconds, including its first page compilation. Only processes started by this
-launcher are targeted.
+The default native HTTP port is 8787. `bun run dev` starts a DSH host and uses
+its own options; run `bun run dev -- --help` for those.
 
 After a failed request, `GET /runtime` provides a fixed, bounded diagnostic for the
 most recent failure in that API process: authentication, unavailable endpoint, or

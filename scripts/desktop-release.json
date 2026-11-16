@@ -1,0 +1,12 @@
+{
+  "platform": "win32",
+  "arch": "x64",
+  "dshVersion": "0.2.2-rc.3",
+  "reverie": {
+    "repository": "memrok-com/reverie",
+    "tag": "v0.2.0",
+    "asset": "reverie-v0.2.0-windows-x64.zip",
+    "sha256": "582474cf3b6ef1573e3de2510cb77afe34ffe8d8e7bcbdbea30b8a3001186e05",
+    "protocol": 1
+  }
+}

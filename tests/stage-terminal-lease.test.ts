@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { StageSession } from "../src/local-ui/lib/stage-session.ts";
+import { StageSession } from "../src/client/stage/stage-session.ts";
 
 function fixture() {
   const records: { id: string; generationCommandId: string; branchId: string; basisHeadCommitId: string; actorId: string; audience: string[]; status: string; artifact: null; failure: null; createdAt: string; routingReview?: import("../src/local-api/stage-contracts.ts").StageDraft["routingReview"] }[] = [];

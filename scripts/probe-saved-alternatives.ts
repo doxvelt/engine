@@ -126,7 +126,8 @@ async function start(db: string, count: string, inProcess: boolean) {
       server.emit("request", request, response);
     });
     const checked = async (route: string, body?: unknown) => { const response = await call(route, body); assert.equal(response.status, 200, JSON.stringify(response.json)); return response.json; };
-    return { post: (route: string, body: unknown) => checked(route, body), get: (route: string) => checked(route), stop: async () => {} };
+    return { post: (route: string, body: unknown) => checked(route, body), get: (route: string) => checked(route),
+      stop: () => new Promise<void>(resolve => server.close(() => resolve())) };
   }
   const child = fork(filename, ["--serve", db, count], { stdio: ["ignore", "ignore", "pipe", "ipc"] });
   let stderr = ""; child.stderr?.on("data", chunk => { stderr += String(chunk); });

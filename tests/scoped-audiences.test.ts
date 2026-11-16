@@ -266,7 +266,7 @@ test("standalone Reverie source and reflection callbacks receive only the observ
   } });
   try {
     const query = { ownerScope: "local", simulationId: "scopes", branchId: "main" };
-    memory.setDate(f.store, query, "first", "2026-01-01");
+    await memory.setDate(f.store, query, "first", "2026-01-01");
     const result = await memory.memorize(f.store, query, "first");
     assert.equal(result.status, "published");
     assert.equal(captures.length, 3);

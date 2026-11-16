@@ -1,0 +1,5063 @@
+{
+  "memory": {
+    "schemaVersion": 6,
+    "contentRevision": {
+      "id": "rev_81e8bbf2-e24e-4b66-97d4-4d2161f8d33c",
+      "ownerScope": "owner",
+      "digest": "4209574aa5e2679833c272145b5ad688bfe23286076bca9c4c1e30003e30900c",
+      "compiled": {
+        "sourceRoot": "",
+        "models": [],
+        "worlds": [
+          {
+            "id": "strategy-class",
+            "kind": "world",
+            "name": "Strategy Class",
+            "path": "worlds/strategy-class.md",
+            "metadata": {},
+            "body": "A meeting."
+          }
+        ],
+        "scenarios": [
+          {
+            "id": "executive-interviews",
+            "kind": "scenario",
+            "name": "Executive Interviews",
+            "path": "scenarios/executive-interviews.md",
+            "metadata": {},
+            "body": "A meeting."
+          }
+        ],
+        "formats": [],
+        "entities": [
+          {
+            "id": "ceo",
+            "kind": "agent",
+            "rawKind": "agent",
+            "name": "CEO",
+            "visibility": "public",
+            "folder": "entities/ceo",
+            "files": [
+              "entities/ceo/BELIEFS.md",
+              "entities/ceo/EXAMPLES.md",
+              "entities/ceo/IDENTITY.md",
+              "entities/ceo/SURFACE.md"
+            ]
+          },
+          {
+            "id": "cfo",
+            "kind": "agent",
+            "rawKind": "agent",
+            "name": "CFO",
+            "visibility": "public",
+            "folder": "entities/cfo",
+            "files": [
+              "entities/cfo/BELIEFS.md",
+              "entities/cfo/EXAMPLES.md",
+              "entities/cfo/IDENTITY.md",
+              "entities/cfo/SURFACE.md"
+            ]
+          }
+        ],
+        "connections": [],
+        "mentions": [],
+        "taggedLines": [],
+        "beliefs": [
+          {
+            "holder": "ceo",
+            "strength": 3,
+            "propositionText": "The plan can work.",
+            "mentions": [],
+            "sourceSpan": {
+              "file": "entities/ceo/beliefs.md",
+              "line": 1,
+              "quote": "+3 The plan can work."
+            }
+          }
+        ],
+        "surfaces": [
+          {
+            "entity": "ceo",
+            "channels": [
+              "in_person",
+              "video"
+            ],
+            "text": "A reserved person.",
+            "sourceSpan": {
+              "file": "entities/ceo/surface.md",
+              "line": 1,
+              "quote": "A reserved person."
+            }
+          },
+          {
+            "entity": "ceo",
+            "channels": [
+              "audio",
+              "video",
+              "in_person"
+            ],
+            "text": "A reserved person.",
+            "sourceSpan": {
+              "file": "entities/ceo/surface.md",
+              "line": 1,
+              "quote": "A reserved person."
+            }
+          },
+          {
+            "entity": "cfo",
+            "channels": [
+              "in_person",
+              "video"
+            ],
+            "text": "A reserved person.",
+            "sourceSpan": {
+              "file": "entities/cfo/surface.md",
+              "line": 1,
+              "quote": "A reserved person."
+            }
+          },
+          {
+            "entity": "cfo",
+            "channels": [
+              "audio",
+              "video",
+              "in_person"
+            ],
+            "text": "A reserved person.",
+            "sourceSpan": {
+              "file": "entities/cfo/surface.md",
+              "line": 1,
+              "quote": "A reserved person."
+            }
+          }
+        ],
+        "accessLinks": [
+          {
+            "member": "cfo",
+            "container": "ceo",
+            "mode": "member",
+            "sourceSpan": {
+              "file": "connections/leadership-access.md",
+              "line": 8,
+              "quote": "@ceo gives @cfo access to @ceo recovery-planning context. :access:member"
+            }
+          }
+        ],
+        "diagnostics": []
+      },
+      "createdAt": "2026-11-10T09:41:38.162Z"
+    },
+    "simulation": {
+      "id": "archive",
+      "ownerScope": "owner",
+      "contentRevisionId": "rev_81e8bbf2-e24e-4b66-97d4-4d2161f8d33c",
+      "sourceRoot": "",
+      "scenarioId": "default",
+      "defaultBranchId": "main",
+      "createdAt": "2026-11-10T09:41:38.163Z"
+    },
+    "branches": [
+      {
+        "id": "main",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "name": "main",
+        "headCommitId": "commit_4a3b397d8979b4a8f436e91115116160",
+        "origin": {
+          "kind": "root",
+          "commandId": "start",
+          "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+        },
+        "createdAt": "2026-11-10T09:41:38.163Z"
+      }
+    ],
+    "commits": [
+      {
+        "id": "commit_59f6fec5e3b72faff276df9c271f270a",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": null,
+        "kind": "root",
+        "commandId": "start",
+        "events": [],
+        "createdAt": "2026-11-10T09:41:38.163Z"
+      },
+      {
+        "id": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+        "kind": "turn",
+        "commandId": "original",
+        "events": [
+          {
+            "type": "message_accepted",
+            "message": {
+              "id": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "actorId": "ceo",
+              "text": "A private claim.",
+              "audience": [
+                "ceo",
+                "cfo"
+              ],
+              "provenance": {
+                "mode": "manual",
+                "operation": "turn"
+              }
+            }
+          },
+          {
+            "type": "first_impression_formed",
+            "impression": {
+              "holder": "ceo",
+              "observerId": "ceo",
+              "entityId": "cfo",
+              "strength": 1,
+              "propositionText": "@ceo forms a first impression that A reserved person.",
+              "surfaceSourceSpan": {
+                "file": "entities/cfo/surface.md",
+                "line": 1,
+                "quote": "A reserved person."
+              }
+            }
+          },
+          {
+            "type": "first_impression_formed",
+            "impression": {
+              "holder": "cfo",
+              "observerId": "cfo",
+              "entityId": "ceo",
+              "strength": 1,
+              "propositionText": "@cfo forms a first impression that A reserved person.",
+              "surfaceSourceSpan": {
+                "file": "entities/ceo/surface.md",
+                "line": 1,
+                "quote": "A reserved person."
+              }
+            }
+          },
+          {
+            "type": "stage_whisper_consumed",
+            "whisperId": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+            "targetActorId": "ceo",
+            "text": "Be precise."
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.168Z"
+      },
+      {
+        "id": "commit_cf8f0c33eb394b0c536e3e63fc54514e",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+        "kind": "effects",
+        "commandId": "access",
+        "events": [
+          {
+            "type": "audience_changed",
+            "actorId": "cfo",
+            "action": "add",
+            "reason": null
+          },
+          {
+            "type": "access_changed",
+            "action": "revoke",
+            "member": "cfo",
+            "container": "ceo",
+            "mode": "member",
+            "reason": null
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.170Z"
+      },
+      {
+        "id": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_cf8f0c33eb394b0c536e3e63fc54514e",
+        "kind": "turn",
+        "commandId": "scoped",
+        "events": [
+          {
+            "type": "message_accepted",
+            "message": {
+              "id": "message_version_1383125dd4b4508f561ea89c87e89fb5",
+              "logicalMessageId": "message_1383125dd4b4508f561ea89c87e89fb5",
+              "actorId": "ceo",
+              "text": "Shared #cfo(secret)",
+              "audience": [
+                "ceo",
+                "cfo"
+              ],
+              "provenance": {
+                "mode": "manual",
+                "operation": "turn"
+              },
+              "performance": {
+                "version": 1,
+                "syntax": "scoped-v1",
+                "baseAudience": [
+                  "ceo"
+                ],
+                "spans": [
+                  {
+                    "audience": [
+                      "ceo"
+                    ],
+                    "primary": "Shared ",
+                    "fallback": null
+                  },
+                  {
+                    "audience": [
+                      "cfo"
+                    ],
+                    "primary": "secret",
+                    "fallback": null
+                  }
+                ],
+                "projections": [
+                  {
+                    "actorId": "ceo",
+                    "text": "Shared secret"
+                  },
+                  {
+                    "actorId": "cfo",
+                    "text": "secret"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.174Z"
+      },
+      {
+        "id": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "kind": "episode_closure",
+        "commandId": "closure",
+        "events": [
+          {
+            "type": "episode_closed",
+            "closure": {
+              "episode": {
+                "id": "episode_6d4cb937d6d22521566bba561458d0d1",
+                "simulationId": "archive",
+                "commitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+                "label": "Meeting",
+                "closedAt": "2026-11-10T09:41:38.176Z"
+              },
+              "memories": [],
+              "longTermMemories": [],
+              "extractedBeliefs": [],
+              "retainedBeliefs": [],
+              "memoryOperations": []
+            }
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.176Z"
+      },
+      {
+        "id": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "kind": "memory",
+        "commandId": "revise",
+        "events": [
+          {
+            "type": "memory_operation",
+            "operation": {
+              "id": "memory_operation_ce3a1ebd84cd832d10bae71d967fe3ab",
+              "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "memoryKind": "episode",
+              "basisCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "closureCommitId": null,
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "manual",
+                "commandId": "revise"
+              },
+              "createdAt": "2026-11-10T09:41:38.187Z",
+              "type": "revised",
+              "content": "A revised recollection.",
+              "revisesOperationId": "memory_operation_50bd859d5a96b1932ce1eae1ac58bef2"
+            }
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.187Z"
+      },
+      {
+        "id": "commit_4a3b397d8979b4a8f436e91115116160",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+        "kind": "memory",
+        "commandId": "retract",
+        "events": [
+          {
+            "type": "memory_operation",
+            "operation": {
+              "id": "memory_operation_4a3b397d8979b4a8f436e91115116160",
+              "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "memoryKind": "episode",
+              "basisCommitId": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+              "closureCommitId": null,
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "manual",
+                "commandId": "retract"
+              },
+              "createdAt": "2026-11-10T09:41:38.189Z",
+              "type": "retracted",
+              "retractsOperationId": "memory_operation_ce3a1ebd84cd832d10bae71d967fe3ab"
+            }
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.189Z"
+      }
+    ],
+    "stageWhispers": [
+      {
+        "id": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "branchId": "main",
+        "expectedHead": "commit_59f6fec5e3b72faff276df9c271f270a",
+        "commandId": "direction",
+        "targetActorId": "ceo",
+        "text": "Be precise.",
+        "createdAt": "2026-11-10T09:41:38.165Z"
+      }
+    ],
+    "commandResults": [
+      {
+        "commandId": "start",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "scenarioId": "default",
+          "sourceRoot": "",
+          "compiled": {
+            "sourceRoot": "",
+            "models": [],
+            "worlds": [
+              {
+                "id": "strategy-class",
+                "kind": "world",
+                "name": "Strategy Class",
+                "path": "worlds/strategy-class.md",
+                "metadata": {},
+                "body": "A meeting."
+              }
+            ],
+            "scenarios": [
+              {
+                "id": "executive-interviews",
+                "kind": "scenario",
+                "name": "Executive Interviews",
+                "path": "scenarios/executive-interviews.md",
+                "metadata": {},
+                "body": "A meeting."
+              }
+            ],
+            "formats": [],
+            "entities": [
+              {
+                "id": "ceo",
+                "kind": "agent",
+                "rawKind": "agent",
+                "name": "CEO",
+                "visibility": "public",
+                "folder": "entities/ceo",
+                "files": [
+                  "entities/ceo/BELIEFS.md",
+                  "entities/ceo/EXAMPLES.md",
+                  "entities/ceo/IDENTITY.md",
+                  "entities/ceo/SURFACE.md"
+                ]
+              },
+              {
+                "id": "cfo",
+                "kind": "agent",
+                "rawKind": "agent",
+                "name": "CFO",
+                "visibility": "public",
+                "folder": "entities/cfo",
+                "files": [
+                  "entities/cfo/BELIEFS.md",
+                  "entities/cfo/EXAMPLES.md",
+                  "entities/cfo/IDENTITY.md",
+                  "entities/cfo/SURFACE.md"
+                ]
+              }
+            ],
+            "connections": [],
+            "mentions": [],
+            "taggedLines": [],
+            "beliefs": [
+              {
+                "holder": "ceo",
+                "strength": 3,
+                "propositionText": "The plan can work.",
+                "mentions": [],
+                "sourceSpan": {
+                  "file": "entities/ceo/beliefs.md",
+                  "line": 1,
+                  "quote": "+3 The plan can work."
+                }
+              }
+            ],
+            "surfaces": [
+              {
+                "entity": "ceo",
+                "channels": [
+                  "in_person",
+                  "video"
+                ],
+                "text": "A reserved person.",
+                "sourceSpan": {
+                  "file": "entities/ceo/surface.md",
+                  "line": 1,
+                  "quote": "A reserved person."
+                }
+              },
+              {
+                "entity": "ceo",
+                "channels": [
+                  "audio",
+                  "video",
+                  "in_person"
+                ],
+                "text": "A reserved person.",
+                "sourceSpan": {
+                  "file": "entities/ceo/surface.md",
+                  "line": 1,
+                  "quote": "A reserved person."
+                }
+              },
+              {
+                "entity": "cfo",
+                "channels": [
+                  "in_person",
+                  "video"
+                ],
+                "text": "A reserved person.",
+                "sourceSpan": {
+                  "file": "entities/cfo/surface.md",
+                  "line": 1,
+                  "quote": "A reserved person."
+                }
+              },
+              {
+                "entity": "cfo",
+                "channels": [
+                  "audio",
+                  "video",
+                  "in_person"
+                ],
+                "text": "A reserved person.",
+                "sourceSpan": {
+                  "file": "entities/cfo/surface.md",
+                  "line": 1,
+                  "quote": "A reserved person."
+                }
+              }
+            ],
+            "accessLinks": [
+              {
+                "member": "cfo",
+                "container": "ceo",
+                "mode": "member",
+                "sourceSpan": {
+                  "file": "connections/leadership-access.md",
+                  "line": 8,
+                  "quote": "@ceo gives @cfo access to @ceo recovery-planning context. :access:member"
+                }
+              }
+            ],
+            "diagnostics": []
+          },
+          "defaultBranchId": "main",
+          "rootCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+          "commandId": "start",
+          "kind": "start"
+        },
+        "fingerprint": "1652cfeef188e7e41b7c53c0b5b388a3314be1e7f809a73a7bb7e6d9dd3ff4b6",
+        "result": {
+          "kind": "start",
+          "simulation": {
+            "id": "archive",
+            "ownerScope": "owner",
+            "contentRevisionId": "rev_81e8bbf2-e24e-4b66-97d4-4d2161f8d33c",
+            "sourceRoot": "",
+            "scenarioId": "default",
+            "defaultBranchId": "main",
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "root": {
+            "id": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": null,
+            "kind": "root",
+            "commandId": "start",
+            "events": [],
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "contentRevision": {
+            "id": "rev_81e8bbf2-e24e-4b66-97d4-4d2161f8d33c",
+            "ownerScope": "owner",
+            "digest": "4209574aa5e2679833c272145b5ad688bfe23286076bca9c4c1e30003e30900c",
+            "compiled": {
+              "sourceRoot": "",
+              "models": [],
+              "worlds": [
+                {
+                  "id": "strategy-class",
+                  "kind": "world",
+                  "name": "Strategy Class",
+                  "path": "worlds/strategy-class.md",
+                  "metadata": {},
+                  "body": "A meeting."
+                }
+              ],
+              "scenarios": [
+                {
+                  "id": "executive-interviews",
+                  "kind": "scenario",
+                  "name": "Executive Interviews",
+                  "path": "scenarios/executive-interviews.md",
+                  "metadata": {},
+                  "body": "A meeting."
+                }
+              ],
+              "formats": [],
+              "entities": [
+                {
+                  "id": "ceo",
+                  "kind": "agent",
+                  "rawKind": "agent",
+                  "name": "CEO",
+                  "visibility": "public",
+                  "folder": "entities/ceo",
+                  "files": [
+                    "entities/ceo/BELIEFS.md",
+                    "entities/ceo/EXAMPLES.md",
+                    "entities/ceo/IDENTITY.md",
+                    "entities/ceo/SURFACE.md"
+                  ]
+                },
+                {
+                  "id": "cfo",
+                  "kind": "agent",
+                  "rawKind": "agent",
+                  "name": "CFO",
+                  "visibility": "public",
+                  "folder": "entities/cfo",
+                  "files": [
+                    "entities/cfo/BELIEFS.md",
+                    "entities/cfo/EXAMPLES.md",
+                    "entities/cfo/IDENTITY.md",
+                    "entities/cfo/SURFACE.md"
+                  ]
+                }
+              ],
+              "connections": [],
+              "mentions": [],
+              "taggedLines": [],
+              "beliefs": [
+                {
+                  "holder": "ceo",
+                  "strength": 3,
+                  "propositionText": "The plan can work.",
+                  "mentions": [],
+                  "sourceSpan": {
+                    "file": "entities/ceo/beliefs.md",
+                    "line": 1,
+                    "quote": "+3 The plan can work."
+                  }
+                }
+              ],
+              "surfaces": [
+                {
+                  "entity": "ceo",
+                  "channels": [
+                    "in_person",
+                    "video"
+                  ],
+                  "text": "A reserved person.",
+                  "sourceSpan": {
+                    "file": "entities/ceo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                },
+                {
+                  "entity": "ceo",
+                  "channels": [
+                    "audio",
+                    "video",
+                    "in_person"
+                  ],
+                  "text": "A reserved person.",
+                  "sourceSpan": {
+                    "file": "entities/ceo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                },
+                {
+                  "entity": "cfo",
+                  "channels": [
+                    "in_person",
+                    "video"
+                  ],
+                  "text": "A reserved person.",
+                  "sourceSpan": {
+                    "file": "entities/cfo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                },
+                {
+                  "entity": "cfo",
+                  "channels": [
+                    "audio",
+                    "video",
+                    "in_person"
+                  ],
+                  "text": "A reserved person.",
+                  "sourceSpan": {
+                    "file": "entities/cfo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                }
+              ],
+              "accessLinks": [
+                {
+                  "member": "cfo",
+                  "container": "ceo",
+                  "mode": "member",
+                  "sourceSpan": {
+                    "file": "connections/leadership-access.md",
+                    "line": 8,
+                    "quote": "@ceo gives @cfo access to @ceo recovery-planning context. :access:member"
+                  }
+                }
+              ],
+              "diagnostics": []
+            },
+            "createdAt": "2026-11-10T09:41:38.162Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.163Z"
+      },
+      {
+        "commandId": "direction",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "direction",
+          "expectedHead": "commit_59f6fec5e3b72faff276df9c271f270a",
+          "targetActorId": "ceo",
+          "text": "Be precise.",
+          "kind": "whisper"
+        },
+        "fingerprint": "853a70ca08b7002b434236e30b0d6885f09346fff4948ee92f6a57b9fdce29ed",
+        "result": {
+          "kind": "whisper",
+          "whisper": {
+            "id": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "branchId": "main",
+            "expectedHead": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "commandId": "direction",
+            "targetActorId": "ceo",
+            "text": "Be precise.",
+            "createdAt": "2026-11-10T09:41:38.165Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.165Z"
+      },
+      {
+        "commandId": "original",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "original",
+          "expectedHead": "commit_59f6fec5e3b72faff276df9c271f270a",
+          "payload": {
+            "actorId": "ceo",
+            "audience": [
+              "ceo",
+              "cfo"
+            ],
+            "text": "A private claim.",
+            "stageWhisperIds": [
+              "whisper_e9db620a38ba125d6ec1757b2e71e8ea"
+            ]
+          },
+          "kind": "turn"
+        },
+        "fingerprint": "09ca1f067d7282e8fdcfd07bd46c604d1e2dacc4d2f386c3b500fbef2bed718d",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "commit": {
+            "id": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "kind": "turn",
+            "commandId": "original",
+            "events": [
+              {
+                "type": "message_accepted",
+                "message": {
+                  "id": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                  "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                  "actorId": "ceo",
+                  "text": "A private claim.",
+                  "audience": [
+                    "ceo",
+                    "cfo"
+                  ],
+                  "provenance": {
+                    "mode": "manual",
+                    "operation": "turn"
+                  }
+                }
+              },
+              {
+                "type": "first_impression_formed",
+                "impression": {
+                  "holder": "ceo",
+                  "observerId": "ceo",
+                  "entityId": "cfo",
+                  "strength": 1,
+                  "propositionText": "@ceo forms a first impression that A reserved person.",
+                  "surfaceSourceSpan": {
+                    "file": "entities/cfo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                }
+              },
+              {
+                "type": "first_impression_formed",
+                "impression": {
+                  "holder": "cfo",
+                  "observerId": "cfo",
+                  "entityId": "ceo",
+                  "strength": 1,
+                  "propositionText": "@cfo forms a first impression that A reserved person.",
+                  "surfaceSourceSpan": {
+                    "file": "entities/ceo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                }
+              },
+              {
+                "type": "stage_whisper_consumed",
+                "whisperId": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+                "targetActorId": "ceo",
+                "text": "Be precise."
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.168Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.168Z"
+      },
+      {
+        "commandId": "access",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "access",
+          "expectedHead": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "payload": {
+            "accessChanges": [
+              {
+                "action": "revoke",
+                "member": "cfo",
+                "container": "ceo",
+                "reason": null
+              }
+            ],
+            "audienceChanges": [
+              {
+                "actorId": "cfo",
+                "action": "add",
+                "reason": null
+              }
+            ]
+          },
+          "kind": "effects"
+        },
+        "fingerprint": "69f51f0b7783904afd02941922127609407386c6e74d5fbd348d203f2dfa6b08",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_cf8f0c33eb394b0c536e3e63fc54514e",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "commit": {
+            "id": "commit_cf8f0c33eb394b0c536e3e63fc54514e",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+            "kind": "effects",
+            "commandId": "access",
+            "events": [
+              {
+                "type": "audience_changed",
+                "actorId": "cfo",
+                "action": "add",
+                "reason": null
+              },
+              {
+                "type": "access_changed",
+                "action": "revoke",
+                "member": "cfo",
+                "container": "ceo",
+                "mode": "member",
+                "reason": null
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.170Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.170Z"
+      },
+      {
+        "commandId": "scoped",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "scoped",
+          "expectedHead": "commit_cf8f0c33eb394b0c536e3e63fc54514e",
+          "payload": {
+            "actorId": "ceo",
+            "audience": [
+              "ceo"
+            ],
+            "text": "Shared #cfo(secret)",
+            "audienceSyntax": "scoped-v1",
+            "knowledgePolicy": "actor-knowledge-v1"
+          },
+          "kind": "turn"
+        },
+        "fingerprint": "9c70fdd305632d4d26a88435980fb6c8b328df41265315425d9870dabf08644c",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "commit": {
+            "id": "commit_1383125dd4b4508f561ea89c87e89fb5",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_cf8f0c33eb394b0c536e3e63fc54514e",
+            "kind": "turn",
+            "commandId": "scoped",
+            "events": [
+              {
+                "type": "message_accepted",
+                "message": {
+                  "id": "message_version_1383125dd4b4508f561ea89c87e89fb5",
+                  "logicalMessageId": "message_1383125dd4b4508f561ea89c87e89fb5",
+                  "actorId": "ceo",
+                  "text": "Shared #cfo(secret)",
+                  "audience": [
+                    "ceo",
+                    "cfo"
+                  ],
+                  "provenance": {
+                    "mode": "manual",
+                    "operation": "turn"
+                  },
+                  "performance": {
+                    "version": 1,
+                    "syntax": "scoped-v1",
+                    "baseAudience": [
+                      "ceo"
+                    ],
+                    "spans": [
+                      {
+                        "audience": [
+                          "ceo"
+                        ],
+                        "primary": "Shared ",
+                        "fallback": null
+                      },
+                      {
+                        "audience": [
+                          "cfo"
+                        ],
+                        "primary": "secret",
+                        "fallback": null
+                      }
+                    ],
+                    "projections": [
+                      {
+                        "actorId": "ceo",
+                        "text": "Shared secret"
+                      },
+                      {
+                        "actorId": "cfo",
+                        "text": "secret"
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.174Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.174Z"
+      },
+      {
+        "commandId": "closure",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "closure",
+          "expectedHead": "commit_1383125dd4b4508f561ea89c87e89fb5",
+          "payload": {
+            "label": "Meeting"
+          },
+          "kind": "closure"
+        },
+        "fingerprint": "f96bb6930f0eba2dc6381f67b406af5c02e40f0b475388ce2bff250b3696eb9a",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "commit": {
+            "id": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+            "kind": "episode_closure",
+            "commandId": "closure",
+            "events": [
+              {
+                "type": "episode_closed",
+                "closure": {
+                  "episode": {
+                    "id": "episode_6d4cb937d6d22521566bba561458d0d1",
+                    "simulationId": "archive",
+                    "commitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+                    "label": "Meeting",
+                    "closedAt": "2026-11-10T09:41:38.176Z"
+                  },
+                  "memories": [],
+                  "longTermMemories": [],
+                  "extractedBeliefs": [],
+                  "retainedBeliefs": [],
+                  "memoryOperations": []
+                }
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.176Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.176Z"
+      },
+      {
+        "commandId": "revise",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "revise",
+          "expectedHead": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+          "payload": {
+            "actorId": "ceo",
+            "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+            "revisesOperationId": "memory_operation_50bd859d5a96b1932ce1eae1ac58bef2",
+            "content": "A revised recollection."
+          },
+          "kind": "revise_memory"
+        },
+        "fingerprint": "9e3cdd57ce8999484f97350c9a3a3be0d262ddc2e3f61ac53cafe26dd95c283d",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "commit": {
+            "id": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+            "kind": "memory",
+            "commandId": "revise",
+            "events": [
+              {
+                "type": "memory_operation",
+                "operation": {
+                  "id": "memory_operation_ce3a1ebd84cd832d10bae71d967fe3ab",
+                  "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+                  "simulationId": "archive",
+                  "actorId": "ceo",
+                  "memoryKind": "episode",
+                  "basisCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+                  "closureCommitId": null,
+                  "sourcePerceptionIds": [
+                    "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                    "perception_4331e66566ec3d865052c41ba55d7808"
+                  ],
+                  "sourceEventIds": [
+                    "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                    "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+                  ],
+                  "sourceMessageVersionIds": [
+                    "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                    "message_version_1383125dd4b4508f561ea89c87e89fb5"
+                  ],
+                  "producer": {
+                    "mode": "manual",
+                    "commandId": "revise"
+                  },
+                  "createdAt": "2026-11-10T09:41:38.187Z",
+                  "type": "revised",
+                  "content": "A revised recollection.",
+                  "revisesOperationId": "memory_operation_50bd859d5a96b1932ce1eae1ac58bef2"
+                }
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.187Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.187Z"
+      },
+      {
+        "commandId": "retract",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "retract",
+          "expectedHead": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+          "payload": {
+            "actorId": "ceo",
+            "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+            "retractsOperationId": "memory_operation_ce3a1ebd84cd832d10bae71d967fe3ab"
+          },
+          "kind": "retract_memory"
+        },
+        "fingerprint": "3cb6c632e43ce66febf03be8a79ab77164c1d4e3500e5071a819bde084d18873",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_4a3b397d8979b4a8f436e91115116160",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "commit": {
+            "id": "commit_4a3b397d8979b4a8f436e91115116160",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+            "kind": "memory",
+            "commandId": "retract",
+            "events": [
+              {
+                "type": "memory_operation",
+                "operation": {
+                  "id": "memory_operation_4a3b397d8979b4a8f436e91115116160",
+                  "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+                  "simulationId": "archive",
+                  "actorId": "ceo",
+                  "memoryKind": "episode",
+                  "basisCommitId": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+                  "closureCommitId": null,
+                  "sourcePerceptionIds": [
+                    "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                    "perception_4331e66566ec3d865052c41ba55d7808"
+                  ],
+                  "sourceEventIds": [
+                    "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                    "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+                  ],
+                  "sourceMessageVersionIds": [
+                    "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                    "message_version_1383125dd4b4508f561ea89c87e89fb5"
+                  ],
+                  "producer": {
+                    "mode": "manual",
+                    "commandId": "retract"
+                  },
+                  "createdAt": "2026-11-10T09:41:38.189Z",
+                  "type": "retracted",
+                  "retractsOperationId": "memory_operation_ce3a1ebd84cd832d10bae71d967fe3ab"
+                }
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.189Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.189Z"
+      }
+    ],
+    "memoryJobs": [
+      {
+        "id": "memory_job_a0e349a7f018d312638cfb4dc5370e1e",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "originBranchId": "main",
+        "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+        "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "basisHeadCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "commandId": "closure",
+        "label": "Meeting",
+        "status": "completed",
+        "attemptCount": 1,
+        "resultFingerprint": "2b7b67e1d1e86f22a8b690cc70f8af00bb9e74f025dbb9d5ee871f6fb3a0be41",
+        "result": {
+          "episode": {
+            "id": "episode_6d4cb937d6d22521566bba561458d0d1",
+            "simulationId": "archive",
+            "commitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+            "label": "Meeting",
+            "closedAt": "2026-11-10T09:41:38.176Z"
+          },
+          "memories": [
+            {
+              "id": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "text": "I remember the meeting as @ceo.",
+              "sourceTurnIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "text": "I remember the meeting as @cfo.",
+              "sourceTurnIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "sourcePerceptionIds": [
+                "perception_692d5269b67ddeaeae8483672b0c98b6",
+                "perception_c3c016edd7b2d8895cef547ce808a109"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "longTermMemories": [
+            {
+              "id": "long_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "episodeMemoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "text": "My longer recollection as @ceo.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "long_memory_c256768d77fd71b16fc482768aa335dd",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "episodeMemoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "text": "My longer recollection as @cfo.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "extractedBeliefs": [
+            {
+              "id": "belief_9ddf8392e53006a658384f041548e9b9",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "holder": "ceo",
+              "strength": -1,
+              "propositionText": "@ceo doubts the claim.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "belief_a914235177f7bb44eab62225453f98ee",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "memoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "holder": "cfo",
+              "strength": -1,
+              "propositionText": "@cfo doubts the claim.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "retainedBeliefs": [
+            {
+              "id": "retained_a914235177f7bb44eab62225453f98ee",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "holder": "cfo",
+              "strength": 1,
+              "propositionText": "The plan can work.",
+              "sourceHolder": "ceo",
+              "accessPath": [
+                "cfo",
+                "ceo"
+              ],
+              "sourceBelief": {
+                "holder": "ceo",
+                "strength": 3,
+                "propositionText": "The plan can work.",
+                "mentions": [],
+                "sourceSpan": {
+                  "file": "entities/ceo/beliefs.md",
+                  "line": 1,
+                  "quote": "+3 The plan can work."
+                }
+              },
+              "runtimeAccessEventId": "commit_cf8f0c33eb394b0c536e3e63fc54514e:event:1",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "retained_56e2638a006f06f129a8487d54a721c1",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "holder": "cfo",
+              "strength": 1,
+              "propositionText": "@ceo forms a first impression that A reserved person.",
+              "sourceHolder": "ceo",
+              "accessPath": [
+                "cfo",
+                "ceo"
+              ],
+              "sourceBelief": {
+                "holder": "ceo",
+                "observerId": "ceo",
+                "entityId": "cfo",
+                "strength": 1,
+                "propositionText": "@ceo forms a first impression that A reserved person.",
+                "surfaceSourceSpan": {
+                  "file": "entities/cfo/surface.md",
+                  "line": 1,
+                  "quote": "A reserved person."
+                },
+                "id": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:impression:0",
+                "simulationId": "archive",
+                "createdAt": "2026-11-10T09:41:38.168Z"
+              },
+              "runtimeAccessEventId": "commit_cf8f0c33eb394b0c536e3e63fc54514e:event:1",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "memoryOperations": [
+            {
+              "id": "memory_operation_50bd859d5a96b1932ce1eae1ac58bef2",
+              "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "memoryKind": "episode",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "asserted",
+              "content": "I remember the meeting as @ceo."
+            },
+            {
+              "id": "memory_operation_6bdc15de2cf25546ae41c31207c7bb76",
+              "memoryId": "long_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "memoryKind": "long_term",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "consolidated",
+              "content": "My longer recollection as @ceo.",
+              "episodeMemoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733"
+            },
+            {
+              "id": "memory_operation_3f07772b4f226badfbc1edc6eafed558",
+              "memoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "memoryKind": "episode",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_692d5269b67ddeaeae8483672b0c98b6",
+                "perception_c3c016edd7b2d8895cef547ce808a109"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "asserted",
+              "content": "I remember the meeting as @cfo."
+            },
+            {
+              "id": "memory_operation_5f61f9c6d1a24067be3f16a0d6774de6",
+              "memoryId": "long_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "memoryKind": "long_term",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_692d5269b67ddeaeae8483672b0c98b6",
+                "perception_c3c016edd7b2d8895cef547ce808a109"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "consolidated",
+              "content": "My longer recollection as @cfo.",
+              "episodeMemoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd"
+            }
+          ]
+        },
+        "lastError": null,
+        "createdAt": "2026-11-10T09:41:38.176Z",
+        "updatedAt": "2026-11-10T09:41:38.183Z"
+      }
+    ],
+    "memoryJobTransitions": [
+      {
+        "id": "memory_job_transition_d19c7a11509391e6e0de035a5501bb9c",
+        "jobId": "memory_job_a0e349a7f018d312638cfb4dc5370e1e",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "attempt": 1,
+        "status": "running",
+        "resultFingerprint": null,
+        "result": null,
+        "error": null,
+        "createdAt": "2026-11-10T09:41:38.179Z"
+      },
+      {
+        "id": "memory_job_transition_f0bd7f569d1dcb16ba96b734763d9364",
+        "jobId": "memory_job_a0e349a7f018d312638cfb4dc5370e1e",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "attempt": 1,
+        "status": "completed",
+        "resultFingerprint": "2b7b67e1d1e86f22a8b690cc70f8af00bb9e74f025dbb9d5ee871f6fb3a0be41",
+        "result": {
+          "episode": {
+            "id": "episode_6d4cb937d6d22521566bba561458d0d1",
+            "simulationId": "archive",
+            "commitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+            "label": "Meeting",
+            "closedAt": "2026-11-10T09:41:38.176Z"
+          },
+          "memories": [
+            {
+              "id": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "text": "I remember the meeting as @ceo.",
+              "sourceTurnIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "text": "I remember the meeting as @cfo.",
+              "sourceTurnIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "sourcePerceptionIds": [
+                "perception_692d5269b67ddeaeae8483672b0c98b6",
+                "perception_c3c016edd7b2d8895cef547ce808a109"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "longTermMemories": [
+            {
+              "id": "long_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "episodeMemoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "text": "My longer recollection as @ceo.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "long_memory_c256768d77fd71b16fc482768aa335dd",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "episodeMemoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "text": "My longer recollection as @cfo.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "extractedBeliefs": [
+            {
+              "id": "belief_9ddf8392e53006a658384f041548e9b9",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "holder": "ceo",
+              "strength": -1,
+              "propositionText": "@ceo doubts the claim.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "belief_a914235177f7bb44eab62225453f98ee",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "memoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "holder": "cfo",
+              "strength": -1,
+              "propositionText": "@cfo doubts the claim.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "retainedBeliefs": [
+            {
+              "id": "retained_a914235177f7bb44eab62225453f98ee",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "holder": "cfo",
+              "strength": 1,
+              "propositionText": "The plan can work.",
+              "sourceHolder": "ceo",
+              "accessPath": [
+                "cfo",
+                "ceo"
+              ],
+              "sourceBelief": {
+                "holder": "ceo",
+                "strength": 3,
+                "propositionText": "The plan can work.",
+                "mentions": [],
+                "sourceSpan": {
+                  "file": "entities/ceo/beliefs.md",
+                  "line": 1,
+                  "quote": "+3 The plan can work."
+                }
+              },
+              "runtimeAccessEventId": "commit_cf8f0c33eb394b0c536e3e63fc54514e:event:1",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "retained_56e2638a006f06f129a8487d54a721c1",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "holder": "cfo",
+              "strength": 1,
+              "propositionText": "@ceo forms a first impression that A reserved person.",
+              "sourceHolder": "ceo",
+              "accessPath": [
+                "cfo",
+                "ceo"
+              ],
+              "sourceBelief": {
+                "holder": "ceo",
+                "observerId": "ceo",
+                "entityId": "cfo",
+                "strength": 1,
+                "propositionText": "@ceo forms a first impression that A reserved person.",
+                "surfaceSourceSpan": {
+                  "file": "entities/cfo/surface.md",
+                  "line": 1,
+                  "quote": "A reserved person."
+                },
+                "id": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:impression:0",
+                "simulationId": "archive",
+                "createdAt": "2026-11-10T09:41:38.168Z"
+              },
+              "runtimeAccessEventId": "commit_cf8f0c33eb394b0c536e3e63fc54514e:event:1",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "memoryOperations": [
+            {
+              "id": "memory_operation_50bd859d5a96b1932ce1eae1ac58bef2",
+              "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "memoryKind": "episode",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "asserted",
+              "content": "I remember the meeting as @ceo."
+            },
+            {
+              "id": "memory_operation_6bdc15de2cf25546ae41c31207c7bb76",
+              "memoryId": "long_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "memoryKind": "long_term",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "consolidated",
+              "content": "My longer recollection as @ceo.",
+              "episodeMemoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733"
+            },
+            {
+              "id": "memory_operation_3f07772b4f226badfbc1edc6eafed558",
+              "memoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "memoryKind": "episode",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_692d5269b67ddeaeae8483672b0c98b6",
+                "perception_c3c016edd7b2d8895cef547ce808a109"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "asserted",
+              "content": "I remember the meeting as @cfo."
+            },
+            {
+              "id": "memory_operation_5f61f9c6d1a24067be3f16a0d6774de6",
+              "memoryId": "long_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "memoryKind": "long_term",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_692d5269b67ddeaeae8483672b0c98b6",
+                "perception_c3c016edd7b2d8895cef547ce808a109"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "consolidated",
+              "content": "My longer recollection as @cfo.",
+              "episodeMemoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd"
+            }
+          ]
+        },
+        "error": null,
+        "createdAt": "2026-11-10T09:41:38.183Z"
+      }
+    ],
+    "detachedMemoryOperations": [
+      {
+        "id": "memory_operation_50bd859d5a96b1932ce1eae1ac58bef2",
+        "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+        "simulationId": "archive",
+        "actorId": "ceo",
+        "memoryKind": "episode",
+        "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "sourcePerceptionIds": [
+          "perception_23ccba7f278d35c5ab0ef209b40550b0",
+          "perception_4331e66566ec3d865052c41ba55d7808"
+        ],
+        "sourceEventIds": [
+          "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+          "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+        ],
+        "sourceMessageVersionIds": [
+          "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "message_version_1383125dd4b4508f561ea89c87e89fb5"
+        ],
+        "producer": {
+          "mode": "episode_closure",
+          "commandId": "closure"
+        },
+        "createdAt": "2026-11-10T09:41:38.176Z",
+        "type": "asserted",
+        "content": "I remember the meeting as @ceo."
+      },
+      {
+        "id": "memory_operation_6bdc15de2cf25546ae41c31207c7bb76",
+        "memoryId": "long_memory_327d299e4dbc1cc3ba6063de9621a733",
+        "simulationId": "archive",
+        "actorId": "ceo",
+        "memoryKind": "long_term",
+        "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "sourcePerceptionIds": [
+          "perception_23ccba7f278d35c5ab0ef209b40550b0",
+          "perception_4331e66566ec3d865052c41ba55d7808"
+        ],
+        "sourceEventIds": [
+          "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+          "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+        ],
+        "sourceMessageVersionIds": [
+          "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "message_version_1383125dd4b4508f561ea89c87e89fb5"
+        ],
+        "producer": {
+          "mode": "episode_closure",
+          "commandId": "closure"
+        },
+        "createdAt": "2026-11-10T09:41:38.176Z",
+        "type": "consolidated",
+        "content": "My longer recollection as @ceo.",
+        "episodeMemoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733"
+      },
+      {
+        "id": "memory_operation_3f07772b4f226badfbc1edc6eafed558",
+        "memoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+        "simulationId": "archive",
+        "actorId": "cfo",
+        "memoryKind": "episode",
+        "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "sourcePerceptionIds": [
+          "perception_692d5269b67ddeaeae8483672b0c98b6",
+          "perception_c3c016edd7b2d8895cef547ce808a109"
+        ],
+        "sourceEventIds": [
+          "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+          "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+        ],
+        "sourceMessageVersionIds": [
+          "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "message_version_1383125dd4b4508f561ea89c87e89fb5"
+        ],
+        "producer": {
+          "mode": "episode_closure",
+          "commandId": "closure"
+        },
+        "createdAt": "2026-11-10T09:41:38.176Z",
+        "type": "asserted",
+        "content": "I remember the meeting as @cfo."
+      },
+      {
+        "id": "memory_operation_5f61f9c6d1a24067be3f16a0d6774de6",
+        "memoryId": "long_memory_c256768d77fd71b16fc482768aa335dd",
+        "simulationId": "archive",
+        "actorId": "cfo",
+        "memoryKind": "long_term",
+        "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "sourcePerceptionIds": [
+          "perception_692d5269b67ddeaeae8483672b0c98b6",
+          "perception_c3c016edd7b2d8895cef547ce808a109"
+        ],
+        "sourceEventIds": [
+          "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+          "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+        ],
+        "sourceMessageVersionIds": [
+          "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "message_version_1383125dd4b4508f561ea89c87e89fb5"
+        ],
+        "producer": {
+          "mode": "episode_closure",
+          "commandId": "closure"
+        },
+        "createdAt": "2026-11-10T09:41:38.176Z",
+        "type": "consolidated",
+        "content": "My longer recollection as @cfo.",
+        "episodeMemoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd"
+      }
+    ]
+  },
+  "complete": {
+    "schemaVersion": 7,
+    "contentRevision": {
+      "id": "rev_81e8bbf2-e24e-4b66-97d4-4d2161f8d33c",
+      "ownerScope": "owner",
+      "digest": "4209574aa5e2679833c272145b5ad688bfe23286076bca9c4c1e30003e30900c",
+      "compiled": {
+        "sourceRoot": "",
+        "models": [],
+        "worlds": [
+          {
+            "id": "strategy-class",
+            "kind": "world",
+            "name": "Strategy Class",
+            "path": "worlds/strategy-class.md",
+            "metadata": {},
+            "body": "A meeting."
+          }
+        ],
+        "scenarios": [
+          {
+            "id": "executive-interviews",
+            "kind": "scenario",
+            "name": "Executive Interviews",
+            "path": "scenarios/executive-interviews.md",
+            "metadata": {},
+            "body": "A meeting."
+          }
+        ],
+        "formats": [],
+        "entities": [
+          {
+            "id": "ceo",
+            "kind": "agent",
+            "rawKind": "agent",
+            "name": "CEO",
+            "visibility": "public",
+            "folder": "entities/ceo",
+            "files": [
+              "entities/ceo/BELIEFS.md",
+              "entities/ceo/EXAMPLES.md",
+              "entities/ceo/IDENTITY.md",
+              "entities/ceo/SURFACE.md"
+            ]
+          },
+          {
+            "id": "cfo",
+            "kind": "agent",
+            "rawKind": "agent",
+            "name": "CFO",
+            "visibility": "public",
+            "folder": "entities/cfo",
+            "files": [
+              "entities/cfo/BELIEFS.md",
+              "entities/cfo/EXAMPLES.md",
+              "entities/cfo/IDENTITY.md",
+              "entities/cfo/SURFACE.md"
+            ]
+          }
+        ],
+        "connections": [],
+        "mentions": [],
+        "taggedLines": [],
+        "beliefs": [
+          {
+            "holder": "ceo",
+            "strength": 3,
+            "propositionText": "The plan can work.",
+            "mentions": [],
+            "sourceSpan": {
+              "file": "entities/ceo/beliefs.md",
+              "line": 1,
+              "quote": "+3 The plan can work."
+            }
+          }
+        ],
+        "surfaces": [
+          {
+            "entity": "ceo",
+            "channels": [
+              "in_person",
+              "video"
+            ],
+            "text": "A reserved person.",
+            "sourceSpan": {
+              "file": "entities/ceo/surface.md",
+              "line": 1,
+              "quote": "A reserved person."
+            }
+          },
+          {
+            "entity": "ceo",
+            "channels": [
+              "audio",
+              "video",
+              "in_person"
+            ],
+            "text": "A reserved person.",
+            "sourceSpan": {
+              "file": "entities/ceo/surface.md",
+              "line": 1,
+              "quote": "A reserved person."
+            }
+          },
+          {
+            "entity": "cfo",
+            "channels": [
+              "in_person",
+              "video"
+            ],
+            "text": "A reserved person.",
+            "sourceSpan": {
+              "file": "entities/cfo/surface.md",
+              "line": 1,
+              "quote": "A reserved person."
+            }
+          },
+          {
+            "entity": "cfo",
+            "channels": [
+              "audio",
+              "video",
+              "in_person"
+            ],
+            "text": "A reserved person.",
+            "sourceSpan": {
+              "file": "entities/cfo/surface.md",
+              "line": 1,
+              "quote": "A reserved person."
+            }
+          }
+        ],
+        "accessLinks": [
+          {
+            "member": "cfo",
+            "container": "ceo",
+            "mode": "member",
+            "sourceSpan": {
+              "file": "connections/leadership-access.md",
+              "line": 8,
+              "quote": "@ceo gives @cfo access to @ceo recovery-planning context. :access:member"
+            }
+          }
+        ],
+        "diagnostics": []
+      },
+      "createdAt": "2026-11-10T09:41:38.162Z"
+    },
+    "simulation": {
+      "id": "archive",
+      "ownerScope": "owner",
+      "contentRevisionId": "rev_81e8bbf2-e24e-4b66-97d4-4d2161f8d33c",
+      "sourceRoot": "",
+      "scenarioId": "default",
+      "defaultBranchId": "main",
+      "createdAt": "2026-11-10T09:41:38.163Z"
+    },
+    "branches": [
+      {
+        "id": "main",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "name": "main",
+        "headCommitId": "commit_efaac55b4a18762fe81834fac02ea558",
+        "origin": {
+          "kind": "root",
+          "commandId": "start",
+          "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+        },
+        "createdAt": "2026-11-10T09:41:38.163Z"
+      },
+      {
+        "id": "forked",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "name": "Fork",
+        "headCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+        "origin": {
+          "kind": "fork",
+          "commandId": "fork",
+          "sourceBranchId": "main",
+          "sourceHeadCommitId": "commit_4a3b397d8979b4a8f436e91115116160",
+          "baseCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb"
+        },
+        "createdAt": "2026-11-10T09:41:38.196Z"
+      },
+      {
+        "id": "edited",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "name": "edit",
+        "headCommitId": "commit_56e7492f0ef06e89915cf49218ff2656",
+        "origin": {
+          "kind": "edit",
+          "commandId": "edit",
+          "sourceBranchId": "main",
+          "sourceHeadCommitId": "commit_4a3b397d8979b4a8f436e91115116160",
+          "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+        },
+        "createdAt": "2026-11-10T09:41:38.200Z"
+      },
+      {
+        "id": "regenerated",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "name": "regenerate",
+        "headCommitId": "commit_0aca7368a01c215823ea58513219484c",
+        "origin": {
+          "kind": "regenerate",
+          "commandId": "regenerate",
+          "sourceBranchId": "main",
+          "sourceHeadCommitId": "commit_4a3b397d8979b4a8f436e91115116160",
+          "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+        },
+        "createdAt": "2026-11-10T09:41:38.206Z"
+      },
+      {
+        "id": "alternative_branch_90e526e747e81eb16155c6c8f925d3c6",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "name": "edit",
+        "headCommitId": "commit_90e526e747e81eb16155c6c8f925d3c6",
+        "origin": {
+          "kind": "edit",
+          "commandId": "historical-manual",
+          "sourceBranchId": "main",
+          "sourceHeadCommitId": "commit_efaac55b4a18762fe81834fac02ea558",
+          "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+        },
+        "createdAt": "2026-11-10T09:41:38.226Z"
+      },
+      {
+        "id": "alternative_branch_1c442936dde68b08c4842a3c6c5f862a",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "name": "regenerate",
+        "headCommitId": "commit_1c442936dde68b08c4842a3c6c5f862a",
+        "origin": {
+          "kind": "regenerate",
+          "commandId": "historical-generate",
+          "sourceBranchId": "main",
+          "sourceHeadCommitId": "commit_efaac55b4a18762fe81834fac02ea558",
+          "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+        },
+        "createdAt": "2026-11-10T09:41:38.237Z"
+      },
+      {
+        "id": "correction_branch_f781e47dbc29f0c1672d256a65ac66e6",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "name": "correction",
+        "headCommitId": "commit_f781e47dbc29f0c1672d256a65ac66e6",
+        "origin": {
+          "kind": "edit",
+          "commandId": "correct",
+          "sourceBranchId": "main",
+          "sourceHeadCommitId": "commit_efaac55b4a18762fe81834fac02ea558",
+          "baseCommitId": "commit_efaac55b4a18762fe81834fac02ea558"
+        },
+        "createdAt": "2026-11-10T09:41:38.253Z"
+      }
+    ],
+    "commits": [
+      {
+        "id": "commit_59f6fec5e3b72faff276df9c271f270a",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": null,
+        "kind": "root",
+        "commandId": "start",
+        "events": [],
+        "createdAt": "2026-11-10T09:41:38.163Z"
+      },
+      {
+        "id": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+        "kind": "turn",
+        "commandId": "original",
+        "events": [
+          {
+            "type": "message_accepted",
+            "message": {
+              "id": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "actorId": "ceo",
+              "text": "A private claim.",
+              "audience": [
+                "ceo",
+                "cfo"
+              ],
+              "provenance": {
+                "mode": "manual",
+                "operation": "turn"
+              }
+            }
+          },
+          {
+            "type": "first_impression_formed",
+            "impression": {
+              "holder": "ceo",
+              "observerId": "ceo",
+              "entityId": "cfo",
+              "strength": 1,
+              "propositionText": "@ceo forms a first impression that A reserved person.",
+              "surfaceSourceSpan": {
+                "file": "entities/cfo/surface.md",
+                "line": 1,
+                "quote": "A reserved person."
+              }
+            }
+          },
+          {
+            "type": "first_impression_formed",
+            "impression": {
+              "holder": "cfo",
+              "observerId": "cfo",
+              "entityId": "ceo",
+              "strength": 1,
+              "propositionText": "@cfo forms a first impression that A reserved person.",
+              "surfaceSourceSpan": {
+                "file": "entities/ceo/surface.md",
+                "line": 1,
+                "quote": "A reserved person."
+              }
+            }
+          },
+          {
+            "type": "stage_whisper_consumed",
+            "whisperId": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+            "targetActorId": "ceo",
+            "text": "Be precise."
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.168Z"
+      },
+      {
+        "id": "commit_cf8f0c33eb394b0c536e3e63fc54514e",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+        "kind": "effects",
+        "commandId": "access",
+        "events": [
+          {
+            "type": "audience_changed",
+            "actorId": "cfo",
+            "action": "add",
+            "reason": null
+          },
+          {
+            "type": "access_changed",
+            "action": "revoke",
+            "member": "cfo",
+            "container": "ceo",
+            "mode": "member",
+            "reason": null
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.170Z"
+      },
+      {
+        "id": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_cf8f0c33eb394b0c536e3e63fc54514e",
+        "kind": "turn",
+        "commandId": "scoped",
+        "events": [
+          {
+            "type": "message_accepted",
+            "message": {
+              "id": "message_version_1383125dd4b4508f561ea89c87e89fb5",
+              "logicalMessageId": "message_1383125dd4b4508f561ea89c87e89fb5",
+              "actorId": "ceo",
+              "text": "Shared #cfo(secret)",
+              "audience": [
+                "ceo",
+                "cfo"
+              ],
+              "provenance": {
+                "mode": "manual",
+                "operation": "turn"
+              },
+              "performance": {
+                "version": 1,
+                "syntax": "scoped-v1",
+                "baseAudience": [
+                  "ceo"
+                ],
+                "spans": [
+                  {
+                    "audience": [
+                      "ceo"
+                    ],
+                    "primary": "Shared ",
+                    "fallback": null
+                  },
+                  {
+                    "audience": [
+                      "cfo"
+                    ],
+                    "primary": "secret",
+                    "fallback": null
+                  }
+                ],
+                "projections": [
+                  {
+                    "actorId": "ceo",
+                    "text": "Shared secret"
+                  },
+                  {
+                    "actorId": "cfo",
+                    "text": "secret"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.174Z"
+      },
+      {
+        "id": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "kind": "episode_closure",
+        "commandId": "closure",
+        "events": [
+          {
+            "type": "episode_closed",
+            "closure": {
+              "episode": {
+                "id": "episode_6d4cb937d6d22521566bba561458d0d1",
+                "simulationId": "archive",
+                "commitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+                "label": "Meeting",
+                "closedAt": "2026-11-10T09:41:38.176Z"
+              },
+              "memories": [],
+              "longTermMemories": [],
+              "extractedBeliefs": [],
+              "retainedBeliefs": [],
+              "memoryOperations": []
+            }
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.176Z"
+      },
+      {
+        "id": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "kind": "memory",
+        "commandId": "revise",
+        "events": [
+          {
+            "type": "memory_operation",
+            "operation": {
+              "id": "memory_operation_ce3a1ebd84cd832d10bae71d967fe3ab",
+              "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "memoryKind": "episode",
+              "basisCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "closureCommitId": null,
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "manual",
+                "commandId": "revise"
+              },
+              "createdAt": "2026-11-10T09:41:38.187Z",
+              "type": "revised",
+              "content": "A revised recollection.",
+              "revisesOperationId": "memory_operation_50bd859d5a96b1932ce1eae1ac58bef2"
+            }
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.187Z"
+      },
+      {
+        "id": "commit_4a3b397d8979b4a8f436e91115116160",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+        "kind": "memory",
+        "commandId": "retract",
+        "events": [
+          {
+            "type": "memory_operation",
+            "operation": {
+              "id": "memory_operation_4a3b397d8979b4a8f436e91115116160",
+              "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "memoryKind": "episode",
+              "basisCommitId": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+              "closureCommitId": null,
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "manual",
+                "commandId": "retract"
+              },
+              "createdAt": "2026-11-10T09:41:38.189Z",
+              "type": "retracted",
+              "retractsOperationId": "memory_operation_ce3a1ebd84cd832d10bae71d967fe3ab"
+            }
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.189Z"
+      },
+      {
+        "id": "commit_56e7492f0ef06e89915cf49218ff2656",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+        "kind": "turn",
+        "commandId": "edit",
+        "events": [
+          {
+            "type": "message_accepted",
+            "message": {
+              "id": "message_version_56e7492f0ef06e89915cf49218ff2656",
+              "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "actorId": "ceo",
+              "text": "An alternative wording.",
+              "audience": [
+                "ceo",
+                "cfo"
+              ],
+              "provenance": {
+                "mode": "manual",
+                "operation": "edit"
+              }
+            }
+          },
+          {
+            "type": "first_impression_formed",
+            "impression": {
+              "holder": "ceo",
+              "observerId": "ceo",
+              "entityId": "cfo",
+              "strength": 1,
+              "propositionText": "@ceo forms a first impression that A reserved person.",
+              "surfaceSourceSpan": {
+                "file": "entities/cfo/surface.md",
+                "line": 1,
+                "quote": "A reserved person."
+              }
+            }
+          },
+          {
+            "type": "first_impression_formed",
+            "impression": {
+              "holder": "cfo",
+              "observerId": "cfo",
+              "entityId": "ceo",
+              "strength": 1,
+              "propositionText": "@cfo forms a first impression that A reserved person.",
+              "surfaceSourceSpan": {
+                "file": "entities/ceo/surface.md",
+                "line": 1,
+                "quote": "A reserved person."
+              }
+            }
+          },
+          {
+            "type": "stage_whisper_consumed",
+            "whisperId": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+            "targetActorId": "ceo",
+            "text": "Be precise."
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.200Z"
+      },
+      {
+        "id": "commit_0aca7368a01c215823ea58513219484c",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+        "kind": "turn",
+        "commandId": "regenerate",
+        "events": [
+          {
+            "type": "message_accepted",
+            "message": {
+              "id": "message_version_0aca7368a01c215823ea58513219484c",
+              "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "actorId": "ceo",
+              "text": "An alternative wording.",
+              "audience": [
+                "ceo",
+                "cfo"
+              ],
+              "provenance": {
+                "mode": "manual",
+                "operation": "regenerate"
+              }
+            }
+          },
+          {
+            "type": "first_impression_formed",
+            "impression": {
+              "holder": "ceo",
+              "observerId": "ceo",
+              "entityId": "cfo",
+              "strength": 1,
+              "propositionText": "@ceo forms a first impression that A reserved person.",
+              "surfaceSourceSpan": {
+                "file": "entities/cfo/surface.md",
+                "line": 1,
+                "quote": "A reserved person."
+              }
+            }
+          },
+          {
+            "type": "first_impression_formed",
+            "impression": {
+              "holder": "cfo",
+              "observerId": "cfo",
+              "entityId": "ceo",
+              "strength": 1,
+              "propositionText": "@cfo forms a first impression that A reserved person.",
+              "surfaceSourceSpan": {
+                "file": "entities/ceo/surface.md",
+                "line": 1,
+                "quote": "A reserved person."
+              }
+            }
+          },
+          {
+            "type": "stage_whisper_consumed",
+            "whisperId": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+            "targetActorId": "ceo",
+            "text": "Be precise."
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.206Z"
+      },
+      {
+        "id": "commit_efaac55b4a18762fe81834fac02ea558",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_4a3b397d8979b4a8f436e91115116160",
+        "kind": "turn",
+        "commandId": "accept",
+        "events": [
+          {
+            "type": "message_accepted",
+            "message": {
+              "id": "message_version_efaac55b4a18762fe81834fac02ea558",
+              "logicalMessageId": "message_efaac55b4a18762fe81834fac02ea558",
+              "actorId": "cfo",
+              "text": "  Edited generated reply.  ",
+              "audience": [
+                "cfo",
+                "ceo"
+              ],
+              "provenance": {
+                "mode": "generated",
+                "operation": "turn",
+                "sourceArtifactDigest": "1153b091d60526187162ace374f995b78360b4bd55dd488e6f157eae3290ea15",
+                "finalTextSource": "acceptor_edited"
+              }
+            }
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.219Z"
+      },
+      {
+        "id": "commit_90e526e747e81eb16155c6c8f925d3c6",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+        "kind": "turn",
+        "commandId": "historical-manual",
+        "events": [
+          {
+            "type": "message_accepted",
+            "message": {
+              "id": "message_version_90e526e747e81eb16155c6c8f925d3c6",
+              "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "actorId": "ceo",
+              "text": "A manual beginning.",
+              "audience": [
+                "ceo"
+              ],
+              "provenance": {
+                "mode": "manual",
+                "operation": "edit"
+              }
+            }
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.226Z"
+      },
+      {
+        "id": "commit_1c442936dde68b08c4842a3c6c5f862a",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+        "kind": "turn",
+        "commandId": "historical-generate",
+        "events": [
+          {
+            "type": "message_accepted",
+            "message": {
+              "id": "message_version_1c442936dde68b08c4842a3c6c5f862a",
+              "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "actorId": "ceo",
+              "text": "A new beginning.",
+              "audience": [
+                "ceo"
+              ],
+              "provenance": {
+                "mode": "generated",
+                "operation": "regenerate",
+                "sourceArtifactDigest": "fe521082cccb6ffef21b51b2163a9163a3b40640f078de445ea1467a96f9ce36",
+                "finalTextSource": "generated_verbatim"
+              }
+            }
+          },
+          {
+            "type": "stage_whisper_consumed",
+            "whisperId": "alternative_input_a3b193e3913fe927ba8c50edd4021dfb",
+            "targetActorId": "ceo",
+            "text": "Change the opening."
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.237Z"
+      },
+      {
+        "id": "commit_f781e47dbc29f0c1672d256a65ac66e6",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "parentCommitId": "commit_efaac55b4a18762fe81834fac02ea558",
+        "kind": "effects",
+        "commandId": "correct",
+        "events": [
+          {
+            "type": "message_body_corrected",
+            "messageVersionId": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+            "text": "A corrected private claim."
+          }
+        ],
+        "createdAt": "2026-11-10T09:41:38.253Z"
+      }
+    ],
+    "stageWhispers": [
+      {
+        "id": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "branchId": "main",
+        "expectedHead": "commit_59f6fec5e3b72faff276df9c271f270a",
+        "commandId": "direction",
+        "targetActorId": "ceo",
+        "text": "Be precise.",
+        "createdAt": "2026-11-10T09:41:38.165Z"
+      }
+    ],
+    "commandResults": [
+      {
+        "commandId": "start",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "scenarioId": "default",
+          "sourceRoot": "",
+          "compiled": {
+            "sourceRoot": "",
+            "models": [],
+            "worlds": [
+              {
+                "id": "strategy-class",
+                "kind": "world",
+                "name": "Strategy Class",
+                "path": "worlds/strategy-class.md",
+                "metadata": {},
+                "body": "A meeting."
+              }
+            ],
+            "scenarios": [
+              {
+                "id": "executive-interviews",
+                "kind": "scenario",
+                "name": "Executive Interviews",
+                "path": "scenarios/executive-interviews.md",
+                "metadata": {},
+                "body": "A meeting."
+              }
+            ],
+            "formats": [],
+            "entities": [
+              {
+                "id": "ceo",
+                "kind": "agent",
+                "rawKind": "agent",
+                "name": "CEO",
+                "visibility": "public",
+                "folder": "entities/ceo",
+                "files": [
+                  "entities/ceo/BELIEFS.md",
+                  "entities/ceo/EXAMPLES.md",
+                  "entities/ceo/IDENTITY.md",
+                  "entities/ceo/SURFACE.md"
+                ]
+              },
+              {
+                "id": "cfo",
+                "kind": "agent",
+                "rawKind": "agent",
+                "name": "CFO",
+                "visibility": "public",
+                "folder": "entities/cfo",
+                "files": [
+                  "entities/cfo/BELIEFS.md",
+                  "entities/cfo/EXAMPLES.md",
+                  "entities/cfo/IDENTITY.md",
+                  "entities/cfo/SURFACE.md"
+                ]
+              }
+            ],
+            "connections": [],
+            "mentions": [],
+            "taggedLines": [],
+            "beliefs": [
+              {
+                "holder": "ceo",
+                "strength": 3,
+                "propositionText": "The plan can work.",
+                "mentions": [],
+                "sourceSpan": {
+                  "file": "entities/ceo/beliefs.md",
+                  "line": 1,
+                  "quote": "+3 The plan can work."
+                }
+              }
+            ],
+            "surfaces": [
+              {
+                "entity": "ceo",
+                "channels": [
+                  "in_person",
+                  "video"
+                ],
+                "text": "A reserved person.",
+                "sourceSpan": {
+                  "file": "entities/ceo/surface.md",
+                  "line": 1,
+                  "quote": "A reserved person."
+                }
+              },
+              {
+                "entity": "ceo",
+                "channels": [
+                  "audio",
+                  "video",
+                  "in_person"
+                ],
+                "text": "A reserved person.",
+                "sourceSpan": {
+                  "file": "entities/ceo/surface.md",
+                  "line": 1,
+                  "quote": "A reserved person."
+                }
+              },
+              {
+                "entity": "cfo",
+                "channels": [
+                  "in_person",
+                  "video"
+                ],
+                "text": "A reserved person.",
+                "sourceSpan": {
+                  "file": "entities/cfo/surface.md",
+                  "line": 1,
+                  "quote": "A reserved person."
+                }
+              },
+              {
+                "entity": "cfo",
+                "channels": [
+                  "audio",
+                  "video",
+                  "in_person"
+                ],
+                "text": "A reserved person.",
+                "sourceSpan": {
+                  "file": "entities/cfo/surface.md",
+                  "line": 1,
+                  "quote": "A reserved person."
+                }
+              }
+            ],
+            "accessLinks": [
+              {
+                "member": "cfo",
+                "container": "ceo",
+                "mode": "member",
+                "sourceSpan": {
+                  "file": "connections/leadership-access.md",
+                  "line": 8,
+                  "quote": "@ceo gives @cfo access to @ceo recovery-planning context. :access:member"
+                }
+              }
+            ],
+            "diagnostics": []
+          },
+          "defaultBranchId": "main",
+          "rootCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+          "commandId": "start",
+          "kind": "start"
+        },
+        "fingerprint": "1652cfeef188e7e41b7c53c0b5b388a3314be1e7f809a73a7bb7e6d9dd3ff4b6",
+        "result": {
+          "kind": "start",
+          "simulation": {
+            "id": "archive",
+            "ownerScope": "owner",
+            "contentRevisionId": "rev_81e8bbf2-e24e-4b66-97d4-4d2161f8d33c",
+            "sourceRoot": "",
+            "scenarioId": "default",
+            "defaultBranchId": "main",
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "root": {
+            "id": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": null,
+            "kind": "root",
+            "commandId": "start",
+            "events": [],
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "contentRevision": {
+            "id": "rev_81e8bbf2-e24e-4b66-97d4-4d2161f8d33c",
+            "ownerScope": "owner",
+            "digest": "4209574aa5e2679833c272145b5ad688bfe23286076bca9c4c1e30003e30900c",
+            "compiled": {
+              "sourceRoot": "",
+              "models": [],
+              "worlds": [
+                {
+                  "id": "strategy-class",
+                  "kind": "world",
+                  "name": "Strategy Class",
+                  "path": "worlds/strategy-class.md",
+                  "metadata": {},
+                  "body": "A meeting."
+                }
+              ],
+              "scenarios": [
+                {
+                  "id": "executive-interviews",
+                  "kind": "scenario",
+                  "name": "Executive Interviews",
+                  "path": "scenarios/executive-interviews.md",
+                  "metadata": {},
+                  "body": "A meeting."
+                }
+              ],
+              "formats": [],
+              "entities": [
+                {
+                  "id": "ceo",
+                  "kind": "agent",
+                  "rawKind": "agent",
+                  "name": "CEO",
+                  "visibility": "public",
+                  "folder": "entities/ceo",
+                  "files": [
+                    "entities/ceo/BELIEFS.md",
+                    "entities/ceo/EXAMPLES.md",
+                    "entities/ceo/IDENTITY.md",
+                    "entities/ceo/SURFACE.md"
+                  ]
+                },
+                {
+                  "id": "cfo",
+                  "kind": "agent",
+                  "rawKind": "agent",
+                  "name": "CFO",
+                  "visibility": "public",
+                  "folder": "entities/cfo",
+                  "files": [
+                    "entities/cfo/BELIEFS.md",
+                    "entities/cfo/EXAMPLES.md",
+                    "entities/cfo/IDENTITY.md",
+                    "entities/cfo/SURFACE.md"
+                  ]
+                }
+              ],
+              "connections": [],
+              "mentions": [],
+              "taggedLines": [],
+              "beliefs": [
+                {
+                  "holder": "ceo",
+                  "strength": 3,
+                  "propositionText": "The plan can work.",
+                  "mentions": [],
+                  "sourceSpan": {
+                    "file": "entities/ceo/beliefs.md",
+                    "line": 1,
+                    "quote": "+3 The plan can work."
+                  }
+                }
+              ],
+              "surfaces": [
+                {
+                  "entity": "ceo",
+                  "channels": [
+                    "in_person",
+                    "video"
+                  ],
+                  "text": "A reserved person.",
+                  "sourceSpan": {
+                    "file": "entities/ceo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                },
+                {
+                  "entity": "ceo",
+                  "channels": [
+                    "audio",
+                    "video",
+                    "in_person"
+                  ],
+                  "text": "A reserved person.",
+                  "sourceSpan": {
+                    "file": "entities/ceo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                },
+                {
+                  "entity": "cfo",
+                  "channels": [
+                    "in_person",
+                    "video"
+                  ],
+                  "text": "A reserved person.",
+                  "sourceSpan": {
+                    "file": "entities/cfo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                },
+                {
+                  "entity": "cfo",
+                  "channels": [
+                    "audio",
+                    "video",
+                    "in_person"
+                  ],
+                  "text": "A reserved person.",
+                  "sourceSpan": {
+                    "file": "entities/cfo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                }
+              ],
+              "accessLinks": [
+                {
+                  "member": "cfo",
+                  "container": "ceo",
+                  "mode": "member",
+                  "sourceSpan": {
+                    "file": "connections/leadership-access.md",
+                    "line": 8,
+                    "quote": "@ceo gives @cfo access to @ceo recovery-planning context. :access:member"
+                  }
+                }
+              ],
+              "diagnostics": []
+            },
+            "createdAt": "2026-11-10T09:41:38.162Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.163Z"
+      },
+      {
+        "commandId": "direction",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "direction",
+          "expectedHead": "commit_59f6fec5e3b72faff276df9c271f270a",
+          "targetActorId": "ceo",
+          "text": "Be precise.",
+          "kind": "whisper"
+        },
+        "fingerprint": "853a70ca08b7002b434236e30b0d6885f09346fff4948ee92f6a57b9fdce29ed",
+        "result": {
+          "kind": "whisper",
+          "whisper": {
+            "id": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "branchId": "main",
+            "expectedHead": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "commandId": "direction",
+            "targetActorId": "ceo",
+            "text": "Be precise.",
+            "createdAt": "2026-11-10T09:41:38.165Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.165Z"
+      },
+      {
+        "commandId": "original",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "original",
+          "expectedHead": "commit_59f6fec5e3b72faff276df9c271f270a",
+          "payload": {
+            "actorId": "ceo",
+            "audience": [
+              "ceo",
+              "cfo"
+            ],
+            "text": "A private claim.",
+            "stageWhisperIds": [
+              "whisper_e9db620a38ba125d6ec1757b2e71e8ea"
+            ]
+          },
+          "kind": "turn"
+        },
+        "fingerprint": "09ca1f067d7282e8fdcfd07bd46c604d1e2dacc4d2f386c3b500fbef2bed718d",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "commit": {
+            "id": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "kind": "turn",
+            "commandId": "original",
+            "events": [
+              {
+                "type": "message_accepted",
+                "message": {
+                  "id": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                  "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                  "actorId": "ceo",
+                  "text": "A private claim.",
+                  "audience": [
+                    "ceo",
+                    "cfo"
+                  ],
+                  "provenance": {
+                    "mode": "manual",
+                    "operation": "turn"
+                  }
+                }
+              },
+              {
+                "type": "first_impression_formed",
+                "impression": {
+                  "holder": "ceo",
+                  "observerId": "ceo",
+                  "entityId": "cfo",
+                  "strength": 1,
+                  "propositionText": "@ceo forms a first impression that A reserved person.",
+                  "surfaceSourceSpan": {
+                    "file": "entities/cfo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                }
+              },
+              {
+                "type": "first_impression_formed",
+                "impression": {
+                  "holder": "cfo",
+                  "observerId": "cfo",
+                  "entityId": "ceo",
+                  "strength": 1,
+                  "propositionText": "@cfo forms a first impression that A reserved person.",
+                  "surfaceSourceSpan": {
+                    "file": "entities/ceo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                }
+              },
+              {
+                "type": "stage_whisper_consumed",
+                "whisperId": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+                "targetActorId": "ceo",
+                "text": "Be precise."
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.168Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.168Z"
+      },
+      {
+        "commandId": "access",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "access",
+          "expectedHead": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "payload": {
+            "accessChanges": [
+              {
+                "action": "revoke",
+                "member": "cfo",
+                "container": "ceo",
+                "reason": null
+              }
+            ],
+            "audienceChanges": [
+              {
+                "actorId": "cfo",
+                "action": "add",
+                "reason": null
+              }
+            ]
+          },
+          "kind": "effects"
+        },
+        "fingerprint": "69f51f0b7783904afd02941922127609407386c6e74d5fbd348d203f2dfa6b08",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_cf8f0c33eb394b0c536e3e63fc54514e",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "commit": {
+            "id": "commit_cf8f0c33eb394b0c536e3e63fc54514e",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+            "kind": "effects",
+            "commandId": "access",
+            "events": [
+              {
+                "type": "audience_changed",
+                "actorId": "cfo",
+                "action": "add",
+                "reason": null
+              },
+              {
+                "type": "access_changed",
+                "action": "revoke",
+                "member": "cfo",
+                "container": "ceo",
+                "mode": "member",
+                "reason": null
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.170Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.170Z"
+      },
+      {
+        "commandId": "scoped",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "scoped",
+          "expectedHead": "commit_cf8f0c33eb394b0c536e3e63fc54514e",
+          "payload": {
+            "actorId": "ceo",
+            "audience": [
+              "ceo"
+            ],
+            "text": "Shared #cfo(secret)",
+            "audienceSyntax": "scoped-v1",
+            "knowledgePolicy": "actor-knowledge-v1"
+          },
+          "kind": "turn"
+        },
+        "fingerprint": "9c70fdd305632d4d26a88435980fb6c8b328df41265315425d9870dabf08644c",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "commit": {
+            "id": "commit_1383125dd4b4508f561ea89c87e89fb5",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_cf8f0c33eb394b0c536e3e63fc54514e",
+            "kind": "turn",
+            "commandId": "scoped",
+            "events": [
+              {
+                "type": "message_accepted",
+                "message": {
+                  "id": "message_version_1383125dd4b4508f561ea89c87e89fb5",
+                  "logicalMessageId": "message_1383125dd4b4508f561ea89c87e89fb5",
+                  "actorId": "ceo",
+                  "text": "Shared #cfo(secret)",
+                  "audience": [
+                    "ceo",
+                    "cfo"
+                  ],
+                  "provenance": {
+                    "mode": "manual",
+                    "operation": "turn"
+                  },
+                  "performance": {
+                    "version": 1,
+                    "syntax": "scoped-v1",
+                    "baseAudience": [
+                      "ceo"
+                    ],
+                    "spans": [
+                      {
+                        "audience": [
+                          "ceo"
+                        ],
+                        "primary": "Shared ",
+                        "fallback": null
+                      },
+                      {
+                        "audience": [
+                          "cfo"
+                        ],
+                        "primary": "secret",
+                        "fallback": null
+                      }
+                    ],
+                    "projections": [
+                      {
+                        "actorId": "ceo",
+                        "text": "Shared secret"
+                      },
+                      {
+                        "actorId": "cfo",
+                        "text": "secret"
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.174Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.174Z"
+      },
+      {
+        "commandId": "closure",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "closure",
+          "expectedHead": "commit_1383125dd4b4508f561ea89c87e89fb5",
+          "payload": {
+            "label": "Meeting"
+          },
+          "kind": "closure"
+        },
+        "fingerprint": "f96bb6930f0eba2dc6381f67b406af5c02e40f0b475388ce2bff250b3696eb9a",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "commit": {
+            "id": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+            "kind": "episode_closure",
+            "commandId": "closure",
+            "events": [
+              {
+                "type": "episode_closed",
+                "closure": {
+                  "episode": {
+                    "id": "episode_6d4cb937d6d22521566bba561458d0d1",
+                    "simulationId": "archive",
+                    "commitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+                    "label": "Meeting",
+                    "closedAt": "2026-11-10T09:41:38.176Z"
+                  },
+                  "memories": [],
+                  "longTermMemories": [],
+                  "extractedBeliefs": [],
+                  "retainedBeliefs": [],
+                  "memoryOperations": []
+                }
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.176Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.176Z"
+      },
+      {
+        "commandId": "revise",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "revise",
+          "expectedHead": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+          "payload": {
+            "actorId": "ceo",
+            "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+            "revisesOperationId": "memory_operation_50bd859d5a96b1932ce1eae1ac58bef2",
+            "content": "A revised recollection."
+          },
+          "kind": "revise_memory"
+        },
+        "fingerprint": "9e3cdd57ce8999484f97350c9a3a3be0d262ddc2e3f61ac53cafe26dd95c283d",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "commit": {
+            "id": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+            "kind": "memory",
+            "commandId": "revise",
+            "events": [
+              {
+                "type": "memory_operation",
+                "operation": {
+                  "id": "memory_operation_ce3a1ebd84cd832d10bae71d967fe3ab",
+                  "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+                  "simulationId": "archive",
+                  "actorId": "ceo",
+                  "memoryKind": "episode",
+                  "basisCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+                  "closureCommitId": null,
+                  "sourcePerceptionIds": [
+                    "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                    "perception_4331e66566ec3d865052c41ba55d7808"
+                  ],
+                  "sourceEventIds": [
+                    "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                    "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+                  ],
+                  "sourceMessageVersionIds": [
+                    "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                    "message_version_1383125dd4b4508f561ea89c87e89fb5"
+                  ],
+                  "producer": {
+                    "mode": "manual",
+                    "commandId": "revise"
+                  },
+                  "createdAt": "2026-11-10T09:41:38.187Z",
+                  "type": "revised",
+                  "content": "A revised recollection.",
+                  "revisesOperationId": "memory_operation_50bd859d5a96b1932ce1eae1ac58bef2"
+                }
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.187Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.187Z"
+      },
+      {
+        "commandId": "retract",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "commandId": "retract",
+          "expectedHead": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+          "payload": {
+            "actorId": "ceo",
+            "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+            "retractsOperationId": "memory_operation_ce3a1ebd84cd832d10bae71d967fe3ab"
+          },
+          "kind": "retract_memory"
+        },
+        "fingerprint": "3cb6c632e43ce66febf03be8a79ab77164c1d4e3500e5071a819bde084d18873",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_4a3b397d8979b4a8f436e91115116160",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "commit": {
+            "id": "commit_4a3b397d8979b4a8f436e91115116160",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+            "kind": "memory",
+            "commandId": "retract",
+            "events": [
+              {
+                "type": "memory_operation",
+                "operation": {
+                  "id": "memory_operation_4a3b397d8979b4a8f436e91115116160",
+                  "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+                  "simulationId": "archive",
+                  "actorId": "ceo",
+                  "memoryKind": "episode",
+                  "basisCommitId": "commit_ce3a1ebd84cd832d10bae71d967fe3ab",
+                  "closureCommitId": null,
+                  "sourcePerceptionIds": [
+                    "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                    "perception_4331e66566ec3d865052c41ba55d7808"
+                  ],
+                  "sourceEventIds": [
+                    "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                    "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+                  ],
+                  "sourceMessageVersionIds": [
+                    "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                    "message_version_1383125dd4b4508f561ea89c87e89fb5"
+                  ],
+                  "producer": {
+                    "mode": "manual",
+                    "commandId": "retract"
+                  },
+                  "createdAt": "2026-11-10T09:41:38.189Z",
+                  "type": "retracted",
+                  "retractsOperationId": "memory_operation_ce3a1ebd84cd832d10bae71d967fe3ab"
+                }
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.189Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.189Z"
+      },
+      {
+        "commandId": "fork",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "forked",
+          "commandId": "fork",
+          "sourceBranchId": "main",
+          "expectedHead": "commit_4a3b397d8979b4a8f436e91115116160",
+          "atCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "name": "Fork",
+          "kind": "fork"
+        },
+        "fingerprint": "53b0aa25360944ed47c2d2ec3e94f8ca2d45151087896197a0395a23c9c16584",
+        "result": {
+          "kind": "branch",
+          "branch": {
+            "id": "forked",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "Fork",
+            "headCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+            "origin": {
+              "kind": "fork",
+              "commandId": "fork",
+              "sourceBranchId": "main",
+              "sourceHeadCommitId": "commit_4a3b397d8979b4a8f436e91115116160",
+              "baseCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb"
+            },
+            "createdAt": "2026-11-10T09:41:38.196Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.196Z"
+      },
+      {
+        "commandId": "edit",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "sourceBranchId": "main",
+          "sourceCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "expectedHead": "commit_4a3b397d8979b4a8f436e91115116160",
+          "payload": {
+            "actorId": "ceo",
+            "audience": [
+              "ceo",
+              "cfo"
+            ],
+            "text": "An alternative wording."
+          },
+          "commandId": "edit",
+          "branchId": "edited",
+          "kind": "edit"
+        },
+        "fingerprint": "d7e2a1763760fc29754527bee01924c04d2ad129dea269bc0762a96cd18e64d3",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "edited",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "edit",
+            "headCommitId": "commit_56e7492f0ef06e89915cf49218ff2656",
+            "origin": {
+              "kind": "edit",
+              "commandId": "edit",
+              "sourceBranchId": "main",
+              "sourceHeadCommitId": "commit_4a3b397d8979b4a8f436e91115116160",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.200Z"
+          },
+          "commit": {
+            "id": "commit_56e7492f0ef06e89915cf49218ff2656",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "kind": "turn",
+            "commandId": "edit",
+            "events": [
+              {
+                "type": "message_accepted",
+                "message": {
+                  "id": "message_version_56e7492f0ef06e89915cf49218ff2656",
+                  "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                  "actorId": "ceo",
+                  "text": "An alternative wording.",
+                  "audience": [
+                    "ceo",
+                    "cfo"
+                  ],
+                  "provenance": {
+                    "mode": "manual",
+                    "operation": "edit"
+                  }
+                }
+              },
+              {
+                "type": "first_impression_formed",
+                "impression": {
+                  "holder": "ceo",
+                  "observerId": "ceo",
+                  "entityId": "cfo",
+                  "strength": 1,
+                  "propositionText": "@ceo forms a first impression that A reserved person.",
+                  "surfaceSourceSpan": {
+                    "file": "entities/cfo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                }
+              },
+              {
+                "type": "first_impression_formed",
+                "impression": {
+                  "holder": "cfo",
+                  "observerId": "cfo",
+                  "entityId": "ceo",
+                  "strength": 1,
+                  "propositionText": "@cfo forms a first impression that A reserved person.",
+                  "surfaceSourceSpan": {
+                    "file": "entities/ceo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                }
+              },
+              {
+                "type": "stage_whisper_consumed",
+                "whisperId": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+                "targetActorId": "ceo",
+                "text": "Be precise."
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.200Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.201Z"
+      },
+      {
+        "commandId": "regenerate",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "sourceBranchId": "main",
+          "sourceCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "expectedHead": "commit_4a3b397d8979b4a8f436e91115116160",
+          "payload": {
+            "actorId": "ceo",
+            "audience": [
+              "ceo",
+              "cfo"
+            ],
+            "text": "An alternative wording."
+          },
+          "commandId": "regenerate",
+          "branchId": "regenerated",
+          "kind": "regenerate"
+        },
+        "fingerprint": "c1e67d01858426b7f85a8503a9d012228e69ec1675b8c7c9aa12a0ac548ff10b",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "regenerated",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "regenerate",
+            "headCommitId": "commit_0aca7368a01c215823ea58513219484c",
+            "origin": {
+              "kind": "regenerate",
+              "commandId": "regenerate",
+              "sourceBranchId": "main",
+              "sourceHeadCommitId": "commit_4a3b397d8979b4a8f436e91115116160",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.206Z"
+          },
+          "commit": {
+            "id": "commit_0aca7368a01c215823ea58513219484c",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "kind": "turn",
+            "commandId": "regenerate",
+            "events": [
+              {
+                "type": "message_accepted",
+                "message": {
+                  "id": "message_version_0aca7368a01c215823ea58513219484c",
+                  "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                  "actorId": "ceo",
+                  "text": "An alternative wording.",
+                  "audience": [
+                    "ceo",
+                    "cfo"
+                  ],
+                  "provenance": {
+                    "mode": "manual",
+                    "operation": "regenerate"
+                  }
+                }
+              },
+              {
+                "type": "first_impression_formed",
+                "impression": {
+                  "holder": "ceo",
+                  "observerId": "ceo",
+                  "entityId": "cfo",
+                  "strength": 1,
+                  "propositionText": "@ceo forms a first impression that A reserved person.",
+                  "surfaceSourceSpan": {
+                    "file": "entities/cfo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                }
+              },
+              {
+                "type": "first_impression_formed",
+                "impression": {
+                  "holder": "cfo",
+                  "observerId": "cfo",
+                  "entityId": "ceo",
+                  "strength": 1,
+                  "propositionText": "@cfo forms a first impression that A reserved person.",
+                  "surfaceSourceSpan": {
+                    "file": "entities/ceo/surface.md",
+                    "line": 1,
+                    "quote": "A reserved person."
+                  }
+                }
+              },
+              {
+                "type": "stage_whisper_consumed",
+                "whisperId": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+                "targetActorId": "ceo",
+                "text": "Be precise."
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.206Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.206Z"
+      },
+      {
+        "commandId": "accept",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "branchId": "main",
+          "expectedHead": "commit_4a3b397d8979b4a8f436e91115116160",
+          "commandId": "accept",
+          "payload": {
+            "receiptVersion": 1,
+            "draftId": "actor_turn_draft_e1eebbc87c4b7c65ef4868ce600329f7",
+            "generationCommandId": "generation",
+            "contentRevisionId": "rev_81e8bbf2-e24e-4b66-97d4-4d2161f8d33c",
+            "actorId": "cfo",
+            "audience": [
+              "cfo",
+              "ceo"
+            ],
+            "stageWhispers": [],
+            "runtimeProfile": {
+              "id": "local-character",
+              "version": "v1"
+            },
+            "promptPolicy": {
+              "id": "default",
+              "version": "v1"
+            },
+            "outputSchema": {
+              "id": "screenplay",
+              "digest": "v1"
+            },
+            "skillDigests": [],
+            "capabilityGrant": [],
+            "contextHash": "1629240434c572a177abf8e3dd8c1d0dc07c8083467d420e9769b4959586ac0f",
+            "promptHash": "c2b534da5a16eb2c332dbccfbf9e83de56817b4b3e9c4bcc9c55dd37b3693750",
+            "generatedArtifact": {
+              "text": "Generated reply.",
+              "digest": "1153b091d60526187162ace374f995b78360b4bd55dd488e6f157eae3290ea15",
+              "provenance": {
+                "adapter": {
+                  "id": "deterministic-fake",
+                  "version": "1"
+                },
+                "runtimeProfile": {
+                  "id": "local-character",
+                  "version": "v1"
+                },
+                "providerId": null,
+                "modelId": null,
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0
+                },
+                "stopReason": "stop",
+                "terminalStatus": "completed"
+              }
+            },
+            "accepted": {
+              "textSource": "acceptor_edited",
+              "text": "  Edited generated reply.  "
+            }
+          },
+          "kind": "accept_draft"
+        },
+        "fingerprint": "ead7e01e14ecf14070559190a78fa18562d6a3aefc06c95770e4a2aae8038544",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "main",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "main",
+            "headCommitId": "commit_efaac55b4a18762fe81834fac02ea558",
+            "origin": {
+              "kind": "root",
+              "commandId": "start",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.163Z"
+          },
+          "commit": {
+            "id": "commit_efaac55b4a18762fe81834fac02ea558",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_4a3b397d8979b4a8f436e91115116160",
+            "kind": "turn",
+            "commandId": "accept",
+            "events": [
+              {
+                "type": "message_accepted",
+                "message": {
+                  "id": "message_version_efaac55b4a18762fe81834fac02ea558",
+                  "logicalMessageId": "message_efaac55b4a18762fe81834fac02ea558",
+                  "actorId": "cfo",
+                  "text": "  Edited generated reply.  ",
+                  "audience": [
+                    "cfo",
+                    "ceo"
+                  ],
+                  "provenance": {
+                    "mode": "generated",
+                    "operation": "turn",
+                    "sourceArtifactDigest": "1153b091d60526187162ace374f995b78360b4bd55dd488e6f157eae3290ea15",
+                    "finalTextSource": "acceptor_edited"
+                  }
+                }
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.219Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.222Z"
+      },
+      {
+        "commandId": "historical-manual",
+        "canonicalInput": {
+          "kind": "saved_alternative",
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "commandId": "historical-manual",
+          "branchId": "alternative_branch_90e526e747e81eb16155c6c8f925d3c6",
+          "sourceBranchId": "main",
+          "expectedHead": "commit_efaac55b4a18762fe81834fac02ea558",
+          "sourceCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "payload": {
+            "version": 1,
+            "request": {
+              "ownerScope": "owner",
+              "simulationId": "archive",
+              "sourceBranchId": "main",
+              "expectedHead": "commit_efaac55b4a18762fe81834fac02ea558",
+              "sourceCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "messageVersionId": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "actorId": "ceo",
+              "audience": [
+                "ceo"
+              ],
+              "commandId": "historical-manual",
+              "action": "manual",
+              "manualText": "A manual beginning."
+            },
+            "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "contentRevisionId": "rev_81e8bbf2-e24e-4b66-97d4-4d2161f8d33c",
+            "completeWhisper": null,
+            "origin": {
+              "kind": "manual",
+              "state": "complete",
+              "completeWhisper": "Be precise.",
+              "recordedWhispers": [
+                {
+                  "id": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+                  "text": "Be precise."
+                }
+              ],
+              "legacyCorrection": null
+            },
+            "generated": null,
+            "retrySource": null
+          }
+        },
+        "fingerprint": "e48b6861cfaf56534cf6e85962f806066dfb1bf14e5a1fc9764d3d76a40e1c85",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "alternative_branch_90e526e747e81eb16155c6c8f925d3c6",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "edit",
+            "headCommitId": "commit_90e526e747e81eb16155c6c8f925d3c6",
+            "origin": {
+              "kind": "edit",
+              "commandId": "historical-manual",
+              "sourceBranchId": "main",
+              "sourceHeadCommitId": "commit_efaac55b4a18762fe81834fac02ea558",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.226Z"
+          },
+          "commit": {
+            "id": "commit_90e526e747e81eb16155c6c8f925d3c6",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "kind": "turn",
+            "commandId": "historical-manual",
+            "events": [
+              {
+                "type": "message_accepted",
+                "message": {
+                  "id": "message_version_90e526e747e81eb16155c6c8f925d3c6",
+                  "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                  "actorId": "ceo",
+                  "text": "A manual beginning.",
+                  "audience": [
+                    "ceo"
+                  ],
+                  "provenance": {
+                    "mode": "manual",
+                    "operation": "edit"
+                  }
+                }
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.226Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.232Z"
+      },
+      {
+        "commandId": "historical-generate",
+        "canonicalInput": {
+          "kind": "saved_alternative",
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "commandId": "historical-generate",
+          "branchId": "alternative_branch_1c442936dde68b08c4842a3c6c5f862a",
+          "sourceBranchId": "main",
+          "expectedHead": "commit_efaac55b4a18762fe81834fac02ea558",
+          "sourceCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "payload": {
+            "version": 1,
+            "request": {
+              "ownerScope": "owner",
+              "simulationId": "archive",
+              "sourceBranchId": "main",
+              "expectedHead": "commit_efaac55b4a18762fe81834fac02ea558",
+              "sourceCommitId": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "messageVersionId": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+              "actorId": "ceo",
+              "audience": [
+                "ceo"
+              ],
+              "commandId": "historical-generate",
+              "action": "generate",
+              "completeWhisper": "Change the opening."
+            },
+            "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "contentRevisionId": "rev_81e8bbf2-e24e-4b66-97d4-4d2161f8d33c",
+            "completeWhisper": "Change the opening.",
+            "origin": {
+              "kind": "manual",
+              "state": "complete",
+              "completeWhisper": "Be precise.",
+              "recordedWhispers": [
+                {
+                  "id": "whisper_e9db620a38ba125d6ec1757b2e71e8ea",
+                  "text": "Be precise."
+                }
+              ],
+              "legacyCorrection": null
+            },
+            "generated": {
+              "receiptVersion": 2,
+              "routing": {
+                "version": 4,
+                "completeWhisper": "Change the opening.",
+                "initialAudience": null,
+                "correctedAudience": [
+                  "ceo"
+                ],
+                "correction": "",
+                "preservedText": null,
+                "sourceDraftId": null,
+                "availableRecipientIds": [
+                  "ceo"
+                ],
+                "originalDraftId": "actor_turn_draft_aa0d2cd72de075c6f0a72edd00c548b3",
+                "originalGenerationCommandId": "alternative_generation_a3b193e3913fe927ba8c50edd4021dfb",
+                "source": null
+              },
+              "draftId": "actor_turn_draft_aa0d2cd72de075c6f0a72edd00c548b3",
+              "generationCommandId": "alternative_generation_a3b193e3913fe927ba8c50edd4021dfb",
+              "contentRevisionId": "rev_81e8bbf2-e24e-4b66-97d4-4d2161f8d33c",
+              "actorId": "ceo",
+              "audience": [
+                "ceo"
+              ],
+              "stageWhispers": [],
+              "runtimeProfile": {
+                "id": "local-character",
+                "version": "v1"
+              },
+              "promptPolicy": {
+                "id": "actor-knowledge-v1",
+                "version": "v1"
+              },
+              "outputSchema": {
+                "id": "audience-proposal",
+                "digest": "v1"
+              },
+              "skillDigests": [],
+              "capabilityGrant": [],
+              "contextHash": "7c1c075c1463690daf100e5084654ee9f1160c53f430de7cbcd3471658dc4eb7",
+              "promptHash": "47194363e4c05aaa2a2d5aaf862326a3447255aa159b73b398e9aed290a351ec",
+              "generatedArtifact": {
+                "text": "A new beginning.",
+                "digest": "fe521082cccb6ffef21b51b2163a9163a3b40640f078de445ea1467a96f9ce36",
+                "proposedAudience": [
+                  "ceo"
+                ],
+                "provenance": {
+                  "adapter": {
+                    "id": "deterministic-fake",
+                    "version": "1"
+                  },
+                  "runtimeProfile": {
+                    "id": "local-character",
+                    "version": "v1"
+                  },
+                  "providerId": null,
+                  "modelId": null,
+                  "usage": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  },
+                  "stopReason": "stop",
+                  "terminalStatus": "completed"
+                }
+              },
+              "accepted": {
+                "textSource": "generated_verbatim"
+              }
+            },
+            "retrySource": null
+          }
+        },
+        "fingerprint": "545c385a490124be10758499b0985e823e3c01d56bb622dfea09f8faa124b194",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "alternative_branch_1c442936dde68b08c4842a3c6c5f862a",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "regenerate",
+            "headCommitId": "commit_1c442936dde68b08c4842a3c6c5f862a",
+            "origin": {
+              "kind": "regenerate",
+              "commandId": "historical-generate",
+              "sourceBranchId": "main",
+              "sourceHeadCommitId": "commit_efaac55b4a18762fe81834fac02ea558",
+              "baseCommitId": "commit_59f6fec5e3b72faff276df9c271f270a"
+            },
+            "createdAt": "2026-11-10T09:41:38.237Z"
+          },
+          "commit": {
+            "id": "commit_1c442936dde68b08c4842a3c6c5f862a",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_59f6fec5e3b72faff276df9c271f270a",
+            "kind": "turn",
+            "commandId": "historical-generate",
+            "events": [
+              {
+                "type": "message_accepted",
+                "message": {
+                  "id": "message_version_1c442936dde68b08c4842a3c6c5f862a",
+                  "logicalMessageId": "message_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                  "actorId": "ceo",
+                  "text": "A new beginning.",
+                  "audience": [
+                    "ceo"
+                  ],
+                  "provenance": {
+                    "mode": "generated",
+                    "operation": "regenerate",
+                    "sourceArtifactDigest": "fe521082cccb6ffef21b51b2163a9163a3b40640f078de445ea1467a96f9ce36",
+                    "finalTextSource": "generated_verbatim"
+                  }
+                }
+              },
+              {
+                "type": "stage_whisper_consumed",
+                "whisperId": "alternative_input_a3b193e3913fe927ba8c50edd4021dfb",
+                "targetActorId": "ceo",
+                "text": "Change the opening."
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.237Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.251Z"
+      },
+      {
+        "commandId": "correct",
+        "canonicalInput": {
+          "ownerScope": "owner",
+          "simulationId": "archive",
+          "sourceBranchId": "main",
+          "expectedHead": "commit_efaac55b4a18762fe81834fac02ea558",
+          "commandId": "correct",
+          "payload": {
+            "messageVersionId": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+            "text": "A corrected private claim."
+          },
+          "kind": "correct_turn_body",
+          "branchId": "correction_branch_f781e47dbc29f0c1672d256a65ac66e6"
+        },
+        "fingerprint": "98bab2dd8e9f5462e1ec335860f520033f7d6a87cb50e966181ea6706d700893",
+        "result": {
+          "kind": "commit",
+          "branch": {
+            "id": "correction_branch_f781e47dbc29f0c1672d256a65ac66e6",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "name": "correction",
+            "headCommitId": "commit_f781e47dbc29f0c1672d256a65ac66e6",
+            "origin": {
+              "kind": "edit",
+              "commandId": "correct",
+              "sourceBranchId": "main",
+              "sourceHeadCommitId": "commit_efaac55b4a18762fe81834fac02ea558",
+              "baseCommitId": "commit_efaac55b4a18762fe81834fac02ea558"
+            },
+            "createdAt": "2026-11-10T09:41:38.253Z"
+          },
+          "commit": {
+            "id": "commit_f781e47dbc29f0c1672d256a65ac66e6",
+            "ownerScope": "owner",
+            "simulationId": "archive",
+            "parentCommitId": "commit_efaac55b4a18762fe81834fac02ea558",
+            "kind": "effects",
+            "commandId": "correct",
+            "events": [
+              {
+                "type": "message_body_corrected",
+                "messageVersionId": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "text": "A corrected private claim."
+              }
+            ],
+            "createdAt": "2026-11-10T09:41:38.253Z"
+          }
+        },
+        "createdAt": "2026-11-10T09:41:38.253Z"
+      }
+    ],
+    "memoryJobs": [
+      {
+        "id": "memory_job_a0e349a7f018d312638cfb4dc5370e1e",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "originBranchId": "main",
+        "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+        "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "basisHeadCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "commandId": "closure",
+        "label": "Meeting",
+        "status": "completed",
+        "attemptCount": 1,
+        "resultFingerprint": "2b7b67e1d1e86f22a8b690cc70f8af00bb9e74f025dbb9d5ee871f6fb3a0be41",
+        "result": {
+          "episode": {
+            "id": "episode_6d4cb937d6d22521566bba561458d0d1",
+            "simulationId": "archive",
+            "commitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+            "label": "Meeting",
+            "closedAt": "2026-11-10T09:41:38.176Z"
+          },
+          "memories": [
+            {
+              "id": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "text": "I remember the meeting as @ceo.",
+              "sourceTurnIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "text": "I remember the meeting as @cfo.",
+              "sourceTurnIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "sourcePerceptionIds": [
+                "perception_692d5269b67ddeaeae8483672b0c98b6",
+                "perception_c3c016edd7b2d8895cef547ce808a109"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "longTermMemories": [
+            {
+              "id": "long_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "episodeMemoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "text": "My longer recollection as @ceo.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "long_memory_c256768d77fd71b16fc482768aa335dd",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "episodeMemoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "text": "My longer recollection as @cfo.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "extractedBeliefs": [
+            {
+              "id": "belief_9ddf8392e53006a658384f041548e9b9",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "holder": "ceo",
+              "strength": -1,
+              "propositionText": "@ceo doubts the claim.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "belief_a914235177f7bb44eab62225453f98ee",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "memoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "holder": "cfo",
+              "strength": -1,
+              "propositionText": "@cfo doubts the claim.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "retainedBeliefs": [
+            {
+              "id": "retained_a914235177f7bb44eab62225453f98ee",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "holder": "cfo",
+              "strength": 1,
+              "propositionText": "The plan can work.",
+              "sourceHolder": "ceo",
+              "accessPath": [
+                "cfo",
+                "ceo"
+              ],
+              "sourceBelief": {
+                "holder": "ceo",
+                "strength": 3,
+                "propositionText": "The plan can work.",
+                "mentions": [],
+                "sourceSpan": {
+                  "file": "entities/ceo/beliefs.md",
+                  "line": 1,
+                  "quote": "+3 The plan can work."
+                }
+              },
+              "runtimeAccessEventId": "commit_cf8f0c33eb394b0c536e3e63fc54514e:event:1",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "retained_56e2638a006f06f129a8487d54a721c1",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "holder": "cfo",
+              "strength": 1,
+              "propositionText": "@ceo forms a first impression that A reserved person.",
+              "sourceHolder": "ceo",
+              "accessPath": [
+                "cfo",
+                "ceo"
+              ],
+              "sourceBelief": {
+                "holder": "ceo",
+                "observerId": "ceo",
+                "entityId": "cfo",
+                "strength": 1,
+                "propositionText": "@ceo forms a first impression that A reserved person.",
+                "surfaceSourceSpan": {
+                  "file": "entities/cfo/surface.md",
+                  "line": 1,
+                  "quote": "A reserved person."
+                },
+                "id": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:impression:0",
+                "simulationId": "archive",
+                "createdAt": "2026-11-10T09:41:38.168Z"
+              },
+              "runtimeAccessEventId": "commit_cf8f0c33eb394b0c536e3e63fc54514e:event:1",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "memoryOperations": [
+            {
+              "id": "memory_operation_50bd859d5a96b1932ce1eae1ac58bef2",
+              "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "memoryKind": "episode",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "asserted",
+              "content": "I remember the meeting as @ceo."
+            },
+            {
+              "id": "memory_operation_6bdc15de2cf25546ae41c31207c7bb76",
+              "memoryId": "long_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "memoryKind": "long_term",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "consolidated",
+              "content": "My longer recollection as @ceo.",
+              "episodeMemoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733"
+            },
+            {
+              "id": "memory_operation_3f07772b4f226badfbc1edc6eafed558",
+              "memoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "memoryKind": "episode",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_692d5269b67ddeaeae8483672b0c98b6",
+                "perception_c3c016edd7b2d8895cef547ce808a109"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "asserted",
+              "content": "I remember the meeting as @cfo."
+            },
+            {
+              "id": "memory_operation_5f61f9c6d1a24067be3f16a0d6774de6",
+              "memoryId": "long_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "memoryKind": "long_term",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_692d5269b67ddeaeae8483672b0c98b6",
+                "perception_c3c016edd7b2d8895cef547ce808a109"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "consolidated",
+              "content": "My longer recollection as @cfo.",
+              "episodeMemoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd"
+            }
+          ]
+        },
+        "lastError": null,
+        "createdAt": "2026-11-10T09:41:38.176Z",
+        "updatedAt": "2026-11-10T09:41:38.183Z"
+      }
+    ],
+    "memoryJobTransitions": [
+      {
+        "id": "memory_job_transition_d19c7a11509391e6e0de035a5501bb9c",
+        "jobId": "memory_job_a0e349a7f018d312638cfb4dc5370e1e",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "attempt": 1,
+        "status": "running",
+        "resultFingerprint": null,
+        "result": null,
+        "error": null,
+        "createdAt": "2026-11-10T09:41:38.179Z"
+      },
+      {
+        "id": "memory_job_transition_f0bd7f569d1dcb16ba96b734763d9364",
+        "jobId": "memory_job_a0e349a7f018d312638cfb4dc5370e1e",
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "attempt": 1,
+        "status": "completed",
+        "resultFingerprint": "2b7b67e1d1e86f22a8b690cc70f8af00bb9e74f025dbb9d5ee871f6fb3a0be41",
+        "result": {
+          "episode": {
+            "id": "episode_6d4cb937d6d22521566bba561458d0d1",
+            "simulationId": "archive",
+            "commitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+            "label": "Meeting",
+            "closedAt": "2026-11-10T09:41:38.176Z"
+          },
+          "memories": [
+            {
+              "id": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "text": "I remember the meeting as @ceo.",
+              "sourceTurnIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "text": "I remember the meeting as @cfo.",
+              "sourceTurnIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "sourcePerceptionIds": [
+                "perception_692d5269b67ddeaeae8483672b0c98b6",
+                "perception_c3c016edd7b2d8895cef547ce808a109"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "longTermMemories": [
+            {
+              "id": "long_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "episodeMemoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "text": "My longer recollection as @ceo.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "long_memory_c256768d77fd71b16fc482768aa335dd",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "episodeMemoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "text": "My longer recollection as @cfo.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "extractedBeliefs": [
+            {
+              "id": "belief_9ddf8392e53006a658384f041548e9b9",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "holder": "ceo",
+              "strength": -1,
+              "propositionText": "@ceo doubts the claim.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "belief_a914235177f7bb44eab62225453f98ee",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "memoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "holder": "cfo",
+              "strength": -1,
+              "propositionText": "@cfo doubts the claim.",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "retainedBeliefs": [
+            {
+              "id": "retained_a914235177f7bb44eab62225453f98ee",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "holder": "cfo",
+              "strength": 1,
+              "propositionText": "The plan can work.",
+              "sourceHolder": "ceo",
+              "accessPath": [
+                "cfo",
+                "ceo"
+              ],
+              "sourceBelief": {
+                "holder": "ceo",
+                "strength": 3,
+                "propositionText": "The plan can work.",
+                "mentions": [],
+                "sourceSpan": {
+                  "file": "entities/ceo/beliefs.md",
+                  "line": 1,
+                  "quote": "+3 The plan can work."
+                }
+              },
+              "runtimeAccessEventId": "commit_cf8f0c33eb394b0c536e3e63fc54514e:event:1",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            },
+            {
+              "id": "retained_56e2638a006f06f129a8487d54a721c1",
+              "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+              "simulationId": "archive",
+              "holder": "cfo",
+              "strength": 1,
+              "propositionText": "@ceo forms a first impression that A reserved person.",
+              "sourceHolder": "ceo",
+              "accessPath": [
+                "cfo",
+                "ceo"
+              ],
+              "sourceBelief": {
+                "holder": "ceo",
+                "observerId": "ceo",
+                "entityId": "cfo",
+                "strength": 1,
+                "propositionText": "@ceo forms a first impression that A reserved person.",
+                "surfaceSourceSpan": {
+                  "file": "entities/cfo/surface.md",
+                  "line": 1,
+                  "quote": "A reserved person."
+                },
+                "id": "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:impression:0",
+                "simulationId": "archive",
+                "createdAt": "2026-11-10T09:41:38.168Z"
+              },
+              "runtimeAccessEventId": "commit_cf8f0c33eb394b0c536e3e63fc54514e:event:1",
+              "createdAt": "2026-11-10T09:41:38.176Z"
+            }
+          ],
+          "memoryOperations": [
+            {
+              "id": "memory_operation_50bd859d5a96b1932ce1eae1ac58bef2",
+              "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "memoryKind": "episode",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "asserted",
+              "content": "I remember the meeting as @ceo."
+            },
+            {
+              "id": "memory_operation_6bdc15de2cf25546ae41c31207c7bb76",
+              "memoryId": "long_memory_327d299e4dbc1cc3ba6063de9621a733",
+              "simulationId": "archive",
+              "actorId": "ceo",
+              "memoryKind": "long_term",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_23ccba7f278d35c5ab0ef209b40550b0",
+                "perception_4331e66566ec3d865052c41ba55d7808"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "consolidated",
+              "content": "My longer recollection as @ceo.",
+              "episodeMemoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733"
+            },
+            {
+              "id": "memory_operation_3f07772b4f226badfbc1edc6eafed558",
+              "memoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "memoryKind": "episode",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_692d5269b67ddeaeae8483672b0c98b6",
+                "perception_c3c016edd7b2d8895cef547ce808a109"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "asserted",
+              "content": "I remember the meeting as @cfo."
+            },
+            {
+              "id": "memory_operation_5f61f9c6d1a24067be3f16a0d6774de6",
+              "memoryId": "long_memory_c256768d77fd71b16fc482768aa335dd",
+              "simulationId": "archive",
+              "actorId": "cfo",
+              "memoryKind": "long_term",
+              "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+              "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+              "sourcePerceptionIds": [
+                "perception_692d5269b67ddeaeae8483672b0c98b6",
+                "perception_c3c016edd7b2d8895cef547ce808a109"
+              ],
+              "sourceEventIds": [
+                "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+                "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+              ],
+              "sourceMessageVersionIds": [
+                "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                "message_version_1383125dd4b4508f561ea89c87e89fb5"
+              ],
+              "producer": {
+                "mode": "episode_closure",
+                "commandId": "closure"
+              },
+              "createdAt": "2026-11-10T09:41:38.176Z",
+              "type": "consolidated",
+              "content": "My longer recollection as @cfo.",
+              "episodeMemoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd"
+            }
+          ]
+        },
+        "error": null,
+        "createdAt": "2026-11-10T09:41:38.183Z"
+      }
+    ],
+    "detachedMemoryOperations": [
+      {
+        "id": "memory_operation_50bd859d5a96b1932ce1eae1ac58bef2",
+        "memoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733",
+        "simulationId": "archive",
+        "actorId": "ceo",
+        "memoryKind": "episode",
+        "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "sourcePerceptionIds": [
+          "perception_23ccba7f278d35c5ab0ef209b40550b0",
+          "perception_4331e66566ec3d865052c41ba55d7808"
+        ],
+        "sourceEventIds": [
+          "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+          "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+        ],
+        "sourceMessageVersionIds": [
+          "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "message_version_1383125dd4b4508f561ea89c87e89fb5"
+        ],
+        "producer": {
+          "mode": "episode_closure",
+          "commandId": "closure"
+        },
+        "createdAt": "2026-11-10T09:41:38.176Z",
+        "type": "asserted",
+        "content": "I remember the meeting as @ceo."
+      },
+      {
+        "id": "memory_operation_6bdc15de2cf25546ae41c31207c7bb76",
+        "memoryId": "long_memory_327d299e4dbc1cc3ba6063de9621a733",
+        "simulationId": "archive",
+        "actorId": "ceo",
+        "memoryKind": "long_term",
+        "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "sourcePerceptionIds": [
+          "perception_23ccba7f278d35c5ab0ef209b40550b0",
+          "perception_4331e66566ec3d865052c41ba55d7808"
+        ],
+        "sourceEventIds": [
+          "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+          "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+        ],
+        "sourceMessageVersionIds": [
+          "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "message_version_1383125dd4b4508f561ea89c87e89fb5"
+        ],
+        "producer": {
+          "mode": "episode_closure",
+          "commandId": "closure"
+        },
+        "createdAt": "2026-11-10T09:41:38.176Z",
+        "type": "consolidated",
+        "content": "My longer recollection as @ceo.",
+        "episodeMemoryId": "episode_memory_327d299e4dbc1cc3ba6063de9621a733"
+      },
+      {
+        "id": "memory_operation_3f07772b4f226badfbc1edc6eafed558",
+        "memoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd",
+        "simulationId": "archive",
+        "actorId": "cfo",
+        "memoryKind": "episode",
+        "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "sourcePerceptionIds": [
+          "perception_692d5269b67ddeaeae8483672b0c98b6",
+          "perception_c3c016edd7b2d8895cef547ce808a109"
+        ],
+        "sourceEventIds": [
+          "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+          "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+        ],
+        "sourceMessageVersionIds": [
+          "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "message_version_1383125dd4b4508f561ea89c87e89fb5"
+        ],
+        "producer": {
+          "mode": "episode_closure",
+          "commandId": "closure"
+        },
+        "createdAt": "2026-11-10T09:41:38.176Z",
+        "type": "asserted",
+        "content": "I remember the meeting as @cfo."
+      },
+      {
+        "id": "memory_operation_5f61f9c6d1a24067be3f16a0d6774de6",
+        "memoryId": "long_memory_c256768d77fd71b16fc482768aa335dd",
+        "simulationId": "archive",
+        "actorId": "cfo",
+        "memoryKind": "long_term",
+        "basisCommitId": "commit_1383125dd4b4508f561ea89c87e89fb5",
+        "closureCommitId": "commit_a0e349a7f018d312638cfb4dc5370e1e",
+        "sourcePerceptionIds": [
+          "perception_692d5269b67ddeaeae8483672b0c98b6",
+          "perception_c3c016edd7b2d8895cef547ce808a109"
+        ],
+        "sourceEventIds": [
+          "commit_f1ed0ae9fa92aa8b56470a9047fd49cb:event:0",
+          "commit_1383125dd4b4508f561ea89c87e89fb5:event:0"
+        ],
+        "sourceMessageVersionIds": [
+          "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+          "message_version_1383125dd4b4508f561ea89c87e89fb5"
+        ],
+        "producer": {
+          "mode": "episode_closure",
+          "commandId": "closure"
+        },
+        "createdAt": "2026-11-10T09:41:38.176Z",
+        "type": "consolidated",
+        "content": "My longer recollection as @cfo.",
+        "episodeMemoryId": "episode_memory_c256768d77fd71b16fc482768aa335dd"
+      }
+    ]
+  },
+  "legacyConversionHash": "eb96d405a4caeb6ccb5600f261cb4ba219219c1ec002430851b7af57a8dc8a5c"
+}

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { StageSession } from "../src/local-ui/lib/stage-session.ts";
-import { StageRecovery, type BrowserStorage } from "../src/local-ui/lib/stage-recovery.ts";
-import { validStageBuffer } from "../src/local-ui/lib/stage-buffer.ts";
+import { StageSession } from "../src/client/stage/stage-session.ts";
+import { StageRecovery, type BrowserStorage } from "../src/client/stage/stage-recovery.ts";
+import { validStageBuffer } from "../src/client/stage/stage-buffer.ts";
 import type { StageProjection, StageAlternativeDetail, StageDraft } from "../src/local-api/stage-contracts.ts";
 
 class MemoryStorage implements BrowserStorage {

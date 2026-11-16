@@ -17,6 +17,12 @@ try {
     ...(config.allowedOrigins.length ? { allowedOrigins: config.allowedOrigins } : {}),
     ...(actorTurnRuntime ? { actorTurnRuntime, runtimeDiagnostic: actorTurnRuntime.getDiagnostic } : {}),
   });
+  const stop = () => {
+    server.closeAllConnections();
+    server.close(() => { process.exitCode = 0; });
+  };
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
   server.on("error", () => {
     console.error("API could not listen. Check --host/--port and whether the port is already in use.");
     process.exitCode = 1;

@@ -1,5 +1,10 @@
 # MVP Architecture
 
+> Host/API correction (2026-11-09): [DSH and Rust migration](DSH_RUST_MIGRATION.md)
+> supersedes the Nuxt/Nuxt UI and TypeScript-only API choices below. DSH is
+> the UI host and Rust owns the API, simulation engine and persistence. Older baseline descriptions are historical.
+
+
 This document defines the smallest implementation slice that can validate the target architecture in [Target Architecture](ARCHITECTURE.md).
 
 The current repository already contains a working local prototype. The next implementation phase may replace substantial runtime code. It should preserve proven product concepts and tests rather than either defending or deleting code because it already exists.

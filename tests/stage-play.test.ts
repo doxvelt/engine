@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -11,7 +10,7 @@ import {
   runLeasedMutation,
   settleGenerationLease,
   stableSerialize,
-} from "../src/local-ui/lib/stage-play.ts";
+} from "../src/client/stage/stage-play.ts";
 
 test("command leases reuse an ID for an unchanged action body and clear only explicitly", () => {
   let next = 0;
@@ -183,18 +182,4 @@ test("staleness compares the draft basis against the current branch head, never 
     ),
     true,
   );
-});
-
-test("Stage uses supported manual and durable routes through scoped command leases", async () => {
-  const page = await readFile(
-    new URL("../src/local-ui/pages/stage.vue", import.meta.url),
-    "utf8",
-  );
-  const session = await readFile(new URL("../src/local-ui/lib/stage-session.ts", import.meta.url), "utf8");
-  const surface = page + session;
-  for (const required of ["/runtime", "/drafts", '"accept"', '"discard"', "/turns", "createCommandLease", "runLeasedMutation", "settleGenerationLease", "refreshPendingDraft", "StageSession"])
-    assert.ok(surface.includes(required), `missing ${required}`);
-  for (const retired of ["/turn-draft", "localStorage", "modelItems", "inspectorTab"])
-    assert.equal(surface.includes(retired), false, `retired Stage surface: ${retired}`);
-  assert.ok(session.includes('stageWhisperIds: []'), "manual performance does not consume Direct whispers");
 });

@@ -1,0 +1,605 @@
+{
+  "publication": {
+    "id": "b1d3e8a18c7aeca6b3c70935147b38b71fda7fe16fd4e3af769a3169003b022e",
+    "slot": "first",
+    "revision": "82f499468e4bc8e873369dd41d5bb88feb64b0da79dd7e529aafc34c0573c614",
+    "date": "2000-03-01",
+    "label": "Meeting",
+    "dependencies": [],
+    "characters": [
+      {
+        "characterId": "ceo",
+        "file": "00000000-0000-4000-8000-000000000000.sqlite",
+        "memories": [
+          {
+            "gist": "A fallible recollection.",
+            "detail": "",
+            "feeling": "unsure",
+            "sourceMessageIds": []
+          }
+        ],
+        "impressions": []
+      },
+      {
+        "characterId": "cfo",
+        "file": "00000000-0000-4000-8000-000000000000.sqlite",
+        "memories": [
+          {
+            "gist": "A fallible recollection.",
+            "detail": "",
+            "feeling": "unsure",
+            "sourceMessageIds": []
+          }
+        ],
+        "impressions": []
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "undated",
+      "query": {
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "branchId": "main"
+      },
+      "dates": {},
+      "scenes": [
+        {
+          "slot": "first",
+          "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "label": "Meeting",
+          "date": null,
+          "sources": [
+            {
+              "characterId": "ceo",
+              "name": "CEO",
+              "observation": {
+                "foundation": "The remembering character is CEO.",
+                "messages": [
+                  {
+                    "id": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                    "role": "assistant",
+                    "text": "{\"speaker\":\"CEO\",\"recipients\":[\"CFO\"],\"performance\":\"A private claim.\"}"
+                  },
+                  {
+                    "id": "message_version_1383125dd4b4508f561ea89c87e89fb5",
+                    "role": "assistant",
+                    "text": "{\"speaker\":\"CEO\",\"performance\":\"Shared secret\"}"
+                  }
+                ]
+              }
+            },
+            {
+              "characterId": "cfo",
+              "name": "CFO",
+              "observation": {
+                "foundation": "The remembering character is CFO.",
+                "messages": [
+                  {
+                    "id": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                    "role": "user",
+                    "text": "{\"speaker\":\"CEO\",\"recipients\":[\"CFO\"],\"performance\":\"A private claim.\"}"
+                  },
+                  {
+                    "id": "message_version_1383125dd4b4508f561ea89c87e89fb5",
+                    "role": "user",
+                    "text": "{\"speaker\":\"CEO\",\"performance\":\"secret\"}"
+                  }
+                ]
+              }
+            }
+          ],
+          "revision": "288232ea03f31f86ef6fd0c3e8b1f4d7ed9ae159c2d255fc68f0d58d83d3757b"
+        },
+        {
+          "slot": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "episodeId": null,
+          "label": "Episode 2",
+          "date": null,
+          "sources": [
+            {
+              "characterId": "ceo",
+              "name": "CEO",
+              "observation": {
+                "foundation": "The remembering character is CEO.",
+                "messages": [
+                  {
+                    "id": "message_version_efaac55b4a18762fe81834fac02ea558",
+                    "role": "user",
+                    "text": "{\"speaker\":\"CFO\",\"recipients\":[\"CEO\"],\"performance\":\"  Edited generated reply.  \"}"
+                  }
+                ]
+              }
+            },
+            {
+              "characterId": "cfo",
+              "name": "CFO",
+              "observation": {
+                "foundation": "The remembering character is CFO.",
+                "messages": [
+                  {
+                    "id": "message_version_efaac55b4a18762fe81834fac02ea558",
+                    "role": "assistant",
+                    "text": "{\"speaker\":\"CFO\",\"recipients\":[\"CEO\"],\"performance\":\"  Edited generated reply.  \"}"
+                  }
+                ]
+              }
+            }
+          ],
+          "revision": "e39c1ba2a3eb042c3785398280b1be3c5c8be229a42d28a5954aebb9c5541edd"
+        }
+      ],
+      "inspect": [
+        {
+          "slot": "first",
+          "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "label": "Meeting",
+          "date": null,
+          "revision": "288232ea03f31f86ef6fd0c3e8b1f4d7ed9ae159c2d255fc68f0d58d83d3757b",
+          "canMemorize": true,
+          "status": "unmemorized",
+          "memories": []
+        },
+        {
+          "slot": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "episodeId": null,
+          "label": "Episode 2",
+          "date": null,
+          "revision": "e39c1ba2a3eb042c3785398280b1be3c5c8be229a42d28a5954aebb9c5541edd",
+          "canMemorize": true,
+          "status": "unmemorized",
+          "memories": []
+        }
+      ]
+    },
+    {
+      "name": "dated",
+      "query": {
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "branchId": "main"
+      },
+      "dates": {
+        "first": "2000-03-01",
+        "episode_6d4cb937d6d22521566bba561458d0d1": "2001-03-01"
+      },
+      "scenes": [
+        {
+          "slot": "first",
+          "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "label": "Meeting",
+          "date": "2000-03-01",
+          "sources": [
+            {
+              "characterId": "ceo",
+              "name": "CEO",
+              "observation": {
+                "foundation": "The remembering character is CEO.",
+                "messages": [
+                  {
+                    "id": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                    "role": "assistant",
+                    "text": "{\"speaker\":\"CEO\",\"recipients\":[\"CFO\"],\"performance\":\"A private claim.\"}"
+                  },
+                  {
+                    "id": "message_version_1383125dd4b4508f561ea89c87e89fb5",
+                    "role": "assistant",
+                    "text": "{\"speaker\":\"CEO\",\"performance\":\"Shared secret\"}"
+                  }
+                ]
+              }
+            },
+            {
+              "characterId": "cfo",
+              "name": "CFO",
+              "observation": {
+                "foundation": "The remembering character is CFO.",
+                "messages": [
+                  {
+                    "id": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                    "role": "user",
+                    "text": "{\"speaker\":\"CEO\",\"recipients\":[\"CFO\"],\"performance\":\"A private claim.\"}"
+                  },
+                  {
+                    "id": "message_version_1383125dd4b4508f561ea89c87e89fb5",
+                    "role": "user",
+                    "text": "{\"speaker\":\"CEO\",\"performance\":\"secret\"}"
+                  }
+                ]
+              }
+            }
+          ],
+          "revision": "82f499468e4bc8e873369dd41d5bb88feb64b0da79dd7e529aafc34c0573c614"
+        },
+        {
+          "slot": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "episodeId": null,
+          "label": "Episode 2",
+          "date": "2001-03-01",
+          "sources": [
+            {
+              "characterId": "ceo",
+              "name": "CEO",
+              "observation": {
+                "foundation": "The remembering character is CEO.",
+                "messages": [
+                  {
+                    "id": "message_version_efaac55b4a18762fe81834fac02ea558",
+                    "role": "user",
+                    "text": "{\"speaker\":\"CFO\",\"recipients\":[\"CEO\"],\"performance\":\"  Edited generated reply.  \"}"
+                  }
+                ]
+              }
+            },
+            {
+              "characterId": "cfo",
+              "name": "CFO",
+              "observation": {
+                "foundation": "The remembering character is CFO.",
+                "messages": [
+                  {
+                    "id": "message_version_efaac55b4a18762fe81834fac02ea558",
+                    "role": "assistant",
+                    "text": "{\"speaker\":\"CFO\",\"recipients\":[\"CEO\"],\"performance\":\"  Edited generated reply.  \"}"
+                  }
+                ]
+              }
+            }
+          ],
+          "revision": "733fa1d21464ae3c29c7c8eea29ba5e15690eb408a37e622ddb8e6ab6eb382c5"
+        }
+      ],
+      "inspect": [
+        {
+          "slot": "first",
+          "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "label": "Meeting",
+          "date": "2000-03-01",
+          "revision": "82f499468e4bc8e873369dd41d5bb88feb64b0da79dd7e529aafc34c0573c614",
+          "canMemorize": true,
+          "status": "unmemorized",
+          "memories": []
+        },
+        {
+          "slot": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "episodeId": null,
+          "label": "Episode 2",
+          "date": "2001-03-01",
+          "revision": "733fa1d21464ae3c29c7c8eea29ba5e15690eb408a37e622ddb8e6ab6eb382c5",
+          "canMemorize": true,
+          "status": "unmemorized",
+          "memories": []
+        }
+      ]
+    },
+    {
+      "name": "published",
+      "query": {
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "branchId": "main"
+      },
+      "dates": {
+        "first": "2000-03-01",
+        "episode_6d4cb937d6d22521566bba561458d0d1": "2001-03-01"
+      },
+      "scenes": [
+        {
+          "slot": "first",
+          "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "label": "Meeting",
+          "date": "2000-03-01",
+          "sources": [
+            {
+              "characterId": "ceo",
+              "name": "CEO",
+              "observation": {
+                "foundation": "The remembering character is CEO.",
+                "messages": [
+                  {
+                    "id": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                    "role": "assistant",
+                    "text": "{\"speaker\":\"CEO\",\"recipients\":[\"CFO\"],\"performance\":\"A private claim.\"}"
+                  },
+                  {
+                    "id": "message_version_1383125dd4b4508f561ea89c87e89fb5",
+                    "role": "assistant",
+                    "text": "{\"speaker\":\"CEO\",\"performance\":\"Shared secret\"}"
+                  }
+                ]
+              }
+            },
+            {
+              "characterId": "cfo",
+              "name": "CFO",
+              "observation": {
+                "foundation": "The remembering character is CFO.",
+                "messages": [
+                  {
+                    "id": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                    "role": "user",
+                    "text": "{\"speaker\":\"CEO\",\"recipients\":[\"CFO\"],\"performance\":\"A private claim.\"}"
+                  },
+                  {
+                    "id": "message_version_1383125dd4b4508f561ea89c87e89fb5",
+                    "role": "user",
+                    "text": "{\"speaker\":\"CEO\",\"performance\":\"secret\"}"
+                  }
+                ]
+              }
+            }
+          ],
+          "revision": "82f499468e4bc8e873369dd41d5bb88feb64b0da79dd7e529aafc34c0573c614"
+        },
+        {
+          "slot": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "episodeId": null,
+          "label": "Episode 2",
+          "date": "2001-03-01",
+          "sources": [
+            {
+              "characterId": "ceo",
+              "name": "CEO",
+              "observation": {
+                "foundation": "The remembering character is CEO.",
+                "messages": [
+                  {
+                    "id": "message_version_efaac55b4a18762fe81834fac02ea558",
+                    "role": "user",
+                    "text": "{\"speaker\":\"CFO\",\"recipients\":[\"CEO\"],\"performance\":\"  Edited generated reply.  \"}"
+                  }
+                ]
+              }
+            },
+            {
+              "characterId": "cfo",
+              "name": "CFO",
+              "observation": {
+                "foundation": "The remembering character is CFO.",
+                "messages": [
+                  {
+                    "id": "message_version_efaac55b4a18762fe81834fac02ea558",
+                    "role": "assistant",
+                    "text": "{\"speaker\":\"CFO\",\"recipients\":[\"CEO\"],\"performance\":\"  Edited generated reply.  \"}"
+                  }
+                ]
+              }
+            }
+          ],
+          "revision": "733fa1d21464ae3c29c7c8eea29ba5e15690eb408a37e622ddb8e6ab6eb382c5"
+        }
+      ],
+      "inspect": [
+        {
+          "slot": "first",
+          "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "label": "Meeting",
+          "date": "2000-03-01",
+          "revision": "82f499468e4bc8e873369dd41d5bb88feb64b0da79dd7e529aafc34c0573c614",
+          "canMemorize": true,
+          "status": "current",
+          "memories": [
+            {
+              "characterId": "ceo",
+              "memories": [
+                {
+                  "gist": "A fallible recollection.",
+                  "detail": "",
+                  "feeling": "unsure",
+                  "sourceMessageIds": []
+                }
+              ],
+              "impressions": []
+            },
+            {
+              "characterId": "cfo",
+              "memories": [
+                {
+                  "gist": "A fallible recollection.",
+                  "detail": "",
+                  "feeling": "unsure",
+                  "sourceMessageIds": []
+                }
+              ],
+              "impressions": []
+            }
+          ]
+        },
+        {
+          "slot": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "episodeId": null,
+          "label": "Episode 2",
+          "date": "2001-03-01",
+          "revision": "733fa1d21464ae3c29c7c8eea29ba5e15690eb408a37e622ddb8e6ab6eb382c5",
+          "canMemorize": true,
+          "status": "unmemorized",
+          "memories": []
+        }
+      ]
+    },
+    {
+      "name": "another-path",
+      "query": {
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "branchId": "edited"
+      },
+      "dates": {
+        "first": "2000-03-01",
+        "episode_6d4cb937d6d22521566bba561458d0d1": "2001-03-01"
+      },
+      "scenes": [
+        {
+          "slot": "first",
+          "episodeId": null,
+          "label": "Episode 1",
+          "date": "2000-03-01",
+          "sources": [
+            {
+              "characterId": "ceo",
+              "name": "CEO",
+              "observation": {
+                "foundation": "The remembering character is CEO.",
+                "messages": [
+                  {
+                    "id": "message_version_56e7492f0ef06e89915cf49218ff2656",
+                    "role": "assistant",
+                    "text": "{\"speaker\":\"CEO\",\"recipients\":[\"CFO\"],\"performance\":\"An alternative wording.\"}"
+                  }
+                ]
+              }
+            },
+            {
+              "characterId": "cfo",
+              "name": "CFO",
+              "observation": {
+                "foundation": "The remembering character is CFO.",
+                "messages": [
+                  {
+                    "id": "message_version_56e7492f0ef06e89915cf49218ff2656",
+                    "role": "user",
+                    "text": "{\"speaker\":\"CEO\",\"recipients\":[\"CFO\"],\"performance\":\"An alternative wording.\"}"
+                  }
+                ]
+              }
+            }
+          ],
+          "revision": "0ad8db3b7da0d39cc2550ee2c13d09978a958249f098831a49143e394aa32a24"
+        }
+      ],
+      "inspect": [
+        {
+          "slot": "first",
+          "episodeId": null,
+          "label": "Episode 1",
+          "date": "2000-03-01",
+          "revision": "0ad8db3b7da0d39cc2550ee2c13d09978a958249f098831a49143e394aa32a24",
+          "canMemorize": true,
+          "status": "drifted",
+          "memories": []
+        }
+      ]
+    },
+    {
+      "name": "corrected-path",
+      "query": {
+        "ownerScope": "owner",
+        "simulationId": "archive",
+        "branchId": "correction_branch_f781e47dbc29f0c1672d256a65ac66e6"
+      },
+      "dates": {
+        "first": "2000-03-01",
+        "episode_6d4cb937d6d22521566bba561458d0d1": "2001-03-01"
+      },
+      "scenes": [
+        {
+          "slot": "first",
+          "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "label": "Meeting",
+          "date": "2000-03-01",
+          "sources": [
+            {
+              "characterId": "ceo",
+              "name": "CEO",
+              "observation": {
+                "foundation": "The remembering character is CEO.",
+                "messages": [
+                  {
+                    "id": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                    "role": "assistant",
+                    "text": "{\"speaker\":\"CEO\",\"recipients\":[\"CFO\"],\"performance\":\"A corrected private claim.\"}"
+                  },
+                  {
+                    "id": "message_version_1383125dd4b4508f561ea89c87e89fb5",
+                    "role": "assistant",
+                    "text": "{\"speaker\":\"CEO\",\"performance\":\"Shared secret\"}"
+                  }
+                ]
+              }
+            },
+            {
+              "characterId": "cfo",
+              "name": "CFO",
+              "observation": {
+                "foundation": "The remembering character is CFO.",
+                "messages": [
+                  {
+                    "id": "message_version_f1ed0ae9fa92aa8b56470a9047fd49cb",
+                    "role": "user",
+                    "text": "{\"speaker\":\"CEO\",\"recipients\":[\"CFO\"],\"performance\":\"A corrected private claim.\"}"
+                  },
+                  {
+                    "id": "message_version_1383125dd4b4508f561ea89c87e89fb5",
+                    "role": "user",
+                    "text": "{\"speaker\":\"CEO\",\"performance\":\"secret\"}"
+                  }
+                ]
+              }
+            }
+          ],
+          "revision": "72e43d81cb0a4ff9bc875497dd667e75765cf38fbeeb498da3f12ab1bcd7f26f"
+        },
+        {
+          "slot": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "episodeId": null,
+          "label": "Episode 2",
+          "date": "2001-03-01",
+          "sources": [
+            {
+              "characterId": "ceo",
+              "name": "CEO",
+              "observation": {
+                "foundation": "The remembering character is CEO.",
+                "messages": [
+                  {
+                    "id": "message_version_efaac55b4a18762fe81834fac02ea558",
+                    "role": "user",
+                    "text": "{\"speaker\":\"CFO\",\"recipients\":[\"CEO\"],\"performance\":\"  Edited generated reply.  \"}"
+                  }
+                ]
+              }
+            },
+            {
+              "characterId": "cfo",
+              "name": "CFO",
+              "observation": {
+                "foundation": "The remembering character is CFO.",
+                "messages": [
+                  {
+                    "id": "message_version_efaac55b4a18762fe81834fac02ea558",
+                    "role": "assistant",
+                    "text": "{\"speaker\":\"CFO\",\"recipients\":[\"CEO\"],\"performance\":\"  Edited generated reply.  \"}"
+                  }
+                ]
+              }
+            }
+          ],
+          "revision": "733fa1d21464ae3c29c7c8eea29ba5e15690eb408a37e622ddb8e6ab6eb382c5"
+        }
+      ],
+      "inspect": [
+        {
+          "slot": "first",
+          "episodeId": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "label": "Meeting",
+          "date": "2000-03-01",
+          "revision": "72e43d81cb0a4ff9bc875497dd667e75765cf38fbeeb498da3f12ab1bcd7f26f",
+          "canMemorize": true,
+          "status": "drifted",
+          "memories": []
+        },
+        {
+          "slot": "episode_6d4cb937d6d22521566bba561458d0d1",
+          "episodeId": null,
+          "label": "Episode 2",
+          "date": "2001-03-01",
+          "revision": "733fa1d21464ae3c29c7c8eea29ba5e15690eb408a37e622ddb8e6ab6eb382c5",
+          "canMemorize": true,
+          "status": "unmemorized",
+          "memories": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+[package]
+name = "doxvelt-api"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99.1"
+publish = false
+description = "Doxvelt native HTTP and host protocol boundary"
+
+[lib]
+name = "doxvelt_engine"
+path = "src/lib.rs"
+
+[dependencies]
+axum = "0.8.9"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-std", "io-util", "sync", "signal", "process", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+percent-encoding = "2"
+regex = "1"
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
+icu_collator = "2"
+ryu-js = "1"
+url = "2"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

@@ -10,7 +10,9 @@ type StoredHeading = Omit<SceneHeading, "episodeId"> & { branchId: string; ancho
 /** Player annotations have no place in canonical events, actor context or reflection source. */
 export class SceneHeadingStore {
   private readonly db: DatabaseSync;
+  readonly nativeDatabase: string;
   constructor(filename: string) {
+    this.nativeDatabase = filename;
     this.db = new DatabaseSync(filename);
     this.db.exec(`PRAGMA busy_timeout = 5000;
       CREATE TABLE IF NOT EXISTS scene_headings (

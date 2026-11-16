@@ -6,13 +6,12 @@ import { BlockAssembler } from '@deepseek-ai/dsh-llm';
 import { DshActorTurnRuntime } from '../../src/agent-runtime/dsh.ts';
 import { createLocalApiServer } from '../../src/local-api/server.ts';
 import { EpisodeMemory } from '../../src/memory/episodes.ts';
-import { SceneHeadingStore } from '../../src/store/scene-headings.ts';
-import { readSourceText } from '../../src/core/source.ts';
+import { bundledExecutable } from '../../src/local-api/bundled-executables.ts';
 import {
   activateWorkspace, createCollectionObject, readWorkspaceConfiguration,
-  saveCollectionSource, startCollectionStory, workspaceCollection, workspaceLocation,
+  saveCollectionSource, readCollectionSource, startCollectionStory, workspaceCollection, workspaceLocation,
   WorkspaceCollectionError, configurationRevision, saveWorkspaceConfiguration,
-} from '../../src/local-api/workspace-collection.ts';
+} from '../../src/application/workspace-collection.ts';
 import { savedEpisodeRequest } from './saved-episode.mjs';
 
 const authoringGuide = `This workspace is a Doxvelt collection. Help the player author reusable source as ordinary Markdown files.
@@ -52,7 +51,6 @@ export async function applyWorkspaceHost(ctx, options = {}) {
     service.engine.closeIdleConnections();
     await new Promise(resolve => service.engine.close(resolve));
     service.memory.close();
-    service.headings.close();
   }
   ctx.on('dispose', async () => {
     disposing = true;
@@ -81,7 +79,7 @@ export async function applyWorkspaceHost(ctx, options = {}) {
     const location = await workspaceLocation(root);
     const reflection = config.reflectionModel ?? config.actorModel;
     const memory = new EpisodeMemory({
-      directory: path.join(location.data, 'memory'), executable: options.reverie ?? process.env.DOXVELT_REVERIE_EXECUTABLE ?? '',
+      directory: path.join(location.data, 'memory'), executable: options.reverie ?? process.env.DOXVELT_REVERIE_EXECUTABLE ?? bundledExecutable('reverie/reverie-engine') ?? '',
       modelKey: reflection ? reflection.provider + ':' + reflection.model : 'unconfigured',
       async reflect(request, signal) {
         if (!reflection) throw new Error('Choose a reflection model in Doxvelt workspace settings before memorizing.');
@@ -105,12 +103,12 @@ export async function applyWorkspaceHost(ctx, options = {}) {
       characterId: null, key: 'default', label: actor.model,
       profile: { id: 'harness-model', version: createHash('sha256').update(JSON.stringify(actor)).digest('hex') }, runtime: new DshActorTurnRuntime(ctx.llm, actor),
     }] : [];
-    const headings = new SceneHeadingStore(path.join(location.data, 'scene-headings.sqlite'));
+    const headings = { nativeDatabase: path.join(location.data, 'scene-headings.sqlite') };
     const engine = createLocalApiServer({ dbPath: location.database, episodeMemory: memory, actorConfigurations, sceneHeadings: headings });
     try {
       engine.listen(0, '127.0.0.1');
       await once(engine, 'listening');
-    } catch (error) { memory.close(); headings.close(); throw error; }
+    } catch (error) { memory.close(); throw error; }
     const service = { engine, memory, headings, version, origin: 'http://127.0.0.1:' + engine.address().port };
     services.set(root, service);
     return service;
@@ -141,7 +139,7 @@ export async function applyWorkspaceHost(ctx, options = {}) {
       return Response.json(await saveWorkspaceConfiguration(root, command.configuration, command.expectedRevision, signal));
     }
     if (command.mode === 'collection-create') return Response.json(await createCollectionObject(root, command.object, signal));
-    if (command.mode === 'collection-read') return Response.json(await readSourceText(root, command.path));
+    if (command.mode === 'collection-read') return Response.json(await readCollectionSource(root, command.path));
     if (command.mode === 'collection-save') return Response.json(await saveCollectionSource(root, command.source, signal));
     const service = await serviceFor(root, config);
     if (command.mode === 'create-story') return Response.json(await startCollectionStory(root, command.setup, service.memory, signal));

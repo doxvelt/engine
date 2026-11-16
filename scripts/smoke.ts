@@ -1,60 +1,18 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp,rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { closeBranchEpisode } from "../src/core/branch-episode.ts";
-import {
-  commitManualTurn,
-  inspectActorContext,
-  startBranchSimulation,
-} from "../src/core/branch-kernel.ts";
-import { openBranchStore } from "../src/store/branch-sqlite.ts";
+import { NativeApiServer } from "../src/local-api/native-server.ts";
 
-const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-smoke-"));
-const store = await openBranchStore(path.join(root, "runtime.sqlite")).open();
+const root=await mkdtemp(path.join(os.tmpdir(),"doxvelt-native-smoke-"));
+const client=new NativeApiServer({});
+const common=["--db",path.join(root,"runtime.sqlite"),"--simulation","smoke","--branch","main","--json"];
+const cli=(...args:string[])=>client.cli([...args,...common]) as Promise<Record<string,any>>;
 try {
-  const started = await startBranchSimulation(store, {
-    ownerScope: "local",
-    simulationId: "smoke",
-    workspacePath: path.resolve("examples/executive-interviews"),
-    scenarioId: "executive-interviews",
-    branchId: "main",
-    commandId: "smoke-start",
-  });
-  const turn = commitManualTurn(store, {
-    ownerScope: "local",
-    simulationId: "smoke",
-    branchId: "main",
-    expectedHead: started.root.id,
-    commandId: "smoke-turn",
-    payload: {
-      actorId: "ceo",
-      text: "We need to understand what is really going on.",
-      audience: ["student-team"],
-    },
-  });
-  const context = inspectActorContext(store, {
-    ownerScope: "local",
-    simulationId: "smoke",
-    branchId: "main",
-    actorId: "student-team",
-  });
-  if (!context.promptPreview.includes("really going on"))
-    throw new Error("Subjective transcript projection failed.");
-  const closure = await closeBranchEpisode(store, {
-    ownerScope: "local",
-    simulationId: "smoke",
-    branchId: "main",
-    expectedHead: turn.commit.id,
-    commandId: "smoke-close",
-    payload: { label: "Smoke episode" },
-  });
-  if (
-    !closure.closure.memories.length ||
-    !closure.closure.extractedBeliefs.length
-  )
-    throw new Error("Branch closure projection failed.");
-} finally {
-  store.close();
-  await rm(root, { recursive: true, force: true });
-}
-console.log("smoke ok (branch-aware manual kernel)");
+  const started=await cli("start",path.resolve("examples/executive-interviews"),"--scenario","executive-interviews","--command","smoke-start");
+  const turn=await cli("turn","ceo","--manual","We need to understand what is really going on.","--audience","student-team","--expected-head",started.head,"--command","smoke-turn");
+  const context=await cli("context","student-team");
+  if(!context.promptPreview.includes("really going on"))throw new Error("Subjective transcript projection failed.");
+  const closure=await cli("close-episode","--label","Smoke episode","--expected-head",turn.commit.id,"--command","smoke-close");
+  if(!closure.memories.length||!closure.extractedBeliefs.length)throw new Error("Branch closure projection failed.");
+}finally{await new Promise<void>((resolve,reject)=>client.close(error=>error?reject(error):resolve()));await rm(root,{recursive:true,force:true});}
+console.log("smoke ok (native branch-aware manual engine)");

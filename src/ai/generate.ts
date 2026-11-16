@@ -9,6 +9,7 @@ export type DoxveltGenerationRequest = {
   purpose: DoxveltGenerationPurpose;
   model: AssetRecord;
   prompt: string;
+  signal?: AbortSignal;
 };
 
 export type DoxveltGenerationResult = {
@@ -51,7 +52,8 @@ export async function generateDoxveltText(
     const model = resolveLanguageModel(request.model, config);
     const result = await generateText({
       model,
-      prompt: request.prompt
+      prompt: request.prompt,
+      ...(request.signal ? { abortSignal: request.signal } : {}),
     });
 
     return {

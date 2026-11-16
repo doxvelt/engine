@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { HomeCollectionController } from "../src/local-ui/lib/home-collection.ts";
+import { HomeCollectionController } from "../src/client/stage/home-collection.ts";
 
 const item = { simulationId: "saved / run", branchId: "alternate", scenarioName: "Duplicate", createdAt: "2026-01-01", openedAt: null };
 test("Home distinguishes loading/error/empty and navigates only by saved IDs", async t => {

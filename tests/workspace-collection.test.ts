@@ -4,9 +4,9 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
-  activateWorkspace, createCollectionObject, readWorkspaceConfiguration, saveCollectionSource,
+  activateWorkspace, createCollectionObject, readWorkspaceConfiguration, saveWorkspaceConfiguration, configurationRevision, saveCollectionSource,
   startCollectionStory, workspaceCollection, workspaceLocation, type StorySetup,
-} from "../src/local-api/workspace-collection.ts";
+} from "../src/application/workspace-collection.ts";
 import { EpisodeMemory } from "../src/memory/episodes.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
 import { validateSimulationArchive } from "../src/core/archive-verifier.ts";
@@ -42,6 +42,11 @@ test("workspace activation is explicit, idempotent and cancelled before mutation
   assert.equal(await readWorkspaceConfiguration(root), null);
   assert.deepEqual(await activateWorkspace(root), { version: 1 });
   assert.deepEqual(await activateWorkspace(root), { version: 1 });
+  await writeFile(path.join(root,".doxvelt/workspace.json"),'{"version":1.0}');
+  const settings=(await readWorkspaceConfiguration(root))!;
+  assert.deepEqual(settings,{version:1});
+  await assert.rejects(saveWorkspaceConfiguration(root,{version:1,actorModel:{provider:"\uFEFF",model:"model"}},configurationRevision(settings)),/provider and model/);
+  assert.deepEqual((await saveWorkspaceConfiguration(root,{version:1},configurationRevision(settings))).configuration,{version:1});
   assert.equal(await readFile(existing, "utf8"), "Keep my notes");
   const another = await mkdtemp(path.join(os.tmpdir(), "doxvelt-inactive-"));
   assert.equal(await readWorkspaceConfiguration(another), null);
@@ -100,7 +105,7 @@ test("new stories pin selected collection objects, date the episode, safely retr
       assert.deepEqual(archive.contentRevision.compiled.worlds.map(item => item.id), ["river"]);
       assert.deepEqual(archive.contentRevision.compiled.entities.map(item => item.id), ["corin", "nell"]);
       assert.doesNotMatch(JSON.stringify(archive.contentRevision.compiled.taggedLines), /mara keeps her own secrets/);
-      assert.equal(f.memory.inspect(store, q)[0]!.date, f.setup.date);
+      assert.equal((await f.memory.inspect(store, q))[0]!.date, f.setup.date);
       const head = projectBranch(store, q).branch.headCommitId;
       commitManualTurn(store, { ...q, commandId: "private", expectedHead: head,
         payload: { actorId: "corin", text: "The key is hidden.", audience: ["nell"], stageWhisperIds: [], knowledgePolicy: "actor-knowledge-v1" } });
@@ -110,9 +115,9 @@ test("new stories pin selected collection objects, date the episode, safely retr
       const file = (await workspaceCollection(f.root)).files.find(file => file.path === "worlds/river.md")!;
       await saveCollectionSource(f.root, { path: file.path, text: "A changed world.", expectedRevision: file.revision });
       assert.equal(store.exportSimulation("local", first.simulationId).contentRevision.compiled.worlds[0]!.body, archive.contentRevision.compiled.worlds[0]!.body);
-      f.memory.setDate(store, q, "first", "2000-03-02");
+      await f.memory.setDate(store, q, "first", "2000-03-02");
       assert.deepEqual(await startCollectionStory(f.root, f.setup, f.memory), first, "A lost-response retry uses its saved setup after source changes");
-      assert.equal(f.memory.inspect(store, q)[0]!.date, "2000-03-02", "Creation replay preserves a later date correction");
+      assert.equal((await f.memory.inspect(store, q))[0]!.date, "2000-03-02", "Creation replay preserves a later date correction");
       await assert.rejects(startCollectionStory(f.root, { ...f.setup, date: "2000-03-03" }, f.memory), /already belongs/);
     } finally { store.close(); }
   } finally { f.memory.close(); }
@@ -127,12 +132,11 @@ test("stale collection, missing choices and cancellation leave no story; date fa
     const store = await openBranchStore((await workspaceLocation(f.root)).database).open();
     assert.equal(store.listSimulations("local").length, 0);
     store.close();
-    const previous = f.memory.setDate;
-    f.memory.setDate = () => { throw new Error("Storage unavailable"); };
-    const partial = await startCollectionStory(f.root, f.setup, f.memory);
+    const unavailable=path.join(f.root,"unavailable-memory");
+    await writeFile(unavailable,"not a directory");
+    const partial = await startCollectionStory(f.root, f.setup, {nativeConfiguration:{...f.memory.nativeConfiguration,directory:unavailable}});
     assert.equal(partial.status, "partial");
     assert.equal(partial.simulationId, "story-first");
-    f.memory.setDate = previous;
     assert.equal((await startCollectionStory(f.root, f.setup, f.memory)).status, "complete");
     const unsafe = path.join(await mkdtemp(path.join(os.tmpdir(), "doxvelt-unsafe-")), "workspace");
     await mkdir(unsafe);
@@ -154,13 +158,13 @@ test("scene headings organize a story path without changing canonical history, a
       const head = projectBranch(store, q).branch.headCommitId;
       const context = inspectActorContext(store, { ...q, actorId: "nell" });
       const archive = store.exportSimulation("local", first.simulationId);
-      const memory = f.memory.inspect(store, q);
+      const memory = await f.memory.inspect(store, q);
       const command = { ...q, expectedHead: head, commandId: "scene-one" };
       const heading = headings.create(store, command, "Ferry landing — dusk");
       assert.equal(headings.list(store, q)[0]!.title, heading.title);
       assert.deepEqual(inspectActorContext(store, { ...q, actorId: "nell" }), context);
       assert.deepEqual(store.exportSimulation("local", first.simulationId), archive);
-      assert.deepEqual(f.memory.inspect(store, q), memory);
+      assert.deepEqual(await f.memory.inspect(store, q), memory);
       commitManualTurn(store, { ...q, commandId: "turn", expectedHead: head,
         payload: { actorId: "corin", text: "The ferry is ready.", audience: ["nell"], stageWhisperIds: [], knowledgePolicy: "actor-knowledge-v1" } });
       assert.deepEqual(headings.create(store, command, "Ferry landing — dusk"), heading);
@@ -178,4 +182,16 @@ test("scene headings organize a story path without changing canonical history, a
       assert.equal(headings.list(store, alternate).length, 2);
     } finally { store.close(); }
   } finally { headings.close(); f.memory.close(); }
+});
+
+test("competing native workspace clients recover one pinned creation and reject reused setup identities",async()=>{
+  const f=await fixture();
+  try {
+    const results=await Promise.all([startCollectionStory(f.root,f.setup,f.memory),startCollectionStory(f.root,f.setup,f.memory)]);
+    assert.deepEqual(results[0],results[1]);assert.equal(results[0]!.status,"complete");
+    await assert.rejects(startCollectionStory(f.root,{...f.setup,characterIds:["corin"]},f.memory),/already belongs/);
+    const store=await openBranchStore((await workspaceLocation(f.root)).database).open();
+    try {assert.equal(store.listSimulations("local").length,1);validateSimulationArchive(store.exportSimulation("local",results[0]!.simulationId));}
+    finally {store.close();}
+  }finally{f.memory.close();}
 });

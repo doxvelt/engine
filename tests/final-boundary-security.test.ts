@@ -88,9 +88,8 @@ test("malformed persisted start outcomes cannot replay or export", async (t) => 
 
 test("recorded decoders reject unknown, missing, and malformed nested data", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-codec-boundary-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
   const store = await openBranchStore(path.join(root, "runtime.sqlite")).open();
-  t.after(() => store.close());
+  t.after(async () => { store.close(); await rm(root, { recursive: true, force: true }); });
   await startBranchSimulation(store, {
     ownerScope: "local",
     simulationId: "codec-shapes",
@@ -120,7 +119,6 @@ test("recorded decoders reject unknown, missing, and malformed nested data", asy
 
 test("SQLite export rejects a persisted command fingerprint mismatch", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-db-fingerprint-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
   const dbPath = path.join(root, "runtime.sqlite");
   const store = await openBranchStore(dbPath).open();
   await startBranchSimulation(store, {
@@ -138,7 +136,7 @@ test("SQLite export rejects a persisted command fingerprint mismatch", async (t)
   ).run("forged", "fingerprint-start");
   database.close();
   const reopened = await openBranchStore(dbPath).open();
-  t.after(() => reopened.close());
+  t.after(async () => { reopened.close(); await rm(root, { recursive: true, force: true }); });
   assert.throws(
     () => reopened.exportSimulation("local", "tampered-fingerprint"),
     /Command identity/,
