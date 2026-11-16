@@ -13,22 +13,26 @@ Run the full check:
 bun run check
 ```
 
-Run the API and UI separately:
+Run the native API or the DSH development host:
 
 ```sh
 bun run api
 bun run ui
 ```
 
-The UI reads `DOXVELT_API_BASE` and falls back to `http://127.0.0.1:8787`.
+Build Rust first with `bun run api:build`. `bun run ui -- --help` describes the
+isolated DSH host; normal desktop installation uses `scripts/install-dsh.ps1`.
 
 Repository landmarks:
 
 - `src/core`: compiler, branch commands, pure head-relative projections, episode closure, ports, and domain types.
 - `src/store`: SQLite branch-event adapter and logical portable-package adapter.
 - `src/cli`: local CLI wrapper.
-- `src/local-api`: local HTTP API over the core engine.
-- `src/local-ui`: Nuxt workbench UI.
+- `api`: Rust HTTP routing, validation and native host protocol.
+- `src/local-api`: native process adapter and deployment startup.
+- `src/application/local-operations.ts`: framework-independent application dispatch.
+- `scripts/dsh-gui-spike`: DSH UI and workspace integration.
+- `src/client/stage`: transport/recovery clients used by contract tests.
 - `design-system`: visual tokens, fonts, brand assets, and static UI specimens.
 - `examples/last-crossing`: the playable Home example.
 - `examples/executive-interviews`: the retained authoring/inspection example.
@@ -89,31 +93,12 @@ configuration and command examples.
 
 ## Startup acceptance harness
 
-Run `node scripts/verify-inference-startup.ts` with Node >=24 and Bun on PATH
-from a source folder (ZIP extraction or checkout) with dependencies already installed. No UI build is required.
-CI runs this after the unchanged package checks and production UI build.
+`node scripts/verify-inference-startup.ts` exercises real native HTTP startup,
+manual mode and the request boundary, and verifies DSH launch help. It requires
+local loopback access. `bun run ui:build` verifies the distributed DSH plugin's
+exports, bundle patch and JavaScript syntax.
 
-The harness traverses `src`, `scripts`, `examples` and `design-system`, plus
-`package.json` and `tsconfig.json`, copying allowed source/config/asset file types
-including untracked source into a writable temp launch directory. Git is not required.
-It excludes hidden metadata, dotenv, inference configuration, runtime state, databases,
-secret/key files, build/cache directories and symlinks; it never follows source links. It links installed packages into a separate node_modules
-directory, keeping writable caches local. It starts `bun start` without an inference
-file, explicit config path, or prebuilt `.nuxt`/`.output` files. Runtime state,
-configuration, home/cache/temp directories, logs, archives and child PIDs stay under
-the reported temp evidence root; existing worktree state is not used or changed.
-
-It checks the displayed URL/config guidance, automatic full blank private profile,
-unconfigured runtime, Home's example entry and a manual turn persisting across
-restart, including unchanged configuration bytes. Requests drive the same example
-API used by Home, and fetch the real Home/Stage pages; this is not browser-click
-acceptance. Subsequent launches cover authenticated/keyless synthetic generation,
-exact CLI model override with a custom config, environment key precedence,
-connection-unverified startup, safe diagnostics, secret exclusion and shutdown.
-The occupied-port check preserves the unrelated listener.
-
-Network/listen permissions are required. The harness stops its servers and leaves
-evidence under TMPDIR. Fixture replies are deterministic synthetic output, not
-real-model quality or connectivity verification. Focused tests inject hard-link
-failures; they do not prove behavior on a real exFAT filesystem. Browser and Windows ACL/process
-validation remain separate. The app does not install or provide a model server.
+The existing DSH workspace browser harness at
+`scripts/dsh-gui-spike/workspace-test.mjs` verifies activation, source authoring,
+play, memory, restart and four viewport sizes in an actual DSH host. Its scripted
+provider establishes integration behavior, rather than live model quality.

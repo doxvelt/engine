@@ -534,15 +534,14 @@ test("reflection speaker and recipient labels preserve hidden character identiti
     } });
   try {
     // Inspect the source boundary without needing a separately installed native executable.
-    const scenes = (memory as unknown as { scenes: (repository: typeof f.store, query: typeof f.query) =>
-      { sources: { characterId: string; observation: ReverieSource }[] }[] }).scenes(f.store, f.query);
+    const scenes = await memory.scenes(f.store, f.query);
     const source = scenes[0]!.sources.find(item => item.characterId === "ceo")!.observation;
     assert.doesNotMatch(JSON.stringify(source), /SECRET-TRUE-NAME/);
     assert.deepEqual(source.messages.map(message => JSON.parse(message.text)), [
       { speaker: "coo", recipients: ["CEO"], performance: "Hello." },
       { speaker: "CEO", recipients: ["coo"], performance: "I hear you." },
     ]);
-    memory.setDate(f.store, f.query, "first", "2000-01-01");
+    await memory.setDate(f.store, f.query, "first", "2000-01-01");
     const simulation = f.store.getSimulation(f.query.ownerScope, f.query.simulationId)!;
     const transcript = projectBranch(f.store, f.query).transcript;
     const legacyRevision = sha256(JSON.stringify(["first", "2000-01-01", simulation.contentRevisionId,
@@ -555,7 +554,7 @@ test("reflection speaker and recipient labels preserve hidden character identiti
       catalog.prepare("INSERT INTO memory_versions VALUES (?, ?, ?, ?)").run(legacy.id,
         sha256(JSON.stringify([f.query.ownerScope, f.query.simulationId])), legacy.slot, JSON.stringify(legacy));
     } finally { catalog.close(); }
-    const inspected = memory.inspect(f.store, f.query)[0]!;
+    const inspected = (await memory.inspect(f.store, f.query))[0]!;
     assert.equal(inspected.status, "drifted");
     assert.deepEqual(inspected.memories, []);
     if (executable) {
@@ -564,7 +563,7 @@ test("reflection speaker and recipient labels preserve hidden character identiti
       const head = f.store.getBranch(f.query.ownerScope, f.query.simulationId, f.query.branchId)!.headCommitId;
       const closed = await closeBranchEpisode(f.store, { ...f.query, expectedHead: head, commandId: "close-hidden",
         payload: { label: "A greeting" } });
-      memory.setDate(f.store, f.query, closed.closure.episode.id, "2001-01-01");
+      await memory.setDate(f.store, f.query, closed.closure.episode.id, "2001-01-01");
       const recall = await memory.recall(f.store, f.query, "ceo", "hello");
       assert.match(JSON.stringify(recall), /coo saying hello/);
       assert.doesNotMatch(JSON.stringify(recall), /SECRET-TRUE-NAME/);

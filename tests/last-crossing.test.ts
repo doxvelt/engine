@@ -7,7 +7,7 @@ import { compileWorkspace } from "../src/core/compiler.ts";
 import { initWorkspace } from "../src/core/init.ts";
 import { inspectActorContext, LOCAL_OWNER_SCOPE, projectBranch, startBranchSimulation } from "../src/core/branch-kernel.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
-import { playLastCrossing } from "../src/local-api/example.ts";
+import { playLastCrossing } from "../src/application/example.ts";
 import { createLocalApiServer } from "../src/local-api/server.ts";
 import { DeterministicFakeRuntime } from "./helpers/deterministic-fake-runtime.ts";
 
@@ -15,10 +15,10 @@ const actors = ["corin", "mara", "nell"];
 const workspace = path.resolve("examples/last-crossing");
 const entry = "/examples/last-crossing/play";
 
-async function fixture(t: test.TestContext) {
+async function fixture(t: test.TestContext, deferredCleanup = false) {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-crossing-"));
   const dbPath = path.join(root, "runtime.sqlite");
-  t.after(() => rm(root, { recursive: true, force: true }));
+  if (!deferredCleanup) t.after(() => rm(root, { recursive: true, force: true }));
   return { root, dbPath };
 }
 
@@ -44,9 +44,9 @@ test("last crossing compiles with three actors, portable prose and source-linked
 });
 
 test("actual assembled contexts omit every other holder's private prose and hidden source lines", async (t) => {
-  const { dbPath } = await fixture(t);
+  const { root, dbPath } = await fixture(t, true);
   const store = await openBranchStore(dbPath).open();
-  t.after(() => store.close());
+  t.after(async () => { store.close(); await rm(root, { recursive: true, force: true }); });
   const started = await startBranchSimulation(store, { ownerScope: LOCAL_OWNER_SCOPE, simulationId: "scene", workspacePath: workspace, scenarioId: "last-crossing", branchId: "main", commandId: "start" });
   const before = store.exportSimulation(LOCAL_OWNER_SCOPE, "scene");
   for (const actorId of actors) {
@@ -68,7 +68,7 @@ test("actual assembled contexts omit every other holder's private prose and hidd
 });
 
 async function apiFixture(t: test.TestContext) {
-  const { root, dbPath } = await fixture(t);
+  const { root, dbPath } = await fixture(t, true);
   const prompts: string[] = [];
   const runtime = new DeterministicFakeRuntime([{ type: "completed", text: "A deterministic test performance.", stopReason: "stop" }], request => prompts.push(request.prompt));
   let server = createLocalApiServer({ dbPath, actorTurnRuntime: runtime });
@@ -162,9 +162,9 @@ test("example drafts stay uncommitted, recover after restart, and restricted per
 
 
 test("filesystem setup failure is retryable and leaves no simulation or overwritten source", async (t) => {
-  const { root, dbPath } = await fixture(t);
+  const { root, dbPath } = await fixture(t, true);
   const store = await openBranchStore(dbPath).open();
-  t.after(() => store.close());
+  t.after(async () => { store.close(); await rm(root, { recursive: true, force: true }); });
   const blocker = path.join(root, "not-a-directory");
   await writeFile(blocker, "Keep this existing file");
   await assert.rejects(playLastCrossing(store, blocker));

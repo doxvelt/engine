@@ -3,7 +3,7 @@ import path from "node:path";
 import { isIP } from "node:net";
 import { normalizeLocalOpenAICompatibleBaseUrl, type LocalOpenAICompatibleRuntimeConfig } from "../agent-runtime/local-openai-compatible.ts";
 
-const valueFlags = new Set(["--host", "--port", "--db", "--origin", "--runtime-config", "--runtime-base-url", "--runtime-model", "--runtime-context-window", "--runtime-max-tokens", "--ui-port"]);
+const valueFlags = new Set(["--host", "--port", "--db", "--origin", "--runtime-config", "--runtime-base-url", "--runtime-model", "--runtime-context-window", "--runtime-max-tokens"]);
 class PublicationError extends Error {}
 const unsupportedLinks = new Set(["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EXDEV"]);
 const fields = new Set(["baseUrl", "modelId", "contextWindow", "maxTokens", "apiKey"]);
@@ -33,9 +33,7 @@ export function resolveStartup(args: string[], env: NodeJS.ProcessEnv = process.
   const host = get("--host") ?? "127.0.0.1";
   if (!isIP(host) && !/^(?:localhost|[a-zA-Z0-9.-]+)$/.test(host)) throw new Error("Invalid API host.");
   const port = integer(get("--port") ?? "8787", "--port", 65535);
-  const uiPort = integer(get("--ui-port") ?? "3000", "--ui-port", 65535);
-  if (port === uiPort) throw new Error("API and UI ports must differ.");
-  return { configPath, host, port, uiPort, dbPath: get("--db") ?? ".doxvelt/runtime.sqlite", allowedOrigins: (flags.get("--origin") ?? []).flatMap(value => value.split(",")).map(value => value.trim()).filter(Boolean), runtime };
+  return { configPath, host, port, dbPath: get("--db") ?? ".doxvelt/runtime.sqlite", allowedOrigins: (flags.get("--origin") ?? []).flatMap(value => value.split(",")).map(value => value.trim()).filter(Boolean), runtime };
 }
 
 function validateProfile(value: Record<string, unknown>): LocalOpenAICompatibleRuntimeConfig | undefined {

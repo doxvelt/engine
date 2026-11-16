@@ -6,7 +6,6 @@ import test from "node:test";
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { resolveStartup, setupInference } from "../src/local-api/startup.ts";
-import { uiEnvironment, supervise } from "../scripts/dev-processes.ts";
 import { spawn } from "node:child_process";
 
 async function fixture(t: test.TestContext) {
@@ -56,9 +55,17 @@ test("blank and legacy profiles are manual; partial, malformed and unsafe profil
     assert.equal(await readFile(file, "utf8"), bytes);
   }
   await rm(file);
-  await symlink(path.join(root, "missing-target"), file);
-  assert.throws(() => resolveStartup([], {}, root));
-  await assert.rejects(readFile(path.join(root, "missing-target")));
+  await t.test("dangling configuration symlinks remain errors", async t => {
+    try { await symlink(path.join(root, "missing-target"), file); }
+    catch (error) {
+      if (process.platform === "win32" && (error as NodeJS.ErrnoException).code === "EPERM") {
+        t.skip("Windows file symlinks require Developer Mode or symlink privileges."); return;
+      }
+      throw error;
+    }
+    assert.throws(() => resolveStartup([], {}, root));
+    await assert.rejects(readFile(path.join(root, "missing-target")));
+  });
 });
 
 test("concurrent implicit launches reuse the exclusively created profile", async t => {
@@ -133,23 +140,6 @@ test("explicit IPv6 host overrides remain usable for direct API and joint startu
   assert.equal(resolveStartup(["--host", "::"], {}, root).host, "::");
 });
 
-test("UI environment excludes runtime config, secrets, dotenv and loader options", () => {
-  const env = uiEnvironment({ PATH: "/bin", HOME: "/home/test", DOXVELT_RUNTIME_API_KEY: "TEST_SECRET_SENTINEL", DOXVELT_RUNTIME_CONFIG: "private-file", NODE_OPTIONS: "--env-file=.env", BUN_OPTIONS: "x", NUXT_PUBLIC_KEY: "TEST_SECRET_SENTINEL" }, "http://127.0.0.1:8989");
-  assert.doesNotMatch(JSON.stringify(env), /TEST_SECRET_SENTINEL|private-file|env-file|BUN_OPTIONS/);
-  assert.equal(env.DOXVELT_API_BASE, "http://127.0.0.1:8989");
-});
-
-test("supervisor stops stubborn siblings with finite escalation on child exit and spawn error", async () => {
-  for (const failure of ["exit", "spawn"]) {
-    const stubborn = spawn(process.execPath, ["-e", 'process.on("SIGTERM",()=>{});setInterval(()=>{},1000)'], { detached: process.platform !== "win32", stdio: "ignore" });
-    await new Promise(resolve => setTimeout(resolve, 100));
-    const broken = failure === "exit" ? spawn(process.execPath, ["-e", "process.exit(7)"], { detached: process.platform !== "win32", stdio: "ignore" }) : spawn("doxvelt-does-not-exist", [], { detached: process.platform !== "win32", stdio: "ignore" });
-    const code = await supervise([stubborn, broken], 100);
-    assert.notEqual(code, 0);
-    assert.throws(() => process.kill(stubborn.pid!, 0));
-  }
-});
-
 test("provider diagnostics classify failure without retaining provider body or secrets", async () => {
   const { safeRuntimeDiagnostic } = await import("../src/agent-runtime/local-openai-compatible.ts");
   for (const detail of ["401 TEST_SECRET_SENTINEL", "403 TEST_SECRET_SENTINEL", "Connection error TEST_SECRET_SENTINEL", "503 TEST_SECRET_SENTINEL", "arbitrary TEST_SECRET_SENTINEL"]) {
@@ -159,63 +149,6 @@ test("provider diagnostics classify failure without retaining provider body or s
     if (/40[13]/.test(detail)) assert.match(message, /authentication failed/);
     if (/Connection|503/.test(detail)) assert.match(message, /unavailable/);
   }
-});
-
-test("SIGINT and SIGTERM terminate supervised children and return bounded exit status", async t => {
-  const { root } = await fixture(t);
-  const { readFile } = await import("node:fs/promises");
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    const file = path.join(root, signal);
-    const worker = spawn(process.execPath, ["tests/helpers/startup-supervisor-worker.ts", file], { stdio: "ignore" });
-    const exit = new Promise<number | null>(resolve => worker.once("exit", resolve));
-    t.after(() => { worker.kill("SIGKILL"); });
-    let pid = 0;
-    for (let attempt = 0; attempt < 100; attempt++) {
-      try { pid = JSON.parse(await readFile(file, "utf8")).child; break; }
-      catch { await new Promise(resolve => setTimeout(resolve, 10)); }
-    }
-    assert.ok(pid, "worker must expose its owned child PID before signaling");
-    t.after(() => { if (worker.exitCode === null && worker.signalCode === null) { try { process.kill(pid, "SIGKILL"); } catch { /* Already gone. */ } } });
-    worker.kill(signal);
-    const code = await Promise.race([exit, new Promise(resolve => { const timer = setTimeout(() => resolve("timeout"), 3000); timer.unref(); })]);
-    assert.equal(code, signal === "SIGINT" ? 130 : 143);
-    assert.throws(() => process.kill(pid, 0));
-  }
-});
-
-test("process-tree escalation stops descendants that ignore graceful termination", async t => {
-  const { root } = await fixture(t);
-  const { readFile } = await import("node:fs/promises");
-  const file = path.join(root, "grandchild-pid");
-  const source = `const {spawn}=require('node:child_process');const {writeFileSync}=require('node:fs');const child=spawn(process.execPath,['-e','process.on("SIGTERM",()=>{});setInterval(()=>{},1000)'],{stdio:'ignore'});writeFileSync(${JSON.stringify(file)},String(child.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000);`;
-  const parent = spawn(process.execPath, ["-e", source], { detached: true, stdio: "ignore" });
-  let done = false;
-  t.after(() => {
-    if (!done && parent.pid) {
-      if (process.platform === "win32") spawn("taskkill", ["/PID", String(parent.pid), "/T", "/F"], { stdio: "ignore" });
-      else { try { process.kill(-parent.pid, "SIGKILL"); } catch { /* Already gone. */ } }
-    }
-  });
-  let descendant = 0;
-  for (let attempt = 0; attempt < 100; attempt++) {
-    try { descendant = Number(await readFile(file, "utf8")); break; }
-    catch { await new Promise(resolve => setTimeout(resolve, 10)); }
-  }
-  assert.ok(descendant);
-  const broken = spawn(process.execPath, ["-e", "process.exit(7)"], { detached: true, stdio: "ignore" });
-  assert.equal(await supervise([parent, broken], 100), 7);
-  done = true;
-  let alive = false;
-  for (let attempt = 0; attempt < 100; attempt++) {
-    try {
-      process.kill(descendant, 0);
-      // An orphan zombie is terminated and awaits OS reaping; it cannot run.
-      alive = process.platform !== "linux" || !/State:\s+Z/.test(await readFile(`/proc/${descendant}/status`, "utf8"));
-    } catch { alive = false; }
-    if (!alive) break;
-    await new Promise(resolve => setTimeout(resolve, 10));
-  }
-  assert.equal(alive, false, "descendant must no longer be running");
 });
 
 // Builtin mocking stays inside this test file's isolated Node test process.

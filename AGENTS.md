@@ -51,20 +51,21 @@ Do not introduce simultaneous multi-agent turns in the architectural MVP. Altern
 
 ## Current Implementation
 
-Slices 1 and 2 of the architectural MVP are implemented:
+The maintained simulation engine and persistence are Rust:
 
-- `src/core`: immutable content revisions, branch-linked commands/events, pure
-  projections, stable message perceptions, memory operations, and closure-job
-  application services;
-- `src/store`: SQLite adapter with atomic branch writes, append-only memory-job
-  transitions, detached closure results, and logical schema-v5 import/export;
-- `src/ai`: legacy Vercel AI SDK/OpenAI-compatible draft generation, preserved
-  until the Slice 3 adapter owns and replaces that path;
-- `src/cli`: supported manual play and inspection surface;
-- `src/local-api`: supported branch, context, memory-operation, and memory-job API;
-- `src/local-ui`: usable Home/Studio authoring surfaces; Stage still targets the obsolete mutation contract;
+- `api`: authoritative compiler, immutable commands/events, branch and actor-context
+  projections, SQLite persistence, drafts, alternatives, archives, source authoring,
+  workspace setup, scene headings and Reverie formation/injection integration;
+- `src/core` and `src/store`: retired TypeScript reference implementations retained
+  for behavioral and interoperability tests; do not add product behavior here;
+- `src/ai`: legacy CLI provider transport only; it has no simulation persistence;
+- `src/cli`: thin native CLI launcher and credential-owned provider callback;
+- `src/application/workspace-collection.ts`: native workspace transport client;
+- `src/local-api`: native API process adapter and deployment startup;
+- `scripts/dsh-gui-spike`: maintained DSH desktop/workspace plugin;
+- `src/client/stage`: framework-independent transport and recovery clients;
 - `design-system`: canonical product UI language;
-- `.github/workflows/ci.yml` and behavior-heavy tests: Linux lint, typecheck, runtime tests, smoke, and production UI build.
+- `.github/workflows/ci.yml` and behavior-heavy tests: Rust tests, native dependency-boundary audit, lint, typecheck, interoperability tests, native smoke, and DSH package validation.
 
 Preserve the accepted branch, perception, memory, and portability behavior.
 Replace a path only when the next slice owns it; do not maintain parallel
@@ -80,22 +81,24 @@ Known next gaps are:
 - one-command container packaging and public-readiness documentation;
 - migration of authored `models/` endpoint metadata into deployment-owned runtime profiles.
 
-## Design System And Nuxt
+## Design System And DSH
 
 The product design system lives in `design-system/`. It contains the static specimen page, canonical visual tokens, fonts, and brand assets.
 
 Use it for UI changes. Preserve Doxvelt-specific semantics for source spans, dossiers, beliefs, access paths, transcript turns, tags, badges, authoring fields, branch state, drafts, and restrained operational states.
 
-The legacy workbench uses Nuxt and Nuxt UI. The selected play prototype uses DSH. Nuxt remains a client or thin BFF, never the domain kernel.
+DSH is the maintained UI host. The Nuxt workbench has been removed. The approved
+migration moved the API, simulation kernel, application operations and persistence
+to Rust. The TypeScript reference is not a runtime dependency. Keep
+`scripts/check-native-boundary.mjs` passing. See [the migration decision](docs/design/DSH_RUST_MIGRATION.md), which
+supersedes earlier framework and TypeScript-only API requirements.
 
 - Keep API contracts outside page components.
 - Prefer generated or shared transport types.
-- Move API access and orchestration into focused clients, composables, or stores.
-- Use Nuxt UI as the canonical component layer; maximize existing Nuxt UI components.
-  Extract a Doxvelt Vue component only for recurring, meaningful customization,
-  not speculative wrappers: as many components as necessary, as few as possible.
-  Native controls require a semantic reason.
-- Split large page components when behavior stabilizes and decomposition reduces change risk.
+- Move API access and orchestration into focused clients or services.
+- Reuse DSH's stock composer, transcript, controls, navigation, settings and
+  accessibility primitives through its supported plugin contracts.
+- Keep simulation history and subjective memory independent of DSH chat logs.
 - Do not invent parallel palettes, typography scales, badge semantics, or component treatments without updating the design system.
 
 ## Authored Content Versus Runtime

@@ -1,5 +1,10 @@
 # Target Architecture
 
+> Host/API correction (2026-11-09): [DSH and Rust migration](DSH_RUST_MIGRATION.md)
+> supersedes the Nuxt/Nuxt UI and TypeScript-only API choices below. DSH is
+> the UI host and Rust owns the API, simulation engine and persistence. Older baseline descriptions are historical.
+
+
 > The DSH runtime and play prototype supersede the Pi adapter selection below. See [Agent Runtime](AGENT_RUNTIME.md) and [the DSH spike](../spikes/DSH_GUI_SPIKE.md) for the current host integration.
 
 > Approved correction: [Actor Knowledge](ACTOR_KNOWLEDGE.md) supersedes older

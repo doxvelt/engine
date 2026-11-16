@@ -4,19 +4,21 @@ import { Readable } from "node:stream";
 import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { reactive } from "vue";
-import { validStageBuffer } from "../src/local-ui/lib/stage-buffer.ts";
-import { StageSession } from "../src/local-ui/lib/stage-session.ts";
+import { validStageBuffer } from "../src/client/stage/stage-buffer.ts";
+import { StageSession } from "../src/client/stage/stage-session.ts";
 import { stageHistoryBrowserFixture } from "../scripts/stage-history-browser-fixture.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
-import type { BrowserStorage } from "../src/local-ui/lib/stage-recovery.ts";
+import type { BrowserStorage } from "../src/client/stage/stage-recovery.ts";
 import type { StageRecoveryIdentity } from "../src/local-api/stage-contracts.ts";
 
 async function fixture(t: test.TestContext) {
   const root = await mkdtemp(path.join(os.tmpdir(), "stage-history-integration-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
   const dbPath = path.join(root, "original.sqlite");
   const { server, requests } = stageHistoryBrowserFixture(dbPath, "http://stage.invalid");
+  t.after(async () => {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    await rm(root, { force: true, recursive: true });
+  });
   let dropSuffix = "";
   const posts: { suffix: string; body: Record<string, unknown> }[] = [];
   const fetcher: typeof fetch = async (url, options) => new Promise<Response>((resolve, reject) => {
@@ -39,8 +41,8 @@ async function fixture(t: test.TestContext) {
   const values = new Map<string, string>();
   const storage: BrowserStorage = { get length() { return values.size; }, key(i) { return [...values.keys()][i] ?? null; }, getItem(k) { return values.get(k) ?? null; }, setItem(k, v) { values.set(k, v); } };
   const session = async (branchId: string) => {
-    // Exercise the same proxied class graph as Nuxt, including Maps and cycles.
-    const s = reactive(new StageSession({ apiBase: "http://stage.invalid", simulationId: "sim", branchId }, fetcher)) as unknown as StageSession;
+    // Exercise the transport client independently of a presentation framework.
+    const s = new StageSession({ apiBase: "http://stage.invalid", simulationId: "sim", branchId }, fetcher);
     await s.refresh(); await s.enableRecovery(storage); assert.equal(s.recoveryBlocked, false, s.recoveryWarning || s.recovery?.warning); return s;
   };
   return { root, dbPath, call, session, requests, values, posts, dropResponse(suffix: string) { dropSuffix = suffix; } };

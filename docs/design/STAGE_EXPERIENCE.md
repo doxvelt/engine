@@ -1,5 +1,10 @@
 # Stage Experience
 
+> Host/API correction (2026-11-09): [DSH and Rust migration](DSH_RUST_MIGRATION.md)
+> supersedes the Nuxt/Nuxt UI and TypeScript-only API choices below. DSH is
+> the UI host and Rust owns HTTP transport. Older baseline descriptions are historical.
+
+
 > Current DSH host and authoring behavior follows [Workspace play](../WORKSPACES.md)
 > and [Product vision](PRODUCT_VISION.md): workspace activation and collections,
 > native Perform/Generate segments, `@character #audience` opening notation,
@@ -31,7 +36,7 @@ and the [design system](../../design-system/README.md) for visual treatment.
 
 The existing Nuxt/Nuxt UI Stage uses shared
 [transport types](../../src/local-api/stage-contracts.ts) and a focused
-[session client](../../src/local-ui/lib/stage-session.ts):
+[session client](../../src/client/stage/stage-session.ts):
 
 - One conversation surface serves opening, history and generated draft review,
   with a compact header, scrolling history and reachable composer/review actions.
@@ -65,7 +70,7 @@ The existing Nuxt/Nuxt UI Stage uses shared
   and prompt; client filtering is not HTTP redaction. Acceptance returns branch/commit
   data. Historical transport minimization and authorized accepted-input retrieval
   remain follow-on work.
-- [Home](../../src/local-ui/pages/index.vue) lists saved simulations with Continue,
+- [Home](https://github.com/doxvelt/engine/blob/0c2e963220f9e6ddf57138e75c97421706319691/src/local-ui/pages/index.vue) lists saved simulations with Continue,
   the example and Create your own/Studio routes, plus separate browser workspace
   recents. [The last crossing](LAST_CROSSING.md) starts or resumes one database-backed
   example without recompiling on resume. Collection/resume semantics are below.

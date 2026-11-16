@@ -1,0 +1,570 @@
+[
+  {
+    "command": {
+      "ownerScope": "local",
+      "simulationId": "routing",
+      "branchId": "main",
+      "commandId": "generate",
+      "expectedHead": "commit_2593890b727e840ae0b3d7773d2ad992",
+      "payload": {
+        "actorId": "corin",
+        "audience": [
+          "corin",
+          "mara"
+        ],
+        "stageWhisperIds": [],
+        "runtimeProfile": {
+          "id": "character",
+          "version": "v1"
+        },
+        "promptPolicy": {
+          "id": "audience-proposal-v1",
+          "version": "v1"
+        },
+        "outputSchema": {
+          "id": "audience-proposal",
+          "digest": "v1"
+        },
+        "skillDigests": [],
+        "routing": {
+          "version": 1,
+          "initialAudience": [
+            "mara"
+          ],
+          "correctedAudience": null,
+          "sourceDraftId": null,
+          "correction": "",
+          "preservedText": null
+        }
+      }
+    },
+    "source": null,
+    "recall": null,
+    "expected": {
+      "contextHash": "96bb5cf503aa8ac3f522d1c4089f359535f3ded68fb4a61410d429da2aaa449c",
+      "promptHash": "db0187b4a306e4cef099aff023a85b07dea42a2a431046c0893b38bb8150f646",
+      "availableRecipientIds": [
+        "corin",
+        "mara",
+        "nell"
+      ]
+    }
+  },
+  {
+    "command": {
+      "ownerScope": "local",
+      "simulationId": "routing",
+      "branchId": "main",
+      "commandId": "generate",
+      "expectedHead": "commit_2593890b727e840ae0b3d7773d2ad992",
+      "payload": {
+        "actorId": "corin",
+        "audience": [
+          "corin",
+          "mara"
+        ],
+        "stageWhisperIds": [],
+        "runtimeProfile": {
+          "id": "character",
+          "version": "v1"
+        },
+        "promptPolicy": {
+          "id": "audience-proposal-v1",
+          "version": "v1"
+        },
+        "outputSchema": {
+          "id": "audience-proposal",
+          "digest": "v1"
+        },
+        "skillDigests": [],
+        "routing": {
+          "version": 1,
+          "initialAudience": [
+            "mara"
+          ],
+          "correctedAudience": null,
+          "sourceDraftId": null,
+          "correction": "",
+          "preservedText": null
+        }
+      }
+    },
+    "source": {
+      "draftId": "source",
+      "actorId": "corin",
+      "basisHeadCommitId": "commit_2593890b727e840ae0b3d7773d2ad992",
+      "artifact": {
+        "text": "UNACCEPTED-SOURCE-WORDING"
+      },
+      "audience": [
+        "corin",
+        "mara"
+      ]
+    },
+    "recall": null,
+    "expected": {
+      "contextHash": "a8025d802a31723c62f78ad4b4fd026df582992ff0d1f9ea5668d567c38b1b26",
+      "promptHash": "c96aa52ace0a6c2d6253ecde258c71898c6525ea84f860310045e02e924d3d11",
+      "availableRecipientIds": [
+        "corin",
+        "mara",
+        "nell"
+      ]
+    }
+  },
+  {
+    "command": {
+      "ownerScope": "local",
+      "simulationId": "routing",
+      "branchId": "main",
+      "commandId": "generate",
+      "expectedHead": "commit_2593890b727e840ae0b3d7773d2ad992",
+      "payload": {
+        "actorId": "corin",
+        "audience": [
+          "corin",
+          "mara"
+        ],
+        "stageWhisperIds": [],
+        "runtimeProfile": {
+          "id": "character",
+          "version": "v1"
+        },
+        "promptPolicy": {
+          "id": "audience-proposal-v1",
+          "version": "v1"
+        },
+        "outputSchema": {
+          "id": "audience-proposal",
+          "digest": "v1"
+        },
+        "skillDigests": [],
+        "routing": {
+          "version": 1,
+          "initialAudience": [
+            "mara"
+          ],
+          "correctedAudience": null,
+          "sourceDraftId": null,
+          "correction": "",
+          "preservedText": null
+        }
+      }
+    },
+    "source": null,
+    "recall": [
+      {
+        "publicationId": "episode-1",
+        "label": "Earlier",
+        "text": "A fallible recollection, not current presence."
+      }
+    ],
+    "expected": {
+      "contextHash": "50a8216e50a6683c5c8bc74fbf3d0037a8a09001d0cff8ada81bfe7d03b525cf",
+      "promptHash": "e2735e86ebaca098248067d5fde5e398ffc029db1f5e25c72f485652fbdeb314",
+      "availableRecipientIds": [
+        "corin",
+        "mara",
+        "nell"
+      ]
+    }
+  },
+  {
+    "command": {
+      "ownerScope": "local",
+      "simulationId": "routing",
+      "branchId": "main",
+      "commandId": "generate",
+      "expectedHead": "commit_2593890b727e840ae0b3d7773d2ad992",
+      "payload": {
+        "actorId": "corin",
+        "audience": [
+          "corin",
+          "mara"
+        ],
+        "stageWhisperIds": [],
+        "runtimeProfile": {
+          "id": "character",
+          "version": "v1"
+        },
+        "promptPolicy": {
+          "id": "audience-proposal-v1",
+          "version": "v1"
+        },
+        "outputSchema": {
+          "id": "audience-proposal",
+          "digest": "v1"
+        },
+        "skillDigests": [],
+        "routing": {
+          "version": 1,
+          "initialAudience": [
+            "mara"
+          ],
+          "correctedAudience": null,
+          "sourceDraftId": null,
+          "correction": "",
+          "preservedText": null
+        }
+      }
+    },
+    "source": {
+      "draftId": "source",
+      "actorId": "corin",
+      "basisHeadCommitId": "commit_2593890b727e840ae0b3d7773d2ad992",
+      "artifact": {
+        "text": "UNACCEPTED-SOURCE-WORDING"
+      },
+      "audience": [
+        "corin",
+        "mara"
+      ]
+    },
+    "recall": [
+      {
+        "publicationId": "episode-1",
+        "label": "Earlier",
+        "text": "A fallible recollection, not current presence."
+      }
+    ],
+    "expected": {
+      "contextHash": "3c677e88867a04de0b3919cbc8ff3acdabfa082510a7c6251ba930692e50be67",
+      "promptHash": "06505eb789f8f6f5c93318981286f19b0dfead341a4c4fa68611cc50dfb04087",
+      "availableRecipientIds": [
+        "corin",
+        "mara",
+        "nell"
+      ]
+    }
+  },
+  {
+    "command": {
+      "ownerScope": "local",
+      "simulationId": "routing",
+      "branchId": "main",
+      "commandId": "generate",
+      "expectedHead": "commit_2593890b727e840ae0b3d7773d2ad992",
+      "payload": {
+        "actorId": "corin",
+        "audience": [
+          "corin",
+          "mara"
+        ],
+        "stageWhisperIds": [],
+        "runtimeProfile": {
+          "id": "character",
+          "version": "v1"
+        },
+        "promptPolicy": {
+          "id": "audience-proposal-v1",
+          "version": "v1"
+        },
+        "outputSchema": {
+          "id": "audience-proposal",
+          "digest": "v1"
+        },
+        "skillDigests": [],
+        "routing": {
+          "version": 2,
+          "completeWhisper": "Speak only to Mara.",
+          "initialAudience": [
+            "mara"
+          ],
+          "correctedAudience": null,
+          "sourceDraftId": null,
+          "correction": "",
+          "preservedText": null
+        }
+      }
+    },
+    "source": null,
+    "recall": null,
+    "expected": {
+      "contextHash": "a41b6739978e64b7fe92e982c286d4ad62ecf54161f2a8e41f2a2cce63c34bc3",
+      "promptHash": "e4741302897ea5531cb1e8077bac08d9cf3400326b9033690eb2ba0906f6d0b8",
+      "availableRecipientIds": [
+        "corin",
+        "mara",
+        "nell"
+      ]
+    }
+  },
+  {
+    "command": {
+      "ownerScope": "local",
+      "simulationId": "routing",
+      "branchId": "main",
+      "commandId": "generate",
+      "expectedHead": "commit_2593890b727e840ae0b3d7773d2ad992",
+      "payload": {
+        "actorId": "corin",
+        "audience": [
+          "corin",
+          "mara"
+        ],
+        "stageWhisperIds": [],
+        "runtimeProfile": {
+          "id": "character",
+          "version": "v1"
+        },
+        "promptPolicy": {
+          "id": "audience-proposal-v1",
+          "version": "v1"
+        },
+        "outputSchema": {
+          "id": "audience-proposal",
+          "digest": "v1"
+        },
+        "skillDigests": [],
+        "routing": {
+          "version": 2,
+          "completeWhisper": "Speak only to Mara.",
+          "initialAudience": [
+            "mara"
+          ],
+          "correctedAudience": null,
+          "sourceDraftId": null,
+          "correction": "",
+          "preservedText": null
+        }
+      }
+    },
+    "source": null,
+    "recall": [
+      {
+        "publicationId": "episode-1",
+        "label": "Earlier",
+        "text": "A fallible recollection, not current presence."
+      }
+    ],
+    "expected": {
+      "contextHash": "4f87dcb6a2e0e16a9a479b6337594cf7f1e6e11fbc1f3ca924f3a89345765bdb",
+      "promptHash": "2da30d1b4b1bfeae9c5a663f03ce95cc9c4d5dfa0a9ddd8943d41392a70898c3",
+      "availableRecipientIds": [
+        "corin",
+        "mara",
+        "nell"
+      ]
+    }
+  },
+  {
+    "command": {
+      "ownerScope": "local",
+      "simulationId": "routing",
+      "branchId": "main",
+      "commandId": "generate",
+      "expectedHead": "commit_2593890b727e840ae0b3d7773d2ad992",
+      "payload": {
+        "actorId": "corin",
+        "audience": [
+          "corin",
+          "mara"
+        ],
+        "stageWhisperIds": [],
+        "runtimeProfile": {
+          "id": "character",
+          "version": "v1"
+        },
+        "promptPolicy": {
+          "id": "actor-knowledge-v1",
+          "version": "v1"
+        },
+        "outputSchema": {
+          "id": "audience-proposal",
+          "digest": "v1"
+        },
+        "skillDigests": [],
+        "routing": {
+          "version": 3,
+          "completeWhisper": "Speak only to Mara.",
+          "initialAudience": [
+            "mara"
+          ],
+          "correctedAudience": null,
+          "sourceDraftId": null,
+          "correction": "",
+          "preservedText": null
+        }
+      }
+    },
+    "source": null,
+    "recall": null,
+    "expected": {
+      "contextHash": "d1225cacbe13dae965a7643ead6b054d23da487896694e96f5ad9e3d03fe6fe1",
+      "promptHash": "ce978e5fc06c27126ddb93db17aa0d2f330929be52a0d1e75dfde7e28a028fe2",
+      "availableRecipientIds": [
+        "corin",
+        "mara",
+        "nell"
+      ]
+    }
+  },
+  {
+    "command": {
+      "ownerScope": "local",
+      "simulationId": "routing",
+      "branchId": "main",
+      "commandId": "generate",
+      "expectedHead": "commit_2593890b727e840ae0b3d7773d2ad992",
+      "payload": {
+        "actorId": "corin",
+        "audience": [
+          "corin",
+          "mara"
+        ],
+        "stageWhisperIds": [],
+        "runtimeProfile": {
+          "id": "character",
+          "version": "v1"
+        },
+        "promptPolicy": {
+          "id": "actor-knowledge-v1",
+          "version": "v1"
+        },
+        "outputSchema": {
+          "id": "audience-proposal",
+          "digest": "v1"
+        },
+        "skillDigests": [],
+        "routing": {
+          "version": 3,
+          "completeWhisper": "Speak only to Mara.",
+          "initialAudience": [
+            "mara"
+          ],
+          "correctedAudience": null,
+          "sourceDraftId": null,
+          "correction": "",
+          "preservedText": null
+        }
+      }
+    },
+    "source": null,
+    "recall": [
+      {
+        "publicationId": "episode-1",
+        "label": "Earlier",
+        "text": "A fallible recollection, not current presence."
+      }
+    ],
+    "expected": {
+      "contextHash": "64b38e4b0e65c6dfa5f118b1100953f3fb79deb6ec8e3aaf5b8006d6bed7f43b",
+      "promptHash": "9abce224a1e6e2c428c5c63838a946fb6d9e2f1bc9c9edcf306764f91f204954",
+      "availableRecipientIds": [
+        "corin",
+        "mara",
+        "nell"
+      ]
+    }
+  },
+  {
+    "command": {
+      "ownerScope": "local",
+      "simulationId": "routing",
+      "branchId": "main",
+      "commandId": "generate",
+      "expectedHead": "commit_2593890b727e840ae0b3d7773d2ad992",
+      "payload": {
+        "actorId": "corin",
+        "audience": [
+          "corin",
+          "mara"
+        ],
+        "stageWhisperIds": [],
+        "runtimeProfile": {
+          "id": "character",
+          "version": "v1"
+        },
+        "promptPolicy": {
+          "id": "actor-knowledge-v1",
+          "version": "v1"
+        },
+        "outputSchema": {
+          "id": "audience-proposal",
+          "digest": "v1"
+        },
+        "skillDigests": [],
+        "routing": {
+          "version": 4,
+          "completeWhisper": "Speak only to Mara.",
+          "initialAudience": null,
+          "correctedAudience": [
+            "mara"
+          ],
+          "sourceDraftId": null,
+          "correction": "",
+          "preservedText": null
+        }
+      }
+    },
+    "source": null,
+    "recall": null,
+    "expected": {
+      "contextHash": "3c416679e885417833b026d71ea3c374d79f54fcc6f80dc47651bbc08446c954",
+      "promptHash": "3d322eadce733e3a6ebf047510b3854b4bd14977f917aad48c62a56c623bf90b",
+      "availableRecipientIds": [
+        "corin",
+        "mara",
+        "nell"
+      ]
+    }
+  },
+  {
+    "command": {
+      "ownerScope": "local",
+      "simulationId": "routing",
+      "branchId": "main",
+      "commandId": "generate",
+      "expectedHead": "commit_2593890b727e840ae0b3d7773d2ad992",
+      "payload": {
+        "actorId": "corin",
+        "audience": [
+          "corin",
+          "mara"
+        ],
+        "stageWhisperIds": [],
+        "runtimeProfile": {
+          "id": "character",
+          "version": "v1"
+        },
+        "promptPolicy": {
+          "id": "actor-knowledge-v1",
+          "version": "v1"
+        },
+        "outputSchema": {
+          "id": "audience-proposal",
+          "digest": "v1"
+        },
+        "skillDigests": [],
+        "routing": {
+          "version": 4,
+          "completeWhisper": "Speak only to Mara.",
+          "initialAudience": null,
+          "correctedAudience": [
+            "mara"
+          ],
+          "sourceDraftId": null,
+          "correction": "",
+          "preservedText": null
+        }
+      }
+    },
+    "source": null,
+    "recall": [
+      {
+        "publicationId": "episode-1",
+        "label": "Earlier",
+        "text": "A fallible recollection, not current presence."
+      }
+    ],
+    "expected": {
+      "contextHash": "4533629a935982fab489f70352d5c6697ad7796e71aea7bdd889a0fdd086f2ec",
+      "promptHash": "9556431d736f4bfabf319ea532bfad58e1885763a0e99e87a4aa7ad3fb93b4e4",
+      "availableRecipientIds": [
+        "corin",
+        "mara",
+        "nell"
+      ]
+    }
+  }
+]

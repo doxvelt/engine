@@ -70,11 +70,13 @@ test("episode publications follow perceptions, fictional chronology and the sele
     api(base + "/episode-memory/memorize", command(branch, head, { slot }));
   const close = (branch: string, head: string, label: string) =>
     api(base + "/episodes/request-closure", command(branch, head, { label }));
+  let lastDraft: string;
   const generate = async (branch: string, head: string, actorId: string) => {
     const result = await api(base + "/drafts", command(branch, head, {
       actorId, completeWhisper: "Think about the lantern.", stageWhisperIds: [], audience: null, draftingPolicy: "actor-knowledge-v1",
     }));
     assert.equal(result.draft.status, "ready");
+    lastDraft=result.draft.id;
     return prompts.at(-1)!;
   };
 
@@ -100,6 +102,12 @@ test("episode publications follow perceptions, fictional chronology and the sele
   const sequel = await generate("main", mainSequel, "nell");
   assert.match(sequel, /I remember the red lantern agreement/);
   assert.doesNotMatch(sequel, /The red lantern agreement is ours alone/);
+  await date("main",mainSequel,"first","2002-03-01");
+  const retry=await api(base+`/drafts/${lastDraft!}/retry`,{commandId:"frozen-recall-retry"});
+  assert.equal(retry.draft.status,"ready");
+  assert.equal(prompts.at(-1),sequel,"A retry preserves its captured recall after fictional chronology changes");
+  assert.doesNotMatch(await generate("main",mainSequel,"nell"),/I remember the red lantern agreement/);
+  await date("main",mainSequel,"first","2000-03-01");
   assert.doesNotMatch(await generate("main", mainSequel, "mara"), /red lantern agreement/);
 
   await api(base + "/fork", command("main", mainSequel, { atCommitId: rootHead, newBranchId: "alternate" }));

@@ -12,7 +12,7 @@ import { deriveFirstImpressionEvents, fingerprintCommand } from "../src/core/dom
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
 import { createLocalApiServer } from "../src/local-api/server.ts";
 import { ACTOR_KNOWLEDGE_POLICY } from "../src/local-api/stage-contracts.ts";
-import { StageSession } from "../src/local-ui/lib/stage-session.ts";
+import { StageSession } from "../src/client/stage/stage-session.ts";
 import type { RunActorTurnRequest } from "../src/agent-runtime/contracts.ts";
 import { DeterministicFakeRuntime } from "./helpers/deterministic-fake-runtime.ts";
 

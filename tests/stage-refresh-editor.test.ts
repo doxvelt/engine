@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { StageSession } from "../src/local-ui/lib/stage-session.ts";
+import { StageSession } from "../src/client/stage/stage-session.ts";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

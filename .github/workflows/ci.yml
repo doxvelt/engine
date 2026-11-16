@@ -35,11 +35,16 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Set up Rust
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          rustup default 1.99.1
+
       - name: Validate kernel and smoke path
         run: bun run check
 
-      - name: Build Nuxt workbench
+      - name: Verify DSH plugin package
         run: bun run ui:build
 
-      - name: Verify isolated first launch and inference fixture
+      - name: Verify native API startup
         run: node scripts/verify-inference-startup.ts

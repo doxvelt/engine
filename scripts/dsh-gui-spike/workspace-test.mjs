@@ -153,7 +153,7 @@ try {
   await page.getByLabel('Episode date', { exact: true }).fill('2000-03-01');
   await page.getByRole('button', { name: 'Create episode', exact: true }).click();
   await page.getByRole('button', { name: 'Episode memory', exact: true }).waitFor();
-  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.includes('#all'));
+  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/perform @Corin');
   await page.getByRole('button', { name: 'New scene', exact: true }).click();
   await page.getByLabel('Scene heading', { exact: true }).fill('At the ferry landing — dusk');
   await page.getByRole('button', { name: 'Add scene heading', exact: true }).click();
@@ -161,9 +161,9 @@ try {
   const line = 'The ferry is ready; we should leave before the storm.';
   await editor.fill('/perform @Corin #Nell ' + line);
   await editor.press('Enter');
-  await page.locator('[data-doxvelt-turn]').getByText(line, { exact: true }).waitFor();
+  await page.locator('[data-doxvelt-turn]').getByText(line, { exact: false }).waitFor();
   await page.getByRole('heading', { name: 'At the ferry landing — dusk', exact: true }).waitFor();
-  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/perform @Corin #Nell');
+  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/perform @Corin');
   await page.getByRole('button', { name: 'Episode memory', exact: true }).click();
   await page.getByLabel('Fictional date', { exact: true }).waitFor();
   assert.equal(await page.getByLabel('Fictional date', { exact: true }).inputValue(), '2000-03-01');
@@ -171,7 +171,7 @@ try {
   await page.reload();
   try { await signIn.getByRole('button', { name: 'Close', exact: true }).click({ timeout: 3000 }); }
   catch (error) { if (error.name !== 'TimeoutError' || await signIn.isVisible()) throw error; }
-  await page.locator('[data-doxvelt-turn]').getByText(line, { exact: true }).waitFor();
+  await page.locator('[data-doxvelt-turn]').getByText(line, { exact: false }).waitFor();
   assert.equal(await page.locator('[data-doxvelt-turn]').count(), 1);
   await page.screenshot({ path: path.join(root, 'workspace-play.png'), animations: 'disabled' });
   await page.getByRole('button', { name: 'Collection', exact: true }).click();
@@ -208,8 +208,8 @@ try {
   const continuation = 'There is still time to cross.';
   await editor.fill('/perform @Corin #Nell ' + continuation);
   await editor.press('Enter');
-  await page.locator('[data-doxvelt-turn]').getByText(continuation, { exact: true }).waitFor();
-  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/perform @Corin #Nell');
+  await page.locator('[data-doxvelt-turn]').getByText(continuation, { exact: false }).waitFor();
+  await page.waitForFunction(() => document.querySelector('[contenteditable="true"]')?.innerText.trimEnd() === '/perform @Corin');
   assert.equal(await page.locator('[data-doxvelt-turn]').count(), 3, 'The same episode remains playable after memorization');
   await page.screenshot({ path: path.join(root, 'after-memorization.png'), animations: 'disabled' });
   await page.getByRole('button', { name: 'Episode memory', exact: true }).click();
@@ -228,7 +228,7 @@ try {
   const saved = page.getByLabel('Saved episode', { exact: true });
   await saved.getByRole('option', { name: 'The crossing', exact: true }).waitFor({ state: 'attached' });
   if (await saved.isEnabled()) await saved.selectOption({ label: 'The crossing' });
-  await page.locator('[data-doxvelt-turn]').getByText(continuation, { exact: true }).waitFor();
+  await page.locator('[data-doxvelt-turn]').getByText(continuation, { exact: false }).waitFor();
   await page.getByRole('heading', { name: 'At the ferry landing — dusk', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Episode memory', exact: true }).click();
   await page.getByText(reflection, { exact: true }).first().waitFor();

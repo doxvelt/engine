@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { StageSession } from "../src/local-ui/lib/stage-session.ts";
+import { StageSession } from "../src/client/stage/stage-session.ts";
 
 const draft = { id: "draft", generationCommandId: "generate", branchId: "main", basisHeadCommitId: "head", actorId: "scene", audience: ["scene", "a"], status: "ready", artifact: { text: "Saved opening." }, failure: null, createdAt: "2026-01-01" };
 function fixture() {

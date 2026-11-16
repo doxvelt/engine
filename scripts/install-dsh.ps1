@@ -3,6 +3,8 @@ param(
     [string]$Profile = 'desktop'
 )
 $ErrorActionPreference = 'Stop'
+& node (Join-Path $PSScriptRoot 'cargo.mjs') build --locked
+if ($LASTEXITCODE -ne 0) { throw 'Build the native Rust API before installing Doxvelt in DSH.' }
 $doxveltPlugin = Join-Path $PSScriptRoot 'dsh-gui-spike'
 $doxveltEngine = (Resolve-Path -LiteralPath $ReverieExecutable).Path
 if (!(Test-Path -LiteralPath $doxveltEngine -PathType Leaf)) { throw 'Choose the Reverie executable.' }

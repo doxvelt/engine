@@ -93,8 +93,9 @@ async function prepareStory(origin, config) {
     const scenarioId = config.scenario;
     const simulationId = "story-" + hashIdentity(JSON.stringify([workspacePath, scenarioId]));
     if (simulations.some(story => story.simulationId === simulationId)) return;
-    const { compileWorkspace } = await import("../../src/core/compiler.ts");
-    const compiled = await compileWorkspace(workspacePath);
+    const compilation = await fetch(origin + '/source/compile', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspacePath }) });
+    const compiled = await compilation.json();
+    if (!compilation.ok) throw new Error('Could not compile the selected story.');
     if (!compiled.scenarios.some(item => item.id === scenarioId)) throw new Error("The scenario was not found in this story.");
     endpoint = "/simulations/start";
     body = { workspacePath, scenarioId, simulationId, commandId: simulationId + "-start" };

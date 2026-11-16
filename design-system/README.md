@@ -28,7 +28,7 @@ Feature the most recently successfully opened simulation. Opened runs precede
 unopened runs; the latter use creation time with stable simulation-ID ties. Show
 creation as creation, never as a played date. Keep the example and Create your own
 in empty and populated collections, and browser workspace shortcuts separate.
-Use existing Nuxt UI cards, buttons, fields and alerts; extract Doxvelt components
+Use DSH's shared controls and supported extension points; add Doxvelt components
 only for recurring meaningful customization.
 
 Stage reads as a **continuous script**. Avatar and readable name anchor actor
@@ -56,7 +56,7 @@ review. Preserve useful structural hierarchy without multiplying decorative rule
 
 ## Adoption boundary
 
-Build in the existing Nuxt/Nuxt UI application using shared tokens and components.
+Build in the maintained DSH plugin using shared tokens and host components.
 The private study remains an existing disposable reference, not a maintained app.
 Do not copy its HTML, fixtures, storage model or interaction code into production.
 This contract and the adoption plan stand alone after the preview is removed.

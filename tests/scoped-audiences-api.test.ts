@@ -6,12 +6,12 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createLocalApiServer } from "../src/local-api/server.ts";
-import { StageSession } from "../src/local-ui/lib/stage-session.ts";
-import { validStageBuffer } from "../src/local-ui/lib/stage-buffer.ts";
+import { StageSession } from "../src/client/stage/stage-session.ts";
+import { validStageBuffer } from "../src/client/stage/stage-buffer.ts";
 import { inspectActorContext, projectBranch } from "../src/core/branch-kernel.ts";
 import { validateSimulationArchive } from "../src/core/archive-verifier.ts";
 import { openBranchStore } from "../src/store/branch-sqlite.ts";
-import type { BrowserStorage } from "../src/local-ui/lib/stage-recovery.ts";
+import type { BrowserStorage } from "../src/client/stage/stage-recovery.ts";
 import { DeterministicFakeRuntime } from "./helpers/deterministic-fake-runtime.ts";
 // @ts-expect-error DSH's host adapter is a JavaScript plugin loaded by the desktop host.
 import { savedEpisodeRequest } from "../scripts/dsh-gui-spike/saved-episode.mjs";
