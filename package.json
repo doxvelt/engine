@@ -1,6 +1,6 @@
 {
   "name": "@doxvelt/engine",
-  "version": "0.1.0-alpha.1",
+  "version": "0.2.0-alpha.1",
   "private": true,
   "packageManager": "bun@1.3.13",
   "type": "module",
@@ -19,6 +19,8 @@
     "typecheck": "tsc --noEmit",
     "ui": "node ./scripts/dev.js",
     "ui:build": "node ./scripts/check-dsh.mjs",
+    "desktop:package": "node ./scripts/package-dsh.mjs",
+    "desktop:verify": "node ./scripts/test-dsh-package.mjs",
     "api:build": "node ./scripts/cargo.mjs build --locked",
     "api:test": "node ./scripts/cargo.mjs test --locked",
     "inference:setup": "node ./scripts/setup-inference.ts"

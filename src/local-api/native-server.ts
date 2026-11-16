@@ -8,6 +8,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { type LocalApiOptions } from "./options.ts";
 import { NativeModelHost } from "../agent-runtime/native-host.ts";
 import { RuntimeSelectionError } from "../agent-runtime/selection.ts";
+import { bundledExecutable } from "./bundled-executables.ts";
 
 export type { LocalApiOptions } from "./options.ts";
 type Reply = { status: number; body: unknown; headers: Record<string, string> };
@@ -22,6 +23,8 @@ export function createLocalApiServer(options: LocalApiOptions = {}) { return new
 
 export function nativeApiExecutable(): string {
   if (process.env.DOXVELT_API_EXECUTABLE) return process.env.DOXVELT_API_EXECUTABLE;
+  const bundled = bundledExecutable("doxvelt-api");
+  if (bundled) return bundled;
   const suffix = process.platform === "win32" ? ".exe" : "";
   for (const profile of ["debug", "release"]) {
     const filename = fileURLToPath(new URL(`../../api/target/${profile}/doxvelt-api${suffix}`, import.meta.url));

@@ -6,6 +6,7 @@ import { BlockAssembler } from '@deepseek-ai/dsh-llm';
 import { DshActorTurnRuntime } from '../../src/agent-runtime/dsh.ts';
 import { createLocalApiServer } from '../../src/local-api/server.ts';
 import { EpisodeMemory } from '../../src/memory/episodes.ts';
+import { bundledExecutable } from '../../src/local-api/bundled-executables.ts';
 import {
   activateWorkspace, createCollectionObject, readWorkspaceConfiguration,
   saveCollectionSource, readCollectionSource, startCollectionStory, workspaceCollection, workspaceLocation,
@@ -78,7 +79,7 @@ export async function applyWorkspaceHost(ctx, options = {}) {
     const location = await workspaceLocation(root);
     const reflection = config.reflectionModel ?? config.actorModel;
     const memory = new EpisodeMemory({
-      directory: path.join(location.data, 'memory'), executable: options.reverie ?? process.env.DOXVELT_REVERIE_EXECUTABLE ?? '',
+      directory: path.join(location.data, 'memory'), executable: options.reverie ?? process.env.DOXVELT_REVERIE_EXECUTABLE ?? bundledExecutable('reverie/reverie-engine') ?? '',
       modelKey: reflection ? reflection.provider + ':' + reflection.model : 'unconfigured',
       async reflect(request, signal) {
         if (!reflection) throw new Error('Choose a reflection model in Doxvelt workspace settings before memorizing.');

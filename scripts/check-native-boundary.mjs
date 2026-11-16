@@ -6,7 +6,7 @@ import ts from 'typescript';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const allowed=new Set(['src/core/types.ts','src/core/output-contracts.ts']);
-const queue=['src/cli/index.ts','src/local-api/index.ts','scripts/dev.js','scripts/dsh-gui-spike/host.mjs','scripts/dsh-gui-spike/stage.mjs','scripts/dsh-gui-spike/client.js'].map(p=>path.join(root,p));
+const queue=['src/cli/index.ts','src/local-api/index.ts','scripts/dev.js','scripts/dsh-gui-spike/host.mjs','scripts/dsh-gui-spike/package-host.mjs','scripts/dsh-gui-spike/stage.mjs','scripts/dsh-gui-spike/client.js'].map(p=>path.join(root,p));
 const seen=new Set();
 while(queue.length){
   const filename=queue.pop();if(seen.has(filename))continue;seen.add(filename);

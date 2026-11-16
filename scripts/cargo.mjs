@@ -26,7 +26,10 @@ if (process.platform === "win32" && existsSync(localCargo)) {
   }
 }
 const args = process.argv.slice(2);
-const child = spawn(cargo, [args.shift() ?? "build", "--manifest-path", path.join(root, "api/Cargo.toml"), ...args], {
+const sysroot = args[0] === "--print-sysroot";
+const command = sysroot ? (cargo === "cargo" ? "rustc" : path.join(path.dirname(cargo), "rustc.exe")) : cargo;
+const commandArgs = sysroot ? ["--print", "sysroot"] : [args.shift() ?? "build", "--manifest-path", path.join(root, "api/Cargo.toml"), ...args];
+const child = spawn(command, commandArgs, {
   cwd: root, env, windowsHide: true, stdio: "inherit",
 });
 child.once("error", () => { console.error("Install Rust with Cargo, then run bun run api:build."); process.exitCode = 1; });

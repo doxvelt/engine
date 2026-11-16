@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const [dependencies, chrome, reverie, mode] = process.argv.slice(2);
+const [dependencies, chrome, reverie, mode, packageDirectory] = process.argv.slice(2);
 if (!dependencies || !chrome || !reverie) throw new Error('Usage: node workspace-test.mjs <DSH dependencies> <Chromium> <Reverie executable>');
 const modules = path.resolve(dependencies, 'node_modules');
 const calls = [];
@@ -64,13 +64,13 @@ if (mode === '--desktop') {
   const runtime = path.join(installation, 'resources/runtime');
   const profile = path.join(root, 'harness/profiles/desktop');
   await mkdir(path.join(profile, 'node_modules/@doxvelt'), { recursive: true });
-  const bundle = fileURLToPath(new URL('./', import.meta.url));
+  const bundle = packageDirectory ? path.resolve(packageDirectory) : fileURLToPath(new URL('./', import.meta.url));
   await symlink(bundle, path.join(profile, 'node_modules/@doxvelt/dsh'), process.platform === 'win32' ? 'junction' : 'dir');
   await writeFile(path.join(profile, 'package.json'), JSON.stringify({ name: 'doxvelt-desktop-verification', private: true,
     dependencies: { '@doxvelt/dsh': 'link:' + bundle },
     dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@doxvelt/dsh'] } } }));
   await writeFile(path.join(profile, 'cordis.yml'), '[]');
-  const patches = [{ insert: [{ id: 'test-workspaces', name: bootstrap }] }, { id: 'doxvelt', config: { reverie: path.resolve(reverie) } }, modelPatch,
+  const patches = [{ insert: [{ id: 'test-workspaces', name: bootstrap }] }, ...(packageDirectory ? [] : [{ id: 'doxvelt', config: { reverie: path.resolve(reverie) } }]), modelPatch,
     { id: 'desktop-product-telemetry', disabled: true }, { id: 'product-analytics', disabled: true }];
   await writeFile(path.join(profile, 'cordis.patch.yml'), JSON.stringify(patches));
   executable = path.join(installation, 'DeepSeek Harness.exe');

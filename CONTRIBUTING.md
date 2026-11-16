@@ -1,104 +1,116 @@
-# Contributing
+# Developing Doxvelt
 
-Use Node.js >=24 and Bun 1.3.13 (or compatible). Run `bun install` from the
-repository root. Read [AGENTS.md](AGENTS.md) and its required design contracts
-before engineering changes. Design documents describe targets as well as shipped
-behavior; inspect current source and tests before claiming a feature.
+Player installation is documented in [README.md](README.md). This document
+covers source development and release engineering. Read [AGENTS.md](AGENTS.md)
+and its required design contracts before engineering changes.
 
-## Local Development
+## Source setup
 
-Run the full check:
+Install Node.js 24 or newer, Bun 1.3.13 or compatible, and Rust 1.99.1 or newer
+with Cargo and a working native linker. Windows MSVC builds need the Visual C++
+build tools; GNU builds need a matching MinGW toolchain. Use short checkout
+and temporary paths on Windows to avoid SQLite path-length limits.
+
+```sh
+bun install --frozen-lockfile
+bun run api:build
+```
+
+For the normal desktop application, install **DSH 0.2.2-rc.3** and extract the
+complete [Reverie v0.2.0 Windows package](https://github.com/memrok-com/reverie/releases/tag/v0.2.0),
+including its notices. Open DSH once, then fully quit it. Link this checkout:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-dsh.ps1 -ReverieExecutable "C:\path\to\reverie-engine.exe"
+```
+
+This developer installer builds Rust and links the source plugin. Keep both
+locations stable. Rebuild the API and restart DSH after native changes. This
+source workflow intentionally differs from the self-contained player package.
+
+For an isolated development profile, use `bun run dev -- --help`. Supply the DSH
+CLI entry point with `--dsh`, Reverie with `--reverie`, and optional data storage
+with `--data`. `bun run api` starts the native HTTP listener through its host.
+See [CLI/API and runtime configuration](docs/LOCAL_REFERENCE.md).
+
+## Checks
+
+Run the full check before release or a build-affecting change:
 
 ```sh
 bun run check
+bun run ui:build
 ```
 
-Run the native API or the DSH development host:
+During iteration, prefer the relevant Rust tests (`bun run api:test`), focused
+Node tests, `bun run typecheck`, and `node scripts/check-native-boundary.mjs`.
+The dependency audit rejects runtime imports of the retired TypeScript engine
+and Nuxt. `node scripts/verify-inference-startup.ts` verifies native HTTP startup
+and requires local loopback access.
+
+The DSH browser harness at `scripts/dsh-gui-spike/workspace-test.mjs` covers
+activation, source authoring, play, memory, process restart and four viewport
+sizes. Use its `--desktop` mode with the installed DSH host. Its scripted model
+proves integration behavior rather than live model quality.
+
+## Desktop release package
+
+The first distribution target is Windows x64. Release versions are shared by
+the root and plugin `package.json`. `scripts/desktop-release.json` pins the DSH
+host version and the exact independently published Reverie asset, protocol and
+SHA-256. Never resolve a moving `latest` dependency while packaging a release.
+
+After committing and validating the release source:
 
 ```sh
-bun run api
-bun run ui
+bun run desktop:package
+bun run desktop:verify -- dist/doxvelt-v0.2.0-alpha.1-windows-x64.zip
 ```
 
-Build Rust first with `bun run api:build`. `bun run ui -- --help` describes the
-isolated DSH host; normal desktop installation uses `scripts/install-dsh.ps1`.
+The packager downloads only the pinned Reverie archive, verifies its digest,
+builds Doxvelt with `cargo build --release --locked`, bundles the production
+host's JavaScript dependencies, and includes both engines and their notices.
+For offline builds, supply `--reverie-archive <ZIP>`; the same pinned digest is
+still required. GNU release builders must supply their runtime notice file via
+`DOXVELT_COMPILER_NOTICES` unless using this checkout's local w64devkit toolchain.
+Rust standard-library license files must be installed with the toolchain.
 
-Repository landmarks:
+The outputs are a ZIP and `.zip.sha256` under ignored `dist/`. Release metadata
+records the exact source commit and dependency pin. `--allow-dirty` is only for
+local packaging experiments: the installer and release verifier reject those
+builds. Packaging never publishes or changes Git tags.
 
-- `src/core`: compiler, branch commands, pure head-relative projections, episode closure, ports, and domain types.
-- `src/store`: SQLite branch-event adapter and logical portable-package adapter.
-- `src/cli`: local CLI wrapper.
-- `api`: Rust HTTP routing, validation and native host protocol.
-- `src/local-api`: native process adapter and deployment startup.
-- `src/application/local-operations.ts`: framework-independent application dispatch.
-- `scripts/dsh-gui-spike`: DSH UI and workspace integration.
-- `src/client/stage`: transport/recovery clients used by contract tests.
-- `design-system`: visual tokens, fonts, brand assets, and static UI specimens.
-- `examples/last-crossing`: the playable Home example.
-- `examples/executive-interviews`: the retained authoring/inspection example.
+The verifier extracts the ZIP away from the checkout, checks every payload hash,
+installs and reinstalls into an isolated DSH profile, and exercises workspace
+activation, manual play, memory formation and recall using the bundled engines.
+The complete desktop browser harness must also pass against the extracted
+plugin before publication.
 
-Accepted runtime state is stored once as content revisions and branch-linked commits; derived context is rebuilt from those records.
+Review and merge the release PR before creating the immutable version tag.
+Publish the validated ZIP and checksum as assets on that exact GitHub release;
+GitHub's source ZIP is not the player package. Rebuild from the tagged clean
+commit, reverify, and check the downloaded assets before advertising the pin in
+README. Until publication, README must identify the desktop release as pending.
+Keep existing release assets and tags intact. Reverie v0.2.0 is already published
+with the required binary and notices; a new Reverie release is needed only when
+its actual engine changes.
 
-## Design Docs
+## Repository landmarks
 
-The deeper product and engine model lives in:
+- `api`: authoritative Rust compiler, simulation engine, persistence, commands,
+  drafts, history, archives, workspace authoring and Reverie integration.
+- `src/local-api`: native process transport and deployment startup.
+- `src/application/workspace-collection.ts`: native workspace transport client.
+- `src/agent-runtime`: runtime contracts and credential-owned provider callbacks.
+- `src/cli`: thin native CLI launcher.
+- `scripts/dsh-gui-spike`: maintained DSH workspace UI and host integration.
+- `src/client/stage`: framework-independent transport and recovery clients.
+- `src/core` and `src/store`: retired TypeScript behavioral/interoperability
+  references; do not add product behavior here.
+- `design-system`: canonical visual tokens, fonts, brand assets and specimens.
+- `examples`: shipped source templates and authoring examples.
 
-- [Target Architecture](docs/design/ARCHITECTURE.md)
-- [Branching and Memory](docs/design/BRANCHING_AND_MEMORY.md)
-- [Agent Runtime and Security](docs/design/AGENT_RUNTIME.md)
-- [Ubiquitous Language](docs/design/UBIQUITOUS_LANGUAGE.md)
-- [Subjective Context Model](docs/design/SUBJECTIVE_CONTEXT_MODEL.md)
-- [Entity Dossier Format](docs/design/ENTITY_DOSSIER_FORMAT.md)
-- [System Loop](docs/design/SYSTEM_LOOP.md)
-- [MVP Architecture](docs/design/MVP_ARCHITECTURE.md)
-
-## Architecture Direction
-
-The current implementation includes the branch-aware manual kernel and
-memory/closure slice. Content revisions, commits, message versions, branches,
-audience/access effects, first impressions, perceptions, memory operations,
-jobs, and beliefs are immutable or append-only and projected at a selected
-branch head. Portable schema-v5 archives carry explicit branch origins, memory
-jobs, transitions, and detached operations; schema-v4 archives are validated
-before deterministic upconversion. SQLite is the first adapter behind
-storage-neutral domain/application ports. The Pi actor-turn adapter and durable draft lifecycle are implemented. General
-capability mediation and sandboxed executable helpers remain outside this slice.
-
-Slice 2 derives stable message-perception records from committed audiences and uses them as memory provenance. Generalized perception for non-message world events remains later work.
-
-The reset keeps the proven product ideas:
-
-- prose-first dossiers and source spans;
-- hard turns;
-- singular canonical reality with subjective actor access;
-- beliefs, provenance, audiences, access paths, surfaces, and memories;
-- manual generation and portable simulations;
-- the Nuxt/Nuxt UI workbench and Doxvelt design system.
-
-The target changes the runtime foundation:
-
-- immutable branch-linked turns and events;
-- actor perceptions and memories projected at a branch head;
-- generated drafts separated from accepted reality;
-- Doxvelt-owned memory and capability validation;
-- validated `pi-ai` `Models` plus `pi-agent-core` `Agent` as a replaceable
-  model/auth/tool-loop adapter;
-- local and hosted persistence behind the same domain contracts.
-
-Start with [Target Architecture](docs/design/ARCHITECTURE.md), [Branching and Memory](docs/design/BRANCHING_AND_MEMORY.md), and [Agent Runtime and Security](docs/design/AGENT_RUNTIME.md).
-
-
-See the [CLI/runtime/security reference](docs/LOCAL_REFERENCE.md) for deployment
-configuration and command examples.
-
-## Startup acceptance harness
-
-`node scripts/verify-inference-startup.ts` exercises real native HTTP startup,
-manual mode and the request boundary, and verifies DSH launch help. It requires
-local loopback access. `bun run ui:build` verifies the distributed DSH plugin's
-exports, bundle patch and JavaScript syntax.
-
-The existing DSH workspace browser harness at
-`scripts/dsh-gui-spike/workspace-test.mjs` verifies activation, source authoring,
-play, memory, restart and four viewport sizes in an actual DSH host. Its scripted
-provider establishes integration behavior, rather than live model quality.
+The [Rust migration decision](docs/design/DSH_RUST_MIGRATION.md) supersedes the
+earlier Nuxt, TypeScript-only API and Pi runtime choices in historical documents.
+Preserve immutable branch history, subjective actor access, explicit acceptance,
+memory provenance and local/hosted domain parity across implementation changes.

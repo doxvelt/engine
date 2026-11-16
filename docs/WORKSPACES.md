@@ -3,22 +3,15 @@
 Doxvelt is a DSH plugin. Use the normal desktop application to open a folder,
 activate Doxvelt for that workspace, build a collection, and play episodes in
 ordinary DSH chats. Other workspaces and authoring chats keep their normal
-harness behavior. The desktop host is tested with DSH 0.2.2-rc.1 on Windows.
+harness behavior. The desktop package targets DSH 0.2.2-rc.3 on Windows.
 
 ## Install once
 
-Install this source checkout's dependencies with `bun install --frozen-lockfile`.
-Extract the complete Windows package from Reverie 0.2.0, including its notices.
-Open DSH once, then fully quit it. From this checkout, run:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-dsh.ps1 -ReverieExecutable "C:\path\to\reverie-engine.exe"
-```
-
-The installer uses DSH's plugin manager to link the Doxvelt bundle and configures
-the independent native engine. Keep the checkout and engine in stable locations.
-It preserves the existing profile and backs up the previous patch file. Running
-it again updates the same bundle and its managed configuration block.
+Follow the [player installation instructions](../README.md#install-on-windows).
+The complete desktop package includes both native engines; its installer creates
+a managed copy and registers the Doxvelt plugin through DSH. Keep your workspace
+when updating the plugin. For source builds and developer linking, see
+[CONTRIBUTING.md](../CONTRIBUTING.md#source-setup).
 
 ## Build a collection and start play
 
