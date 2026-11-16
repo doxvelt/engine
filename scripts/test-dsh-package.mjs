@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -11,6 +11,7 @@ if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Des
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 assert.equal(hash(await readFile(archive)), (await readFile(archive + '.sha256', 'utf8')).split(' ')[0], 'ZIP checksum');
 const root = await mkdtemp(path.join(tmpdir(), 'dx-'));
+console.log(`Package verification directory: ${root}`);
 run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath $env:DOXVELT_PACKAGE_ZIP -DestinationPath $env:DOXVELT_PACKAGE_EXTRACT'], {
   env: { ...process.env, DOXVELT_PACKAGE_ZIP: archive, DOXVELT_PACKAGE_EXTRACT: root },
 });
@@ -25,8 +26,13 @@ await writeFile(path.join(profile, 'package.json'), JSON.stringify({ name: 'doxv
 await writeFile(path.join(profile, 'cordis.yml'), '[]\n');
 await writeFile(path.join(profile, 'cordis.patch.yml'), '# Keep unrelated settings\n- id: preserved\n  disabled: true\n# BEGIN DOXVELT INSTALLATION\n- id: doxvelt\n  config:\n    reverie: "old-checkout-path"\n# END DOXVELT INSTALLATION\n');
 const installRoot = path.join(root, 'plugins');
+const dshCommand = run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '(Get-Command dsh).Source']).trim();
+const installEnvironment = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^path$/i.test(name)));
+installEnvironment.Path = [path.dirname(dshCommand), path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0'), path.join(process.env.SystemRoot, 'System32'), process.env.SystemRoot].join(path.delimiter);
+installEnvironment.DSH_HOME = home;
+installEnvironment.NODE_PATH = '';
 const install = () => run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(extracted, 'install.ps1'), '-InstallRoot', installRoot], {
-  cwd: root, env: { ...process.env, DSH_HOME: home },
+  cwd: root, env: installEnvironment,
 });
 console.log(install());
 const patch = await readFile(path.join(profile, 'cordis.patch.yml'), 'utf8');
@@ -35,8 +41,8 @@ assert.doesNotMatch(patch, /old-checkout-path|BEGIN DOXVELT INSTALLATION/);
 const manifestBefore = await readFile(path.join(profile, 'package.json'), 'utf8');
 const installed = JSON.parse(manifestBefore);
 assert.equal(installed.dsh.profile.bundles.filter(name => name === '@doxvelt/dsh').length, 1);
-const plugin = installed.dependencies['@doxvelt/dsh'].replace(/^link:/, '');
-assert.ok(path.resolve(plugin).startsWith(path.resolve(installRoot) + path.sep));
+const plugin = await realpath(path.resolve(profile, installed.dependencies['@doxvelt/dsh'].replace(/^link:/, '')));
+assert.ok(plugin.toLowerCase().startsWith((await realpath(installRoot)).toLowerCase() + path.sep), `Plugin ${plugin} must be inside ${installRoot}`);
 console.log(install());
 assert.equal(await readFile(path.join(profile, 'package.json'), 'utf8'), manifestBefore, 'Reinstallation is idempotent');
 await writeFile(path.join(extracted, 'client.js'), '\n// damaged download\n', { flag: 'a' });

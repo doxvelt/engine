@@ -6,7 +6,7 @@ and its required design contracts before engineering changes.
 
 ## Source setup
 
-Install Node.js 24 or newer, Bun 1.3.13 or compatible, and Rust 1.99.1 or newer
+Install Node.js 24 or newer, Bun 1.4.4, and Rust 1.99.1 or newer
 with Cargo and a working native linker. Windows MSVC builds need the Visual C++
 build tools; GNU builds need a matching MinGW toolchain. Use short checkout
 and temporary paths on Windows to avoid SQLite path-length limits.

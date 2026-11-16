@@ -48,8 +48,7 @@ await cp(reverie, path.join(native, 'reverie'), { recursive: true });
 run(process.execPath, [path.join(root, 'scripts/cargo.mjs'), 'build', '--release', '--locked'], { cwd: root, stdio: 'inherit' });
 await copyFile(path.join(root, 'api/target/release/doxvelt-api.exe'), path.join(native, 'doxvelt-api.exe'));
 const meta = path.join(staging, 'bundle.json');
-run('bun', ['build', 'scripts/dsh-gui-spike/package-host.mjs', '--target=node', '--format=esm', '--packages=bundle', '--env=disable',
-  `--outfile=${path.join(directory, 'host.mjs')}`, `--metafile=${meta}`], { cwd: root, stdio: 'inherit' });
+run('bun', ['scripts/bundle-dsh.mjs', path.join(directory, 'host.mjs'), meta], { cwd: root, stdio: 'inherit' });
 const metafile = JSON.parse(await readFile(meta, 'utf8'));
 for (const output of Object.values(metafile.outputs)) {
   if (output.imports.some(item => item.external && !item.path.startsWith('node:'))) throw new Error('Release host has an unbundled dependency.');
