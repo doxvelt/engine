@@ -76,7 +76,11 @@ export class NativeApiServer extends EventEmitter {
     child.once("close", () => lines.close());
     lines.on("line", line => {
       let message: Record<string, unknown>;
-      try { message = JSON.parse(line) as Record<string, unknown>; }
+      try {
+        const value: unknown = JSON.parse(line);
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid envelope.");
+        message = value as Record<string, unknown>;
+      }
       catch { this.fail(new Error("Native API returned an invalid protocol envelope.")); child.kill(); return; }
       if (typeof message.cancelCall === "string") this.callbacks.get(message.cancelCall)?.abort();
       else if (typeof message.callId === "string") void this.answer(message.callId, message.method, message.params);
@@ -84,6 +88,10 @@ export class NativeApiServer extends EventEmitter {
         const request = this.pending.get(message.id); this.pending.delete(message.id);
         if (message.error) request?.reject(new Error((message.error as { message: string }).message));
         else request?.resolve(message.result);
+      }
+      else if (message.error) {
+        this.fail(new Error("Native API rejected a protocol envelope."));
+        child.kill();
       }
     });
   }
@@ -96,7 +104,12 @@ export class NativeApiServer extends EventEmitter {
   }
   private send(message: unknown): void {
     if (this.failure || !this.child || this.child.stdin.destroyed || this.child.stdin.writableEnded) throw this.failure ?? new Error("Native API is closed.");
-    this.child.stdin.write(JSON.stringify(message) + "\n");
+    const serialized = JSON.stringify(message, (key: string, value: unknown) => {
+      if (!key.isWellFormed() || (typeof value === "string" && !value.isWellFormed()))
+        throw new Error("Native API input must contain well-formed Unicode text.");
+      return value;
+    });
+    this.child.stdin.write(serialized + "\n");
   }
   private async answer(id: string, method: unknown, params: unknown): Promise<void> {
     const controller = new AbortController(); this.callbacks.set(id, controller);

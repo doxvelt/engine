@@ -42,7 +42,18 @@ pub fn assert_valid_graph(links: &[AccessLink]) -> Result<()> {
     Ok(())
 }
 pub fn apply_change(links: &[AccessLink], change: &AccessChange) -> Vec<AccessLink> {
-    let mut next = links.to_vec();
+    // Match the reference Map: keep first-key order and the last edge's provenance.
+    let mut next: Vec<AccessLink> = Vec::new();
+    let mut positions = std::collections::HashMap::<_, usize>::new();
+    for link in links {
+        let key = (&link.member, &link.container, &link.mode);
+        if let Some(index) = positions.get(&key) {
+            next[*index] = link.clone();
+        } else {
+            positions.insert(key, next.len());
+            next.push(link.clone());
+        }
+    }
     let position = next.iter().position(|link| {
         link.member == change.member && link.container == change.container && link.mode == "member"
     });
@@ -115,6 +126,40 @@ mod tests {
                 quote: "membership".into(),
             },
         }
+    }
+    #[test]
+    fn changes_collapse_duplicate_edges_with_last_provenance_and_first_key_order() {
+        let mut last = edge("jade", "mafia");
+        last.source_span.quote = "last authored membership".into();
+        let links = vec![edge("jade", "mafia"), edge("mafia", "board"), last];
+        let revoke = AccessChange {
+            action: AccessAction::Revoke,
+            member: "jade".into(),
+            container: "mafia".into(),
+            reason: None,
+        };
+        let revoked = apply_change(&links, &revoke);
+        assert!(resolve_paths("jade", &revoked).is_empty());
+        assert_eq!(revoked.len(), 1);
+        let grant = AccessChange {
+            action: AccessAction::Grant,
+            reason: Some("runtime grant".into()),
+            ..revoke
+        };
+        let granted = apply_change(&links, &grant);
+        assert_eq!(granted.len(), 2);
+        assert_eq!(granted[0].member, "jade");
+        assert_eq!(granted[0].source_span.quote, "runtime grant");
+        assert_eq!(granted[1].member, "mafia");
+        let unrelated = AccessChange {
+            action: AccessAction::Revoke,
+            member: "absent".into(),
+            container: "absent".into(),
+            reason: None,
+        };
+        let collapsed = apply_change(&links, &unrelated);
+        assert_eq!(collapsed[0].source_span.quote, "last authored membership");
+        assert_eq!(links.len(), 3);
     }
     #[test]
     fn nested_membership_is_downward_and_cycles_fail_without_mutating_the_graph() {

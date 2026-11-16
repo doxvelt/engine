@@ -153,7 +153,7 @@ async fn run(bridge: &Bridge, operation: Operation, database: String) -> Result<
     })
     .await?;
     let body = operation.body;
-    let (command, retry, recall, cancellable) = if creating {
+    let (command, retry, recall) = if creating {
         reject_runtime_selection(&body)?;
         if body
             .get("draftingPolicy")
@@ -239,8 +239,7 @@ async fn run(bridge: &Bridge, operation: Operation, database: String) -> Result<
             }
             command.payload["routing"] = routing;
         }
-        let cancellable = knowledge && description["memoryEnabled"] == true;
-        let recall = if cancellable {
+        let recall = if knowledge && description["memoryEnabled"] == true {
             let recalled = crate::episode_api::recall(
                 bridge,
                 &database,
@@ -259,7 +258,7 @@ async fn run(bridge: &Bridge, operation: Operation, database: String) -> Result<
         } else {
             None
         };
-        (command, None, recall, cancellable)
+        (command, None, recall)
     } else {
         let revised = operation.operation == "draft.revise";
         let allowed: &[&str] = if revised {
@@ -323,39 +322,45 @@ async fn run(bridge: &Bridge, operation: Operation, database: String) -> Result<
         } else {
             Some(string(&original, "id")?.to_owned())
         };
-        (command, retry, None, false)
+        (command, retry, None)
     };
-    let prepared = store(&database, move |store| {
-        drafts::prepare_actor_draft(
+    let lease_bridge = bridge.clone();
+    let lease_database = database.clone();
+    let (prepared, lease) = store(&database, move |store| {
+        let prepared = drafts::prepare_actor_draft(
             store,
             command,
             PrepareOptions {
                 retry_draft_id: retry.as_deref(),
                 episode_recall: recall.as_ref(),
             },
-        )
+        )?;
+        // Own cleanup from the moment reservation commits, even if the awaiting
+        // request disappears while this blocking worker is returning its result.
+        let lease = (!prepared.replayed).then(|| GenerationLease {
+            bridge: lease_bridge,
+            database: lease_database,
+            draft: prepared.draft.clone(),
+            identity: json!({}),
+            observation: Observation::default(),
+            finished: false,
+        });
+        Ok((prepared, lease))
     })
     .await?;
     if prepared.replayed {
         return Ok(json!({"draft":stage_draft(&prepared.draft),"replayed":true}));
     }
+    let mut lease = lease.expect("Newly reserved generation owns a cleanup lease.");
     let frozen = prepared.draft.clone();
     if let Some(preserved) = store(&database, move |store| {
         drafts::finish_preserved(store, &frozen)
     })
     .await?
     {
+        lease.finished = true;
         return Ok(json!({"draft":stage_draft(&preserved),"replayed":false}));
     }
-    let mut lease = GenerationLease {
-        bridge: bridge.clone(),
-        database: database.clone(),
-        draft: prepared.draft.clone(),
-        identity: json!({}),
-        observation: Observation::default(),
-        cancellable,
-        finished: false,
-    };
     let outcome = drive_model(bridge, &prepared.draft, |identity, observation| {
         if let Some(identity) = identity {
             lease.identity = identity;
@@ -520,7 +525,6 @@ struct GenerationLease {
     draft: Value,
     identity: Value,
     observation: Observation,
-    cancellable: bool,
     finished: bool,
 }
 impl Drop for GenerationLease {
@@ -532,7 +536,7 @@ impl Drop for GenerationLease {
         let _ = crate::publish(
             json!({"callId":id,"method":"model.close","params":{"draftId":self.draft["id"]}}),
         );
-        if self.cancellable && !self.finished {
+        if !self.finished {
             let database = self.database.clone();
             let draft = self.draft.clone();
             let identity = self.identity.clone();

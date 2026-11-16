@@ -120,17 +120,19 @@ pub fn run_memory_job(
         );
     }
     let job = repository.start_memory_job(owner, simulation, id)?;
-    let closure = match generate_closure(repository, &job, generator) {
-        Ok(result) => result,
-        Err(error) => {
-            repository.settle_memory_job(&job, None)?;
-            return Err(error);
-        }
-    };
-    let completed = repository.settle_memory_job(&job, Some(&closure))?;
-    Ok(
-        json!({"job":completed,"operations":closure["memoryOperations"],"closure":closure,"replayed":false}),
-    )
+    let result = (|| {
+        let closure = generate_closure(repository, &job, generator)?;
+        let completed = repository.settle_memory_job(&job, Some(&closure))?;
+        Ok(
+            json!({"job":completed,"operations":closure["memoryOperations"],"closure":closure,"replayed":false}),
+        )
+    })();
+    if result.is_err() {
+        // Completion can fail after generation, too. Preserve the original error
+        // if storage also prevents recording this attempt's failure.
+        let _ = repository.settle_memory_job(&job, None);
+    }
+    result
 }
 
 fn generate_closure(

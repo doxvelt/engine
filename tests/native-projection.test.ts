@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { appendFile, cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -39,10 +39,14 @@ for (const scoped of [false, true]) {
   test(`native branch projections preserve memory lineage, corrections and immutable perceptions (${scoped ? "scoped" : "legacy"})`, async () => {
     const root = await mkdtemp(path.join(tmpdir(), "doxvelt-native-replay-"));
     const database = path.join(root, "runtime.sqlite");
+    const source = path.join(root, "source");
+    await cp(path.resolve("examples/executive-interviews"), source, { recursive: true });
+    await appendFile(path.join(source, "connections/leadership-access.md"), "\n@ceo gives @cfo access to @ceo recovery-planning context. :access:member\n");
     const store = await openBranchStore(database).open();
     try {
       const base = { ownerScope: "local", simulationId: "sim", branchId: "main" };
-      const started = await startBranchSimulation(store, { ...base, commandId: "start", workspacePath: path.resolve("examples/executive-interviews") });
+      const started = await startBranchSimulation(store, { ...base, commandId: "start", workspacePath: source });
+      assert.equal(projectBranch(store, base).accessLinks.filter(link => link.member === "cfo" && link.container === "ceo").length, 2);
       let sequence = 0;
       const play = (text: string) => commitManualTurn(store, { ...base, expectedHead: store.getBranch("local", "sim", "main")!.headCommitId,
         commandId: "turn-" + ++sequence, payload: { actorId: "ceo", text, audience: ["cfo", "student-team"],
@@ -53,6 +57,7 @@ for (const scoped of [false, true]) {
         commandId: "closure-" + ++sequence, payload: { label } }, generator);
       await check(database, store, "main");
       const first = play(scoped ? "#CFO(private) Public opening." : "Opening.");
+      assert.ok(!projectBranch(store, base).accessLinks.some(link => link.member === "cfo" && link.container === "ceo"));
       await close("Earlier");
       const target = play(scoped ? "#CFO(original private) Public middle." : "Original middle.");
       await close("Affected");

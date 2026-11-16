@@ -10,17 +10,23 @@ import { openBranchStore } from "../src/store/branch-sqlite.ts";
 import type { ActorTurnRuntime } from "../src/agent-runtime/contracts.ts";
 import { EpisodeMemory } from "../src/memory/episodes.ts";
 
-test("native generation abort settles a cancellable candidate without consuming direction or committing a turn", async () => {
+for (const policy of ["default", "audience-proposal-v1", "knowledge-without-memory", "knowledge-with-memory"]) {
+test(`native generation abort settles ${policy} without consuming direction and allows retry`, async () => {
   const root = await mkdtemp(path.join(tmpdir(), "doxvelt-native-abort-")); const database = path.join(root, "story.sqlite");
   let started!: () => void;
   const running = new Promise<void>(resolve => { started = resolve; });
+  let retrying = false;
   const runtime: ActorTurnRuntime = { identity: { id: "abort-test", version: "v1" }, async *runActorTurn(_request, signal) {
+    if (retrying) {
+      yield { type: "completed", text: policy === "default" ? "Recovered draft." : JSON.stringify({ text: "Recovered draft.", audience: ["corin", "mara"] }), stopReason: "stop" };
+      return;
+    }
     yield { type: "usage", usage: { inputTokens: 2 } };
     started();
     await new Promise<void>((_resolve, reject) => signal!.addEventListener("abort", () => reject(new Error("Private provider abort")), { once: true }));
   } };
   const memory = new EpisodeMemory({directory:path.join(root,"memory"),executable:"unused",modelKey:"unused",reflect:async()=>{throw new Error("No reflection expected");}});
-  const server = createLocalApiServer({ dbPath: database, actorTurnRuntime: runtime, episodeMemory: memory });
+  const server = createLocalApiServer({ dbPath: database, actorTurnRuntime: runtime, ...(policy === "knowledge-with-memory" ? { episodeMemory: memory } : {}) });
   const request = (target: string, body: unknown) => new Promise<{ status: number; body: any }>(resolve => {
     const incoming = new IncomingMessage(new Socket()); incoming.method = "POST"; incoming.url = target; incoming.headers = { "content-type": "application/json" };
     incoming.push(JSON.stringify(body)); incoming.push(null);
@@ -33,10 +39,10 @@ test("native generation abort settles a cancellable candidate without consuming 
     assert.equal(start.status, 200); const head = start.body.root.id as string;
     const whisper = await request("/simulations/sim/whispers", { branchId: "main", expectedHead: head, commandId: "whisper", targetActorId: "corin", text: "Private direction." });
     const generation = request("/simulations/sim/drafts", { branchId: "main", expectedHead: head, commandId: "generate", actorId: "corin", audience: ["mara"],
-      stageWhisperIds: [whisper.body.id], draftingPolicy: "actor-knowledge-v1", completeWhisper: "Speak to Mara." });
+      stageWhisperIds: [whisper.body.id], ...(policy === "default" ? {} : { draftingPolicy: policy.startsWith("knowledge") ? "actor-knowledge-v1" : policy, completeWhisper: "Speak to Mara." }) });
     await running; server.closeAllConnections();
     assert.equal((await generation).status, 503);
-    const store = await openBranchStore(database).open();
+    const store = await openBranchStore(database).open(); let draftId: string;
     try {
       let draft = store.listRecoverableActorTurnDrafts("local", "sim", "main")[0]!;
       for (let i = 0; i < 150 && draft.status === "generating"; i++) {
@@ -44,12 +50,17 @@ test("native generation abort settles a cancellable candidate without consuming 
       }
       assert.equal(draft.status, "failed"); assert.equal(draft.failure!.code, "runtime_failure");
       assert.equal(draft.failure!.provenance.stopReason, "aborted"); assert.equal(draft.failure!.provenance.usage.inputTokens, 2);
+      draftId = draft.id;
       assert.equal(store.getBranch("local", "sim", "main")!.headCommitId, head);
       assert.deepEqual(store.listPendingStageWhispers("local", "sim", "main", head, "corin").map(w => w.id), [whisper.body.id]);
       assert.equal(store.listAncestors("local", "sim", head).length, 1);
     } finally { store.close(); }
+    retrying = true;
+    const retried = await request(`/simulations/sim/drafts/${draftId}/retry`, { commandId: "retry" });
+    assert.equal(retried.status, 200); assert.equal(retried.body.draft.status, "ready");
   } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); memory.close(); await rm(root, { recursive: true, force: true }); }
 });
+}
 
 for (const phase of ["provider"]) {
   test(`native historical cancellation during ${phase} preserves the source path and allows a frozen retry`, async () => {
