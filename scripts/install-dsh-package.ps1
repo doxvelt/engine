@@ -6,6 +6,13 @@ $ErrorActionPreference = 'Stop'
 if ($env:PROCESSOR_ARCHITEW6432 -or $env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'This package requires Windows x64 PowerShell.' }
 if ($Profile -notmatch '^[a-zA-Z0-9_-]+$') { throw 'Invalid DSH profile name.' }
 
+function Get-PayloadHash([string]$File) {
+    $stream = [IO.File]::OpenRead($File)
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+    finally { $stream.Dispose(); $algorithm.Dispose() }
+}
+
 function Test-Payload([string]$Directory) {
     $Directory = [IO.Path]::GetFullPath($Directory).TrimEnd('\')
     $prefix = $Directory + '\'
@@ -23,7 +30,7 @@ function Test-Payload([string]$Directory) {
     foreach ($entry in Get-ChildItem -LiteralPath $Directory -Recurse -Force) {
         if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Package files may not be links.' }
         if ($entry.PSIsContainer -or $entry.FullName -eq (Join-Path $Directory 'SHA256SUMS.txt')) { continue }
-        if (!$expected.ContainsKey($entry.FullName) -or (Get-FileHash -LiteralPath $entry.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected[$entry.FullName]) {
+        if (!$expected.ContainsKey($entry.FullName) -or (Get-PayloadHash $entry.FullName) -ne $expected[$entry.FullName]) {
             throw ('Package verification failed: ' + $entry.Name)
         }
         $expected.Remove($entry.FullName)
@@ -47,7 +54,7 @@ if (!(Test-Path -LiteralPath $doxveltManifest -PathType Leaf)) { throw 'Open DSH
 
 # Install a versioned, verified copy; the download folder is disposable afterward.
 $doxveltManagedRoot = [IO.Path]::GetFullPath($InstallRoot).TrimEnd('\')
-$doxveltDigest = (Get-FileHash -LiteralPath (Join-Path $doxveltSource 'SHA256SUMS.txt') -Algorithm SHA256).Hash.ToLowerInvariant()
+$doxveltDigest = Get-PayloadHash (Join-Path $doxveltSource 'SHA256SUMS.txt')
 $doxveltDestination = Join-Path $doxveltManagedRoot ($doxveltRelease.version + '-windows-x64-' + $doxveltDigest.Substring(0, 12))
 New-Item -ItemType Directory -Path $doxveltManagedRoot -Force | Out-Null
 if (!(Test-Path -LiteralPath $doxveltDestination)) {
@@ -61,7 +68,7 @@ if (!(Test-Path -LiteralPath $doxveltDestination)) {
     Move-Item -LiteralPath $doxveltTemporary -Destination $doxveltDestination
 }
 Test-Payload $doxveltDestination
-if ((Get-FileHash -LiteralPath (Join-Path $doxveltDestination 'SHA256SUMS.txt') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $doxveltDigest) { throw 'Existing installation does not match this package.' }
+if ((Get-PayloadHash (Join-Path $doxveltDestination 'SHA256SUMS.txt')) -ne $doxveltDigest) { throw 'Existing installation does not match this package.' }
 & $doxveltCli plugin --profile $Profile add ('link:' + $doxveltDestination.Replace('\', '/')) --offline --ignore-scripts
 if ($LASTEXITCODE -ne 0) { throw 'DSH could not install Doxvelt. Fully quit DSH and retry; see its output above.' }
 $doxveltSelected = Get-Content -LiteralPath $doxveltManifest -Raw | ConvertFrom-Json
