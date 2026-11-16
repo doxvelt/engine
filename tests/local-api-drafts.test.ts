@@ -520,7 +520,7 @@ test("Stage retry captures original routing and whispers; failed drafts can be d
   assert.ok(state.actors.every((actor: object) => Object.keys(actor).toSorted().join() === "id,kind,name"));
 });
 
-test("draft discovery survives API restart with ready, failed and in-progress records", async (t) => {
+test("draft discovery preserves terminal records and settles interrupted generation across API restart", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxvelt-stage-restart-"));
   const dbPath = path.join(root, "runtime.sqlite");
   let finish: () => void = () => {};
@@ -561,9 +561,15 @@ test("draft discovery survives API restart with ready, failed and in-progress re
   server = createLocalApiServer({ dbPath, actorTurnRuntime: runtime });
   base = await listen();
   const recovered = await (await fetch(`${base}/simulations/sim/drafts?branchId=main`)).json();
-  assert.deepEqual(recovered, snapshot);
-  // A restarted API can discard stranded work without adding canonical events.
+  assert.deepEqual(recovered.drafts.slice(0, 2), snapshot.drafts.slice(0, 2));
+  // Closing the first host interrupts its generation; restart must not strand it.
   const pending = snapshot.drafts.find(draft => draft.status === "generating")!;
+  const interrupted = recovered.drafts.find((draft: { id: string }) => draft.id === pending.id);
+  assert.equal(interrupted.status, "failed");
+  assert.equal(interrupted.failure.code, "runtime_failure");
+  assert.equal(interrupted.failure.provenance.stopReason, "aborted");
+  assert.equal(recovered.drafts.length, snapshot.drafts.length);
+  // A restarted API can discard interrupted work without adding canonical events.
   assert.equal((await post(base, `/simulations/sim/drafts/${pending.id}/discard`, { commandId: "discard-stranded" })).status, 200);
   finish(); await inProgress;
   assert.deepEqual((await (await fetch(`${base}/simulations/sim/transcript`)).json()).transcript, []);
