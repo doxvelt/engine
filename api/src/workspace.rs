@@ -27,6 +27,12 @@ pub async fn execute(params: Value, mut abort: watch::Receiver<u64>) -> Reply {
     };
     let cancellation = CancelOnDrop(Arc::new(AtomicBool::new(false)));
     let cancelled = cancellation.0.clone();
+    if action.starts_with("archive.") {
+        return tokio::select! {
+            reply=crate::archive_api::execute(directory,action,params["body"].clone(),cancelled)=>reply,
+            _=abort.changed()=>Reply::error(503,"Workspace transfer was cancelled. Review the destination before retrying."),
+        };
+    }
     let worker = tokio::task::spawn_blocking(move || {
         doxvelt_engine::collection::execute(&directory, &action, &params["body"], &|| {
             cancelled.load(Ordering::SeqCst)

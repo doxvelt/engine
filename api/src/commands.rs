@@ -399,19 +399,56 @@ fn build_manual_commit_with(
         message["performance"] = serde_json::to_value(&scoped.performance).unwrap();
     }
     let mut events = vec![json!({"type":"message_accepted","message":message})];
-    let p = project_branch(
-        reader,
-        &command.owner_scope,
-        &command.simulation_id,
-        &command.branch_id,
-        Some(&command.expected_head),
+    // Current-policy turns without access changes use no historical state:
+    // receipts do not derive first impressions, and audience validation only
+    // needs pinned identities. Preserve full projection for legacy turns,
+    // access mutations and historical selections, including all their checks.
+    let branch = reader
+        .branch(
+            &command.owner_scope,
+            &command.simulation_id,
+            &command.branch_id,
+        )?
+        .ok_or_else(|| missing("Branch", &command.branch_id))?;
+    let needs_access = payload
+        .get("accessChanges")
+        .is_some_and(|v| v.as_array().is_none_or(|a| !a.is_empty()));
+    let p = if payload["knowledgePolicy"] != KNOWLEDGE_POLICY
+        || needs_access
+        || branch.head_commit_id != command.expected_head
+    {
+        Some(project_branch(
+            reader,
+            &command.owner_scope,
+            &command.simulation_id,
+            &command.branch_id,
+            Some(&command.expected_head),
+        )?)
+    } else {
+        if reader
+            .commit(
+                &command.owner_scope,
+                &command.simulation_id,
+                &command.expected_head,
+            )?
+            .is_none()
+        {
+            return Err(missing("Commit", &command.expected_head));
+        }
+        None
+    };
+    append_effect_events(
+        &compiled,
+        p.as_ref()
+            .map_or_else(|| compiled.access_links.clone(), |p| p.access_links.clone()),
+        payload,
+        &mut events,
     )?;
-    append_effect_events(&compiled, p.access_links.clone(), payload, &mut events)?;
     if payload["knowledgePolicy"] != KNOWLEDGE_POLICY {
         events.extend(first_impression_events(
             &compiled,
             &audience,
-            &p.first_impressions,
+            &p.as_ref().unwrap().first_impressions,
         ));
     }
     let pending = reader.pending_whispers(

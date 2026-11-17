@@ -11,6 +11,7 @@ import {
   activateWorkspace, createCollectionObject, readWorkspaceConfiguration,
   saveCollectionSource, readCollectionSource, startCollectionStory, workspaceCollection, workspaceLocation,
   WorkspaceCollectionError, configurationRevision, saveWorkspaceConfiguration,
+  exportWorkspaceArchive, previewWorkspaceImport, importWorkspaceArchive,
 } from '../../src/application/workspace-collection.ts';
 import { savedEpisodeRequest } from './saved-episode.mjs';
 
@@ -142,6 +143,9 @@ export async function applyWorkspaceHost(ctx, options = {}) {
     if (command.mode === 'collection-read') return Response.json(await readCollectionSource(root, command.path));
     if (command.mode === 'collection-save') return Response.json(await saveCollectionSource(root, command.source, signal));
     const service = await serviceFor(root, config);
+    if (command.mode === 'archive-export') return Response.json(await exportWorkspaceArchive(root, command.targetDir, service.memory, signal));
+    if (command.mode === 'archive-preview-import') return Response.json(await previewWorkspaceImport(root, command.packageDir, command.targetDir, service.memory, signal));
+    if (command.mode === 'archive-import') return Response.json(await importWorkspaceArchive(root, command.packageDir, command.targetDir, command.archiveHash, service.memory, signal));
     if (command.mode === 'create-story') return Response.json(await startCollectionStory(root, command.setup, service.memory, signal));
     const response = await savedEpisodeRequest(service.origin, session, command, signal);
     if (!response) throw new WorkspaceCollectionError('episode-required', 'Create or open a Doxvelt episode first.', 409);

@@ -95,9 +95,32 @@ mod tests {
 }
 
 impl Store {
+    /// One coherent workspace history snapshot, independent of local navigation.
+    pub fn export_all(&self, owner: &str) -> Result<Vec<SimulationArchive>> {
+        let _snapshot = self.connection.unchecked_transaction().map_err(sql_error)?;
+        let ids = self
+            .connection
+            .prepare("SELECT id FROM branch_simulations WHERE owner_scope=? ORDER BY id")
+            .map_err(sql_error)?
+            .query_map([owner], |r| r.get::<_, String>(0))
+            .map_err(sql_error)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(sql_error)?;
+        ids.iter()
+            .map(|id| self.export_simulation(owner, id))
+            .collect()
+    }
     pub fn import_simulation(&mut self, archive: SimulationArchive) -> Result<()> {
+        self.import_simulation_cancellable(archive, &|| false)
+    }
+    pub fn import_simulation_cancellable(
+        &mut self,
+        archive: SimulationArchive,
+        cancel: &dyn Fn() -> bool,
+    ) -> Result<()> {
         use crate::{archive, projection::string};
-        let archive = archive::normalize(archive)?;
+        let archive = archive::normalize_cancellable(archive, cancel)?;
+        archive::check_cancelled(cancel)?;
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -106,7 +129,7 @@ impl Store {
         let simulation = &archive.simulation;
         transaction
             .execute(
-                "INSERT INTO content_revisions VALUES (?,?,?,?,?)",
+                "INSERT OR IGNORE INTO content_revisions VALUES (?,?,?,?,?)",
                 params![
                     revision.id,
                     revision.owner_scope,
@@ -116,6 +139,17 @@ impl Store {
                 ],
             )
             .map_err(sql_error)?;
+        let existing: (String,String,String,String) = transaction.query_row("SELECT owner_scope,digest,compiled_json,created_at FROM content_revisions WHERE id=?",[&revision.id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).map_err(sql_error)?;
+        if existing.0 != revision.owner_scope
+            || existing.1 != revision.digest
+            || parse::<Value>(existing.2).map_err(sql_error)?
+                != serde_json::to_value(&revision.compiled).unwrap()
+            || existing.3 != revision.created_at
+        {
+            return Err(invalid(
+                "Imported content revision conflicts with existing content.",
+            ));
+        }
         transaction
             .execute(
                 "INSERT INTO branch_simulations VALUES (?,?,?,?,?,?,?)",
@@ -130,41 +164,27 @@ impl Store {
                 ],
             )
             .map_err(sql_error)?;
-        let mut inserted = std::collections::HashSet::new();
-        while inserted.len() < archive.commits.len() {
-            let ready: Vec<_> = archive
-                .commits
-                .iter()
-                .filter(|c| {
-                    !inserted.contains(&c.id)
-                        && c.parent_commit_id
-                            .as_ref()
-                            .is_none_or(|p| inserted.contains(p))
-                })
-                .collect();
-            if ready.is_empty() {
-                return Err(invalid("Archive commit ancestry is cyclic."));
-            }
-            for c in ready {
-                transaction
-                    .execute(
-                        "INSERT INTO commits VALUES (?,?,?,?,?,?,?,?)",
-                        params![
-                            c.id,
-                            c.owner_scope,
-                            c.simulation_id,
-                            c.parent_commit_id,
-                            c.kind,
-                            c.command_id,
-                            json_text(&c.events),
-                            c.created_at
-                        ],
-                    )
-                    .map_err(sql_error)?;
-                inserted.insert(c.id.clone());
-            }
+        let reader = archive::ArchiveReader::cancellable(&archive, cancel);
+        for c in reader.ordered_commits()? {
+            archive::check_cancelled(cancel)?;
+            transaction
+                .execute(
+                    "INSERT INTO commits VALUES (?,?,?,?,?,?,?,?)",
+                    params![
+                        c.id,
+                        c.owner_scope,
+                        c.simulation_id,
+                        c.parent_commit_id,
+                        c.kind,
+                        c.command_id,
+                        json_text(&c.events),
+                        c.created_at
+                    ],
+                )
+                .map_err(sql_error)?;
         }
         for b in &archive.branches {
+            archive::check_cancelled(cancel)?;
             transaction
                 .execute(
                     "INSERT INTO branches VALUES (?,?,?,?,?,?,?)",
@@ -181,6 +201,7 @@ impl Store {
                 .map_err(sql_error)?;
         }
         for w in &archive.stage_whispers {
+            archive::check_cancelled(cancel)?;
             transaction
                 .execute(
                     "INSERT INTO draft_stage_whispers VALUES (?,?,?,?,?,?,?,?,?)",
@@ -199,6 +220,7 @@ impl Store {
                 .map_err(sql_error)?;
         }
         for c in &archive.command_results {
+            archive::check_cancelled(cancel)?;
             transaction
                 .execute(
                     "INSERT INTO command_results VALUES (?,?,?,?,?,?,?)",
@@ -281,6 +303,7 @@ impl Store {
                 )
                 .map_err(sql_error)?;
         }
+        archive::check_cancelled(cancel)?;
         transaction.commit().map_err(sql_error)
     }
 

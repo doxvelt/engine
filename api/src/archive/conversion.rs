@@ -1,4 +1,4 @@
-use super::{SimulationArchive, validate};
+use super::{SimulationArchive, check_cancelled, validate_cancellable};
 use crate::{
     error::{EngineError, Result},
     identity::{domain_id, fingerprint},
@@ -6,14 +6,17 @@ use crate::{
 };
 use serde_json::{Value, json};
 
-pub(super) fn upconvert(mut archive: SimulationArchive) -> Result<SimulationArchive> {
+pub(super) fn upconvert(
+    mut archive: SimulationArchive,
+    cancel: &dyn Fn() -> bool,
+) -> Result<SimulationArchive> {
     // Validate untouched legacy results before replacing them with checkpoints.
     let mut untouched = archive.clone();
     untouched.schema_version = 5;
     untouched.memory_jobs = Some(Vec::new());
     untouched.memory_job_transitions = Some(Vec::new());
     untouched.detached_memory_operations = Some(Vec::new());
-    validate(&untouched)?;
+    validate_cancellable(&untouched, cancel)?;
     if archive
         .command_results
         .iter()
@@ -32,6 +35,7 @@ pub(super) fn upconvert(mut archive: SimulationArchive) -> Result<SimulationArch
     let mut transitions = Vec::new();
     let mut detached = Vec::new();
     for commit in &mut archive.commits {
+        check_cancelled(cancel)?;
         let Some(index) = commit
             .events
             .iter()

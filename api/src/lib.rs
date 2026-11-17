@@ -31,3 +31,4 @@ pub mod scene;
 pub mod scene_store;
 pub mod source;
 pub mod storage;
+pub mod workspace_archive;
