@@ -34,3 +34,9 @@ export const createCollectionObject=(directory:string,input:{kind:"world"|"scena
 export const readCollectionSource=(directory:string,path:string)=>native<{root:string;path:string;text:string}>(directory,"source.read",{path});
 export const saveCollectionSource=(directory:string,input:{path:string;text:string;expectedRevision:string|null},signal?:AbortSignal)=>native<{path:string;revision:string}>(directory,"source.save",input,signal);
 export const startCollectionStory=(directory:string,setup:StorySetup,memory:Pick<EpisodeMemory,"nativeConfiguration">,signal?:AbortSignal)=>native<SavedStory>(directory,"story.start",{setup,memoryDirectory:memory.nativeConfiguration.directory},signal);
+
+export type ArchiveSummary={archiveHash:string;targetDir:string;stories:number;branches:number;memoryPublications:number;characterMemories:number;sourceFiles:number;modelCalls:0};
+export type ArchiveResult={status:"ready"|"exported"|"imported"|"current";summary:ArchiveSummary;workspaceDir?:string;next?:string};
+export const exportWorkspaceArchive=(directory:string,targetDir:string,memory:Pick<EpisodeMemory,"nativeConfiguration">,signal?:AbortSignal)=>native<ArchiveResult>(directory,"archive.export",{targetDir,memory:memory.nativeConfiguration},signal);
+export const previewWorkspaceImport=(directory:string,packageDir:string,targetDir:string,memory:Pick<EpisodeMemory,"nativeConfiguration">,signal?:AbortSignal)=>native<ArchiveResult>(directory,"archive.preview-import",{packageDir,targetDir,memory:memory.nativeConfiguration},signal);
+export const importWorkspaceArchive=(directory:string,packageDir:string,targetDir:string,archiveHash:string,memory:Pick<EpisodeMemory,"nativeConfiguration">,signal?:AbortSignal)=>native<ArchiveResult>(directory,"archive.import",{packageDir,targetDir,archiveHash,memory:memory.nativeConfiguration},signal);

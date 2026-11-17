@@ -413,6 +413,7 @@ window.__ModuleLoader__.load({
       const [error, setError] = useState('');
       const [created, setCreated] = useState(null);
       const [models, setModels] = useState([]);
+      const [archive, setArchive] = useState({ packageDir: '', exportDir: '', targetDir: '', preview: null, result: null });
       const operation = useRef(null);
       async function load() {
         const result = await submit(sessionId, { mode: 'collection' });
@@ -424,6 +425,7 @@ window.__ModuleLoader__.load({
         setView(next); setCollection(null); setError(''); setWorking(true); setObject(null); setSource(null); setCreated(null);
         operation.current = null;
         try {
+          if (next === 'archive') { setArchive({ packageDir: '', exportDir: '', targetDir: '', preview: null, result: null }); return; }
           if (next === 'models') {
             const data = check(await submit(sessionId, { mode: 'workspace-models' }));
             setModels(data.models); setCollection(data); return;
@@ -468,16 +470,41 @@ window.__ModuleLoader__.load({
             h('option', { value: 'null' }, emptyLabel),
             models.map(model => h('option', { key: model.provider + ':' + model.model, value: JSON.stringify({ provider: model.provider, model: model.model }) }, model.label))));
       }
-      const title = object ? 'New ' + kindNames[object.kind] : source ? 'Edit source' : view === 'models' ? 'Doxvelt models' : view === 'episode' ? 'Create episode' : 'Workspace collection';
-      return h('div', { style: { display: 'flex', gap: 8, fontSize: 13 } },
+      const title = object ? 'New ' + kindNames[object.kind] : source ? 'Edit source' : view === 'archive' ? 'Export and import' : view === 'models' ? 'Doxvelt models' : view === 'episode' ? 'Create episode' : 'Workspace collection';
+      return h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 13 } },
         h(Button, { size: 'sm', variant: 'outline', disabled: busy || unsent, onClick: () => { void open('episode'); } }, 'New episode'),
         h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => { void open('library'); } }, 'Collection'),
         h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => { void open('models'); } }, 'Models'),
+        h(Button, { size: 'sm', variant: 'outline', disabled: busy || unsent, onClick: () => { void open('archive'); } }, 'Export / import'),
         h(Modal, { open: Boolean(view), title, closeLabel: 'Close Doxvelt setup', onClose: () => { if (!working) setView(null); } },
           h('div', { style: { fontSize: 13, maxHeight: '65vh', overflowY: 'auto' } },
             error && h('p', { role: 'alert' }, error),
             working && h('p', { role: 'status' }, 'Saving or loading…'),
-            view === 'models' ? collection?.configuration && h('form', { onSubmit: event => {
+            view === 'archive' ? h('div', null,
+              h('p', null, 'Export this workspace’s collection, accepted story paths, dates, scene headings and formed memories. Models are not called. Unaccepted drafts and DSH chats stay in this installation.'),
+              h('form', { onSubmit: event => { event.preventDefault(); void perform(async () => {
+                const result = check(await submit(sessionId, { mode: 'archive-export', targetDir: archive.exportDir }));
+                setArchive(previous => ({ ...previous, result, preview: null }));
+              }); } },
+                field('New archive folder', archive.exportDir, exportDir => setArchive({ ...archive, exportDir, preview: null, result: null })),
+                h(Button, { type: 'submit', variant: 'primary', disabled: working || !archive.exportDir.trim() }, 'Export workspace')),
+              h('hr'),
+              h('form', { onSubmit: event => { event.preventDefault(); void perform(async () => {
+                const preview = check(await submit(sessionId, { mode: 'archive-preview-import', packageDir: archive.packageDir, targetDir: archive.targetDir }));
+                setArchive(previous => ({ ...previous, preview, result: null }));
+              }); } },
+                h('p', null, 'Import into a new workspace folder. Existing folders are preserved. After importing, open the new folder in DSH.'),
+                field('Archive folder', archive.packageDir, packageDir => setArchive({ ...archive, packageDir, preview: null, result: null })),
+                field('Restored workspace folder', archive.targetDir, targetDir => setArchive({ ...archive, targetDir, preview: null, result: null })),
+                h(Button, { type: 'submit', variant: 'outline', disabled: working || !archive.packageDir.trim() || !archive.targetDir.trim() }, 'Review import')),
+              archive.preview && h('div', { role: 'status' },
+                h('p', null, archive.preview.summary.stories + ' stories, ' + archive.preview.summary.branches + ' story paths and ' + archive.preview.summary.memoryPublications + ' memory publications. No model calls.'),
+                h(Button, { disabled: working, variant: 'primary', onClick: () => { void perform(async () => {
+                  const result = check(await submit(sessionId, { mode: 'archive-import', packageDir: archive.packageDir, targetDir: archive.targetDir, archiveHash: archive.preview.summary.archiveHash }));
+                  setArchive(previous => ({ ...previous, result, preview: null }));
+                }); } }, 'Import workspace')),
+              archive.result && h('p', { role: 'status', style: { overflowWrap: 'anywhere' } }, archive.result.status === 'exported' ? 'Workspace exported to ' + archive.result.summary.targetDir : 'Workspace restored to ' + archive.result.workspaceDir + '. Open that folder as a DSH workspace.'))
+            : view === 'models' ? collection?.configuration && h('form', { onSubmit: event => {
               event.preventDefault(); void perform(async () => {
                 check(await submit(sessionId, { mode: 'workspace-save-models', configuration: collection.configuration, expectedRevision: collection.configurationRevision }));
                 await onChanged(); setView(null);

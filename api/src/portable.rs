@@ -239,7 +239,7 @@ fn validate_manifest(value: &Value) -> Result<()> {
     }
     Ok(())
 }
-fn copy_sanitized_directory(source: &Path, target: &Path) -> Result<()> {
+pub(crate) fn copy_sanitized_directory(source: &Path, target: &Path) -> Result<()> {
     let redaction = Regex::new(r"(?im)^(\s*api[_-]?key\s*:\s*).+$").unwrap();
     for entry in fs::read_dir(source).map_err(io)? {
         let entry = entry.map_err(io)?;

@@ -95,6 +95,21 @@ mod tests {
 }
 
 impl Store {
+    /// One coherent workspace history snapshot, independent of local navigation.
+    pub fn export_all(&self, owner: &str) -> Result<Vec<SimulationArchive>> {
+        let _snapshot = self.connection.unchecked_transaction().map_err(sql_error)?;
+        let ids = self
+            .connection
+            .prepare("SELECT id FROM branch_simulations WHERE owner_scope=? ORDER BY id")
+            .map_err(sql_error)?
+            .query_map([owner], |r| r.get::<_, String>(0))
+            .map_err(sql_error)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(sql_error)?;
+        ids.iter()
+            .map(|id| self.export_simulation(owner, id))
+            .collect()
+    }
     pub fn import_simulation(&mut self, archive: SimulationArchive) -> Result<()> {
         use crate::{archive, projection::string};
         let archive = archive::normalize(archive)?;
@@ -106,7 +121,7 @@ impl Store {
         let simulation = &archive.simulation;
         transaction
             .execute(
-                "INSERT INTO content_revisions VALUES (?,?,?,?,?)",
+                "INSERT OR IGNORE INTO content_revisions VALUES (?,?,?,?,?)",
                 params![
                     revision.id,
                     revision.owner_scope,
@@ -116,6 +131,17 @@ impl Store {
                 ],
             )
             .map_err(sql_error)?;
+        let existing: (String,String,String,String) = transaction.query_row("SELECT owner_scope,digest,compiled_json,created_at FROM content_revisions WHERE id=?",[&revision.id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).map_err(sql_error)?;
+        if existing.0 != revision.owner_scope
+            || existing.1 != revision.digest
+            || parse::<Value>(existing.2).map_err(sql_error)?
+                != serde_json::to_value(&revision.compiled).unwrap()
+            || existing.3 != revision.created_at
+        {
+            return Err(invalid(
+                "Imported content revision conflicts with existing content.",
+            ));
+        }
         transaction
             .execute(
                 "INSERT INTO branch_simulations VALUES (?,?,?,?,?,?,?)",

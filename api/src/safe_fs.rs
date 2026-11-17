@@ -101,6 +101,61 @@ pub fn absent(path: &Path) -> Result<()> {
         }),
     }
 }
+
+/// Publish a fully staged directory on the same filesystem. Destination
+/// collision is checked by the OS in the rename, not by a preceding exists().
+pub fn publish_directory(staged: &Path, target: &Path) -> Result<()> {
+    assert_no_symlink_components(staged)?;
+    assert_no_symlink_components(target)?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::MoveFileExW;
+        let from = staged
+            .as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect::<Vec<_>>();
+        let to = target
+            .as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect::<Vec<_>>();
+        // No REPLACE_EXISTING flag: even a racing empty directory is preserved.
+        if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) } == 0 {
+            return Err(io(std::io::Error::last_os_error()));
+        }
+        Ok(())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::{ffi::CString, os::unix::ffi::OsStrExt};
+        let from = CString::new(staged.as_os_str().as_bytes())
+            .map_err(|_| invalid("Invalid staging path."))?;
+        let to = CString::new(target.as_os_str().as_bytes())
+            .map_err(|_| invalid("Invalid target path."))?;
+        if unsafe {
+            libc::renameat2(
+                libc::AT_FDCWD,
+                from.as_ptr(),
+                libc::AT_FDCWD,
+                to.as_ptr(),
+                libc::RENAME_NOREPLACE,
+            )
+        } != 0
+        {
+            return Err(io(std::io::Error::last_os_error()));
+        }
+        Ok(())
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        let _ = (staged, target);
+        Err(invalid(
+            "Atomic workspace publication is supported on Windows and Linux.",
+        ))
+    }
+}
 pub fn open_no_follow(path: &Path, directory: bool) -> Result<File> {
     let mut options = OpenOptions::new();
     options.read(true);
@@ -214,6 +269,23 @@ pub fn read_regular(path: &Path, reject_hardlinks: bool) -> Result<Vec<u8>> {
     }
     let mut data = Vec::new();
     file.read_to_end(&mut data).map_err(io)?;
+    Ok(data)
+}
+pub fn read_regular_bounded(path: &Path, limit: usize) -> Result<Vec<u8>> {
+    let file = open_no_follow(path, false)?;
+    if file_info(&file)?.1 > 1 {
+        return Err(invalid("Archive entries must be private regular files."));
+    }
+    if file.metadata().map_err(io)?.len() > limit as u64 {
+        return Err(invalid("Archive entry exceeds its size limit."));
+    }
+    let mut data = Vec::new();
+    file.take(limit as u64 + 1)
+        .read_to_end(&mut data)
+        .map_err(io)?;
+    if data.len() > limit {
+        return Err(invalid("Archive entry grew beyond its size limit."));
+    }
     Ok(data)
 }
 pub fn write_private_regular(path: &Path, text: &[u8]) -> Result<()> {

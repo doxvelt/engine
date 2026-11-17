@@ -217,6 +217,30 @@ try {
   await page.getByText('Memories saved.', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Close episode memory', exact: true }).click();
   const callsBeforeRestart = calls.length;
+  const archiveDirectory = path.join(root, 'archive');
+  const restoredDirectory = path.join(root, 'restored');
+  await page.getByRole('button', { name: 'Export / import', exact: true }).click();
+  await page.getByLabel('New archive folder', { exact: true }).fill(archiveDirectory);
+  await page.getByRole('button', { name: 'Export workspace', exact: true }).click();
+  await page.getByText('Workspace exported to ' + archiveDirectory, { exact: true }).waitFor();
+  await page.getByLabel('Archive folder', { exact: true }).fill(archiveDirectory);
+  await page.getByLabel('Restored workspace folder', { exact: true }).fill(restoredDirectory);
+  await page.getByRole('button', { name: 'Review import', exact: true }).click();
+  await page.getByRole('button', { name: 'Import workspace', exact: true }).click();
+  await page.getByText('Workspace restored to ' + restoredDirectory + '. Open that folder as a DSH workspace.', { exact: true }).waitFor();
+  const archived = JSON.parse(await readFile(path.join(archiveDirectory, 'workspace.json'), 'utf8'));
+  assert.ok(archived.memories.length >= 2);
+  assert.equal(JSON.parse(await readFile(path.join(restoredDirectory, '.doxvelt/import.json'), 'utf8')).archiveHash, archived.checksum);
+  assert.equal(calls.length, callsBeforeRestart, 'Archive review and transfer make no model calls');
+  await page.screenshot({ path: path.join(root, 'archive-restored.png'), animations: 'disabled' });
+  for (const [width, height] of [[1280, 600], [390, 844], [360, 640]]) {
+    await page.setViewportSize({ width, height });
+    const dialog = page.getByRole('dialog', { name: 'Export and import', exact: true });
+    assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth), true, 'Archive dialog overflows at ' + width);
+    await page.screenshot({ path: path.join(root, 'archive-' + width + '.png'), animations: 'disabled' });
+  }
+  await page.setViewportSize({ width: 1280, height: 850 });
+  await page.getByRole('button', { name: 'Close Doxvelt setup', exact: true }).click();
   await page.close();
   await stopHost();
   page = await browser.newPage({ viewport: { width: 1280, height: 850 }, locale: 'en-US' });
@@ -240,7 +264,7 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'Horizontal overflow at ' + width);
     await page.screenshot({ path: path.join(root, 'viewport-' + width + '.png'), animations: 'disabled' });
   }
-  console.log('Passed ' + (mode === '--desktop' ? 'native desktop Host' : 'Web Host') + ': activation, inline authoring, dated episodes, compact routing, headings, generation, memorization, continued play, process restart and four viewport sizes.');
+  console.log('Passed ' + (mode === '--desktop' ? 'native desktop Host' : 'Web Host') + ': activation, inline authoring, dated episodes, compact routing, headings, generation, memorization, continued play, combined archive export/review/import, process restart and four viewport sizes.');
   console.log('Isolated browser evidence: ' + root);
 } catch (error) {
   console.error(browserErrors);

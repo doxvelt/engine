@@ -145,7 +145,62 @@ Workspace errors include stable `code` values such as `inactive-workspace`,
 `workspace-unregistered`. Failure details from model providers are not exposed
 as workspace-operation errors. Reverie's protocol remains version 1.
 
-## Verification
+## Export and import
+
+Use **Export / import** in an active workspace. **Export workspace** writes a new
+archive folder containing `workspace.json` and `source/`. Keep the complete folder
+together; it is the combined Doxvelt and Reverie archive format, version 1.
+
+The archive includes the reusable authored collection, pinned content and accepted
+history for every story and path, episode dates, player scene headings, memory
+publication ordering and dependencies, and exact Reverie memory snapshots. Old
+publications remain available when dates or played source have changed. Source
+paths are logical references and are rebound on restore. Provider/model choices
+are preferences; credentials, DSH chats, unaccepted drafts, navigation recents,
+indexes and unreferenced memory files are not exported. Credential files and
+common `api_key` source fields are omitted or redacted as in simulation packages.
+
+Choose an **Archive folder** and a new **Restored workspace folder**, then select
+**Review import**. Review validates package integrity, history, subjective source
+projections and every native memory using isolated in-memory Reverie databases.
+It shows story, path and memory-publication counts. **Import workspace** is bound
+to that archive checksum and restores all components into staging before one
+atomic directory publication. Existing destination folders are never replaced.
+Open the resulting folder as a DSH workspace; choose available models in **Models**
+if the saved preferences do not exist in this installation. Transfer makes no
+model calls and does not reform memories. Legacy Pi ZIP import is not supported.
+
+The trusted native workspace interface exposes `archive.export` with `targetDir`,
+`archive.preview-import` with `packageDir` and `targetDir`, and `archive.import`
+with those fields plus the reviewed `archiveHash`. Each request includes the
+host-owned `memory` service configuration. The DSH modes are `archive-export`,
+`archive-preview-import` and `archive-import`; browser fields cannot choose the
+executable or original workspace. These operations are distinct from the legacy
+single-simulation `/packages` routes, which retain their compatibility format.
+
+Doxvelt calls Reverie's `exportMemory`, `previewImport` and `importMemory` over
+protocol 1. It reconstructs character source from archived immutable history,
+including historical heads and publication dates, and authorizes only those
+`source.read` callbacks. Doxvelt never reads or writes Reverie's SQLite schema.
+Use a Reverie build implementing memory archive version 1; an older executable
+fails the transfer without publishing a destination.
+
+Cancellation or failure before final publication leaves no restored workspace.
+An interrupted process may leave an unreferenced hidden staging directory; keep
+the original archive and retry to the intended absent destination. If publication
+succeeded but the reply was lost, retrying the same checksum and target returns
+`current` using the completed import receipt, including after restart. Export
+refuses existing destinations, and a lost export response can be checked by
+reviewing that archive. Archives and source each have a 256 MiB bound and a 10,000
+source-file bound. Atomic directory publication is supported on Windows and Linux.
+
+## Archive verification
+
+`tests/workspace-archive.test.ts` uses isolated native workspaces and deterministic
+reflection fixtures. Set `DOXVELT_REVERIE_EXECUTABLE` to a current engine build to
+run the real two-process round trips, restart, failure and safe-retry checks.
+The workspace browser runner also exercises export, review and import through
+the maintained DSH controls without provider calls during transfer.
 
 Focused checks run with `node --test tests/workspace-collection.test.ts
 tests/dsh-notation.test.ts tests/dsh-composer.test.ts`. The browser runner

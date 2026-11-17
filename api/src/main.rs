@@ -1,3 +1,4 @@
+mod archive_api;
 mod cli_host;
 mod episode_api;
 mod generation;

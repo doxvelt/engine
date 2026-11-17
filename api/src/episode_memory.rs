@@ -318,6 +318,46 @@ pub struct EpisodeCatalog {
     pub directory: PathBuf,
 }
 impl EpisodeCatalog {
+    /// Logical host metadata only; native memory is exported through Reverie.
+    pub fn export_story(&self, query: &EpisodeQuery) -> Result<Value> {
+        let _snapshot = self.connection.unchecked_transaction().map_err(sql)?;
+        let dates = self
+            .connection
+            .prepare("SELECT slot,date FROM fictional_dates WHERE story=? ORDER BY slot")
+            .map_err(sql)?
+            .query_map([story(query)], |r| {
+                Ok(json!({"slot":r.get::<_,String>(0)?,"date":r.get::<_,String>(1)?}))
+            })
+            .map_err(sql)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(sql)?;
+        Ok(json!({"dates":dates,"publications":self.publications(query)?}))
+    }
+    pub fn import_story(&mut self, query: &EpisodeQuery, data: &Value) -> Result<()> {
+        let tx = self.connection.transaction().map_err(sql)?;
+        for date in crate::projection::array(data, "dates")? {
+            require_date(string(date, "date")?)?;
+            tx.execute(
+                "INSERT INTO fictional_dates VALUES (?,?,?)",
+                params![story(query), string(date, "slot")?, string(date, "date")?],
+            )
+            .map_err(sql)?;
+        }
+        // The catalog reads newest first; restore insertion order too.
+        for version in crate::projection::array(data, "publications")?.iter().rev() {
+            tx.execute(
+                "INSERT INTO memory_versions VALUES (?,?,?,?)",
+                params![
+                    string(version, "id")?,
+                    story(query),
+                    string(version, "slot")?,
+                    serde_json::to_string(version).unwrap()
+                ],
+            )
+            .map_err(sql)?;
+        }
+        tx.commit().map_err(sql)
+    }
     /// Cleanup uses a read-only catalog. If ownership cannot be established,
     /// callers preserve the database rather than risk deleting a publication.
     pub fn file_referenced(directory: &Path, file: &str) -> Result<bool> {

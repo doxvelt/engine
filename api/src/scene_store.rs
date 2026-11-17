@@ -17,6 +17,28 @@ pub struct SceneHeadingStore {
     connection: Connection,
 }
 impl SceneHeadingStore {
+    pub fn export_story(&self, owner: &str, story: &str) -> Result<Vec<Value>> {
+        self.connection.prepare("SELECT command,input,heading FROM scene_headings WHERE owner=? AND story=? ORDER BY rowid").map_err(sql)?
+            .query_map(params![owner,story],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?))).map_err(sql)?
+            .map(|row|{let (command,input,heading)=row.map_err(sql)?;Ok(serde_json::json!({"command":command,"input":serde_json::from_str::<Value>(&input).map_err(|e|EngineError::invalid(e.to_string()))?,"heading":serde_json::from_str::<Value>(&heading).map_err(|e|EngineError::invalid(e.to_string()))?}))}).collect()
+    }
+    pub fn import_story(&mut self, owner: &str, story: &str, records: &[Value]) -> Result<()> {
+        let tx = self.connection.transaction().map_err(sql)?;
+        for r in records {
+            tx.execute(
+                "INSERT INTO scene_headings VALUES (?,?,?,?,?)",
+                params![
+                    owner,
+                    story,
+                    crate::projection::string(r, "command")?,
+                    serde_json::to_string(&r["input"]).unwrap(),
+                    serde_json::to_string(&r["heading"]).unwrap()
+                ],
+            )
+            .map_err(sql)?;
+        }
+        tx.commit().map_err(sql)
+    }
     pub fn open(path: &Path) -> Result<Self> {
         let connection = Connection::open(path).map_err(sql)?;
         connection

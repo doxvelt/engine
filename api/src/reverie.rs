@@ -31,6 +31,7 @@ pub struct Session {
     reflection: Option<Reflection>,
     tasks: JoinSet<(String, std::result::Result<Value, String>)>,
     callbacks: HashMap<String, AbortHandle>,
+    sources: HashMap<String, Value>,
 }
 impl Session {
     pub async fn open(
@@ -78,12 +79,18 @@ impl Session {
             reflection,
             tasks: JoinSet::new(),
             callbacks: HashMap::new(),
+            sources: HashMap::new(),
         };
         let hello = session.request("ping", json!({})).await?;
         if hello["protocol"] != 1 || hello["characterId"] != character {
             return Err(failure("Doxvelt requires Reverie native protocol 1."));
         }
         Ok(session)
+    }
+    /// Transfer operations may read only the source projections supplied by
+    /// the host for this character. They never receive model authorization.
+    pub fn supply_source(&mut self, episode: &str, source: Value) {
+        self.sources.insert(episode.into(), source);
     }
     async fn send(&mut self, value: &Value) -> Result<(), HostError> {
         let mut text = serde_json::to_vec(value).unwrap();
@@ -116,7 +123,19 @@ impl Session {
             .as_ref()
             .filter(|r| valid && params["episodeId"] == r.revision);
         let task_id = id.clone();
+        let supplied = valid
+            .then(|| {
+                params["episodeId"]
+                    .as_str()
+                    .and_then(|id| self.sources.get(id))
+            })
+            .flatten()
+            .cloned();
         let handle = match (method, authorized) {
+            ("source.read", _) if supplied.is_some() => {
+                let source = supplied.unwrap();
+                self.tasks.spawn(async move { (task_id, Ok(source)) })
+            }
             ("source.read", Some(reflection)) => {
                 let result = reflection.source.observation.clone();
                 self.tasks.spawn(async move { (task_id, Ok(result)) })
