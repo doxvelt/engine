@@ -1,71 +1,29 @@
-# Doxvelt
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="design-system/assets/2026-05-doxvelt-wordmark-fg-parchment-raw.svg">
+    <img src="design-system/assets/2026-05-doxvelt-wordmark-fg-ink-raw.svg" alt="Doxvelt" width="360">
+  </picture>
+</h1>
 
-Doxvelt is a local, single-user app for turn-based chat RPGs and role-play
-simulations inside DeepSeek Harness (DSH). Choose who acts and who hears each
-turn; play their words yourself or ask a model for a draft. Characters have
-subjective knowledge, beliefs and memories. No Doxvelt account is required.
+Doxvelt is a turn-based roleplaying game for DeepSeek Harness. Choose who acts
+and who hears each turn. Characters carry their own memories, and you can
+explore alternate story paths.
 
 ## Install on Windows
 
-The desktop package includes the Doxvelt plugin, native simulation engine and
-Reverie memory engine. You need DSH Desktop; you do not need Node.js, Bun, Rust,
-a source checkout or a separate Reverie installation.
-
-Install **v0.2.0-alpha.2** using the steps below. The older v0.1.0-alpha.1 is a
-source-run web alpha and does not contain this desktop package.
-
-1. Install **DSH Desktop 0.2.2-rc.3**. The
-   [official desktop download](https://deepseek.com/harness/) tracks DSH's current
-   version; check `dsh --version` before proceeding. This package requires the
-   stated host version. Open DSH once, then fully quit it.
-2. Download `doxvelt-v0.2.0-alpha.2-windows-x64.zip` and its `.sha256` file from
-   [Doxvelt v0.2.0-alpha.2](https://github.com/doxvelt/engine/releases/tag/v0.2.0-alpha.2).
-   Check the ZIP with `Get-FileHash -Algorithm SHA256` against that file, then
-   extract the complete ZIP.
-3. Open PowerShell in the extracted `doxvelt-v0.2.0-alpha.2-windows-x64` folder:
+1. Install [DeepSeek Harness Desktop 0.2.2-rc.3 (Windows x64)](https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.2-rc.3-win-x64.exe).
+   Open it once, then fully quit it.
+2. Download and extract [Doxvelt v0.2.0-alpha.2 (Windows x64 ZIP)](https://github.com/doxvelt/engine/releases/download/v0.2.0-alpha.2/doxvelt-v0.2.0-alpha.2-windows-x64.zip).
+3. Run this in PowerShell from the folder containing `install.ps1`.
 
    ```powershell
    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
    ```
 
-4. Reopen DSH, choose a workspace, and select **Activate Doxvelt for this workspace**.
-
-The installer verifies the package contents and copies them into your user-local
-application directory before installing the plugin through DSH. You can delete
-the extracted download afterward. Installation requires no administrator access.
-If PowerShell cannot find `dsh`, reopen the terminal after installing DSH.
-
-The package pins [Reverie v0.3.0](https://github.com/memrok-com/reverie/releases/tag/v0.3.0),
-protocol 1. Its license and third-party notices are included. Reverie remains an
-independently released dependency; Doxvelt supplies the compatible version.
-
 ## Start playing
 
-Choose **New episode** to create or select a world, starting scenario, characters
-and format. **Perform** lets you write a character's turn yourself. Manual play
-needs no model configuration. **Models** selects from DSH's existing provider
-connections for generation and memory reflection; credentials stay in DSH.
+Reopen DeepSeek Harness, choose a workspace, and select **Activate Doxvelt for
+this workspace**. Choose **New episode**. Use **Perform** to write a turn yourself
+or **Generate** to play with a model connected in DeepSeek Harness.
 
-**Episode memory** lets you set fictional dates, inspect memories and deliberately
-**Memorize** an episode. Memorizing and ending an episode are separate actions.
-See [workspace setup, authoring, play and recovery](docs/WORKSPACES.md).
-
-## Updates and saved stories
-
-Fully quit DSH and run the installer from the new release package. It installs a
-versioned copy and updates the same plugin registration. Authored content,
-stories and memory stay in each workspace's `.doxvelt` directory; model
-connections stay in DSH. Back up the complete workspace before upgrading an
-alpha. **Export / import** creates a combined archive of authored content,
-accepted stories and paths, episode dates, scene headings and exact Reverie
-memories. Restore to a new folder, then open that folder as a DSH workspace.
-Transfer makes no model calls. Older single-simulation packages retain their
-limited format; use the combined workspace archive for a complete portable backup.
-
-Before sharing an exported package, inspect legacy model files and compiled
-content for credentials. Known redaction gaps are tracked in
-[#53](https://github.com/doxvelt/engine/issues/53).
-
-The package supports Windows x64 and the stated DSH version. Other platforms
-currently require a source build. For source setup, checks, developer linking,
-CLI/API use and release packaging, see [CONTRIBUTING.md](CONTRIBUTING.md).
+[Player guide](docs/WORKSPACES.md) · [Release notes and checksum](https://github.com/doxvelt/engine/releases/tag/v0.2.0-alpha.2) · [Development](CONTRIBUTING.md)
