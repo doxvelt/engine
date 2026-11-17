@@ -6,7 +6,9 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { run } from './lib/package-notices.mjs';
 
-const archive = path.resolve(process.argv[2] ?? 'dist/doxvelt-v0.2.0-alpha.1-windows-x64.zip');
+const expectedVersion = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version;
+const expectedPin = JSON.parse(await readFile(new URL('./desktop-release.json', import.meta.url), 'utf8'));
+const archive = path.resolve(process.argv[2] ?? `dist/doxvelt-v${expectedVersion}-windows-x64.zip`);
 if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Desktop package verification requires Windows x64 and the pinned DSH desktop host.');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 assert.equal(hash(await readFile(archive)), (await readFile(archive + '.sha256', 'utf8')).split(' ')[0], 'ZIP checksum');
@@ -17,6 +19,10 @@ run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Arch
 });
 const extracted = path.join(root, path.basename(archive, '.zip'));
 const release = JSON.parse(await readFile(path.join(extracted, 'release.json'), 'utf8'));
+assert.equal(release.version, expectedVersion);
+assert.deepEqual(release.reverie, expectedPin.reverie);
+assert.ok(run(path.join(extracted, 'native/win32-x64/reverie/reverie-engine.exe'), ['--version']).includes(`Reverie ${release.reverie.tag.slice(1)} native memory engine`));
+assert.doesNotMatch(await readFile(path.join(extracted, 'README.md'), 'utf8'), /<!-- release-status -->/);
 assert.equal(release.dirty, false, 'Only clean release source can pass verification');
 assert.match(release.sourceCommit, /^[0-9a-f]{40}$/);
 const home = path.join(root, 'dsh');
@@ -54,6 +60,7 @@ process.chdir(root);
 const { apply } = await import(pathToFileURL(path.join(plugin, 'host.mjs')).href);
 const workspace = path.join(root, 'workspace');
 await mkdir(workspace);
+const registeredWorkspaces = new Set([workspace]);
 const events = [];
 const session = { id: 'package-check', header: { cwd: workspace }, get seq() { return events.length; }, eventAt: i => events[i],
   append: (type, data) => events.push({ type, data }) };
@@ -66,7 +73,7 @@ const memoryText = 'I remember the packaged ferry crossing.';
 const context = {
   on(name, callback) { if (name === 'dispose') dispose.push(callback); },
   get() { return undefined; },
-  workspaceRegistry: { list: () => [{ path: workspace }] },
+  workspaceRegistry: { list: () => [...registeredWorkspaces].map(path => ({ path })) },
   sessions: { get: id => id === session.id ? session : undefined, async flush() {} },
   connection: { fetch: { register(value) { endpoint = value; } } },
   llm: {
@@ -112,6 +119,8 @@ try {
   const started = await command('create-story', { setup: { operationId: 'packaged-story', collectionRevision: collection.revision,
     worldId: 'river', scenarioId: 'ferry', formatId: 'script', characterIds: ['corin'], date: '2000-03-01' } });
   await command('open-saved', { simulationId: started.simulationId });
+  const heading = await command('scene-status');
+  await command('scene-create', { expectedHead: heading.expectedHead, commandId: 'packaged-heading', title: 'At the ferry landing' });
   await command('perform', { character: 'corin', audience: '!self', body: 'The ferry is ready.' });
   assert.equal(reflections, 0, 'Manual setup/play must not call a model');
   await command('memory-memorize', { slot: 'first' });
@@ -129,7 +138,31 @@ try {
   assert.equal(generations, 1);
   assert.ok(recalled, 'A later episode receives recalled memory from bundled Reverie');
   assert.ok((await readdir(path.join(workspace, '.doxvelt'))).length > 0);
-  console.log('Passed release ZIP checksum, clean provenance, installation/reinstallation without toolchains, damaged-update rejection, source authoring, manual/model play and bundled memory formation/recall.');
+  const modelCalls = { reflections, generations };
+  const packageDir = path.join(root, 'story-archive');
+  const restored = path.join(root, 'restored');
+  const exported = await command('archive-export', { targetDir: packageDir });
+  const archived = JSON.parse(await readFile(path.join(packageDir, 'workspace.json'), 'utf8'));
+  assert.ok(archived.memories.length > 0);
+  assert.equal(archived.stories[0].sceneHeadings.length, 1);
+  const preview = await command('archive-preview-import', { packageDir, targetDir: restored });
+  assert.equal(preview.summary.archiveHash, exported.summary.archiveHash);
+  assert.equal((await command('archive-import', { packageDir, targetDir: restored, archiveHash: preview.summary.archiveHash })).status, 'imported');
+  // Restart the installed host before checking the receipt and restored memory.
+  for (const close of dispose.splice(0)) await close();
+  await apply(context);
+  assert.equal((await command('archive-import', { packageDir, targetDir: restored, archiveHash: preview.summary.archiveHash })).status, 'current');
+  registeredWorkspaces.add(restored);
+  session.header.cwd = restored;
+  events.length = 0;
+  await command('saved');
+  await command('open-saved', { simulationId: started.simulationId });
+  assert.ok(JSON.stringify(await command('memory-status')).includes(memoryText));
+  const reexport = path.join(root, 'reexport');
+  await command('archive-export', { targetDir: reexport });
+  assert.deepEqual(JSON.parse(await readFile(path.join(reexport, 'workspace.json'), 'utf8')), archived);
+  assert.deepEqual({ reflections, generations }, modelCalls, 'Export, preview, import, restart and re-export make no model calls');
+  console.log('Passed release ZIP checksum, clean provenance, installation/reinstallation without toolchains, damaged-update rejection, source authoring, manual/model play, bundled memory formation/recall, archive export/review/import, restart/retry and identical re-export.');
   console.log(`Isolated package evidence: ${root}`);
 } finally {
   for (const close of dispose) await close();

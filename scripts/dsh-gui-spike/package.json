@@ -1,6 +1,6 @@
 {
   "name": "@doxvelt/dsh",
-  "version": "0.2.0-alpha.1",
+  "version": "0.2.0-alpha.2",
   "description": "Doxvelt workspace collections, episodes and Reverie memory inside DSH",
   "private": true,
   "type": "module",
