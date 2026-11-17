@@ -58,7 +58,9 @@ await writeFile(path.join(directory, 'package.json'), JSON.stringify({ ...plugin
   engines: { node: '>=24' }, exports: { '.': './host.mjs', './client': './client.js' } }, null, 2) + '\n');
 for (const filename of ['client.js', 'cordis.patch.yml']) await copyFile(path.join(root, 'scripts/dsh-gui-spike', filename), path.join(directory, filename));
 await copyFile(path.join(root, 'scripts/install-dsh-package.ps1'), path.join(directory, 'install.ps1'));
-const guide = (await readFile(path.join(root, 'README.md'), 'utf8')).replace(/\]\((docs\/WORKSPACES\.md|CONTRIBUTING\.md)\)/g,
+const guide = (await readFile(path.join(root, 'README.md'), 'utf8'))
+  .replace(/<!-- release-status -->[\s\S]*?<!-- \/release-status -->\r?\n\r?\n/g, '')
+  .replace(/\]\((docs\/WORKSPACES\.md|CONTRIBUTING\.md)\)/g,
   (_match, filename) => `](https://github.com/doxvelt/engine/blob/${commit}/${filename})`);
 await writeFile(path.join(directory, 'README.md'), guide);
 await writeFile(path.join(directory, 'release.json'), JSON.stringify({ version: source.version, sourceCommit: commit, dirty, ...pin }, null, 2) + '\n');

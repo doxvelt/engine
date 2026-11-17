@@ -11,18 +11,23 @@ The desktop package includes the Doxvelt plugin, native simulation engine and
 Reverie memory engine. You need DSH Desktop; you do not need Node.js, Bun, Rust,
 a source checkout or a separate Reverie installation.
 
-Install **v0.2.0-alpha.1** using the steps below. The older v0.1.0-alpha.1 is a
+<!-- release-status -->
+**v0.2.0-alpha.2 is pending publication.** Until its assets are published, use the
+[previous desktop release](https://github.com/doxvelt/engine/releases/tag/v0.2.0-alpha.1).
+<!-- /release-status -->
+
+Install **v0.2.0-alpha.2** using the steps below. The older v0.1.0-alpha.1 is a
 source-run web alpha and does not contain this desktop package.
 
 1. Install **DSH Desktop 0.2.2-rc.3**. The
    [official desktop download](https://deepseek.com/harness/) tracks DSH's current
    version; check `dsh --version` before proceeding. This package requires the
    stated host version. Open DSH once, then fully quit it.
-2. Download `doxvelt-v0.2.0-alpha.1-windows-x64.zip` and its `.sha256` file from
-   [Doxvelt v0.2.0-alpha.1](https://github.com/doxvelt/engine/releases/tag/v0.2.0-alpha.1).
+2. Download `doxvelt-v0.2.0-alpha.2-windows-x64.zip` and its `.sha256` file from
+   [Doxvelt v0.2.0-alpha.2](https://github.com/doxvelt/engine/releases/tag/v0.2.0-alpha.2).
    Check the ZIP with `Get-FileHash -Algorithm SHA256` against that file, then
    extract the complete ZIP.
-3. Open PowerShell in the extracted `doxvelt-v0.2.0-alpha.1-windows-x64` folder:
+3. Open PowerShell in the extracted `doxvelt-v0.2.0-alpha.2-windows-x64` folder:
 
    ```powershell
    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
@@ -35,7 +40,7 @@ application directory before installing the plugin through DSH. You can delete
 the extracted download afterward. Installation requires no administrator access.
 If PowerShell cannot find `dsh`, reopen the terminal after installing DSH.
 
-The package pins [Reverie v0.2.0](https://github.com/memrok-com/reverie/releases/tag/v0.2.0),
+The package pins [Reverie v0.3.0](https://github.com/memrok-com/reverie/releases/tag/v0.3.0),
 protocol 1. Its license and third-party notices are included. Reverie remains an
 independently released dependency; Doxvelt supplies the compatible version.
 
@@ -56,8 +61,11 @@ Fully quit DSH and run the installer from the new release package. It installs a
 versioned copy and updates the same plugin registration. Authored content,
 stories and memory stay in each workspace's `.doxvelt` directory; model
 connections stay in DSH. Back up the complete workspace before upgrading an
-alpha. Simulation archives currently exclude the local Reverie memory catalog
-and scene headings, so an archive alone is not a full workspace backup.
+alpha. **Export / import** creates a combined archive of authored content,
+accepted stories and paths, episode dates, scene headings and exact Reverie
+memories. Restore to a new folder, then open that folder as a DSH workspace.
+Transfer makes no model calls. Older single-simulation packages retain their
+limited format; use the combined workspace archive for a complete portable backup.
 
 Before sharing an exported package, inspect legacy model files and compiled
 content for credentials. Known redaction gaps are tracked in

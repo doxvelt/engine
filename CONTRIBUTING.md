@@ -17,7 +17,7 @@ bun run api:build
 ```
 
 For the normal desktop application, install **DSH 0.2.2-rc.3** and extract the
-complete [Reverie v0.2.0 Windows package](https://github.com/memrok-com/reverie/releases/tag/v0.2.0),
+complete [Reverie v0.3.0 Windows package](https://github.com/memrok-com/reverie/releases/tag/v0.3.0),
 including its notices. Open DSH once, then fully quit it. Link this checkout:
 
 ```powershell
@@ -64,7 +64,7 @@ After committing and validating the release source:
 
 ```sh
 bun run desktop:package
-bun run desktop:verify -- dist/doxvelt-v0.2.0-alpha.1-windows-x64.zip
+bun run desktop:verify -- dist/doxvelt-v0.2.0-alpha.2-windows-x64.zip
 ```
 
 The packager downloads only the pinned Reverie archive, verifies its digest,
@@ -83,6 +83,8 @@ builds. Packaging never publishes or changes Git tags.
 The verifier extracts the ZIP away from the checkout, checks every payload hash,
 installs and reinstalls into an isolated DSH profile, and exercises workspace
 activation, manual play, memory formation and recall using the bundled engines.
+It also exports, reviews and restores a workspace, restarts the host, checks safe
+retry, and verifies an identical re-export without additional model calls.
 The complete desktop browser harness must also pass against the extracted
 plugin before publication.
 
@@ -91,9 +93,10 @@ Publish the validated ZIP and checksum as assets on that exact GitHub release;
 GitHub's source ZIP is not the player package. Rebuild from the tagged clean
 commit, reverify, and check the downloaded assets before advertising the pin in
 README. Until publication, README must identify the desktop release as pending.
-Keep existing release assets and tags intact. Reverie v0.2.0 is already published
-with the required binary and notices; a new Reverie release is needed only when
-its actual engine changes.
+Keep existing release assets and tags intact. The release-status block in README
+marks unpublished repository downloads; the packaged guide omits that block.
+After publication and download verification, remove it from README. Reverie
+v0.3.0 supplies the memory-transfer API required for combined workspace archives.
 
 ## Repository landmarks
 
