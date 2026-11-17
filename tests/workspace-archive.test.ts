@@ -101,3 +101,29 @@ test("native-memory failure leaves no restored workspace and the same reviewed a
   assert.equal((await f.api(base+"/episode-memory?branchId=main")).episodes[0].status,"current");
   assert.equal(f.calls(),2);
 });
+
+// Larger release probes use DOXVELT_ARCHIVE_SCALE=400,800 (and can select the
+// release API via DOXVELT_API_EXECUTABLE). CI retains a useful historical-prefix
+// regression without depending on hardware-specific timing ratios.
+for(const turns of (process.env.DOXVELT_ARCHIVE_SCALE??"160").split(",").map(Number)) {
+  test(`long-story archive round trip retains early and current publications (${turns} turns)`,{...available,timeout:180000},async t=>{
+    assert.ok(Number.isSafeInteger(turns)&&turns>1&&turns<=5000);
+    const f=await fixture(t);const base="/simulations/"+f.started.simulationId;
+    let head=(await f.api(base+"/stage")).branch.headCommitId;
+    for(let turn=0;turn<turns;turn++) {
+      const saved=await f.api(base+"/turns",{branchId:"main",expectedHead:head,commandId:"turn-"+turn,actorId:"corin",audience:["nell"],manualText:`The ferry crosses the river, turn ${turn}.`,stageWhisperIds:[],knowledgePolicy:"actor-knowledge-v1"});
+      head=saved.branch.headCommitId;
+      if(turn===0)await f.api(base+"/episode-memory/memorize",{branchId:"main",expectedHead:head,commandId:"memorize-first",slot:"first"});
+    }
+    await f.api(base+"/episode-memory/date",{branchId:"main",expectedHead:head,commandId:"redate",slot:"first",date:"2000-02-01"});
+    await f.api(base+"/episode-memory/memorize",{branchId:"main",expectedHead:head,commandId:"memorize-current",slot:"first"});
+    const packageDir=path.join(f.parent,"archive");const target=path.join(f.parent,"restored");
+    let started=performance.now();await exportWorkspaceArchive(f.root,packageDir,f.memory);const exporting=performance.now()-started;
+    started=performance.now();const preview=await previewWorkspaceImport(f.root,packageDir,target,f.memory);const reviewing=performance.now()-started;
+    started=performance.now();await importWorkspaceArchive(f.root,packageDir,target,preview.summary.archiveHash,f.memory);const importing=performance.now()-started;
+    const restoredMemory=f.memoryFor(target);const reexport=path.join(f.parent,"reexport");await exportWorkspaceArchive(target,reexport,restoredMemory);
+    assert.deepEqual(JSON.parse(await readFile(path.join(reexport,"workspace.json"),"utf8")),JSON.parse(await readFile(path.join(packageDir,"workspace.json"),"utf8")));
+    assert.equal(f.calls(),4,"History reconstruction and transfer never resample the early or current memory");
+    t.diagnostic(`${turns} turns: export ${Math.round(exporting)} ms, preview ${Math.round(reviewing)} ms, import ${Math.round(importing)} ms.`);
+  });
+}

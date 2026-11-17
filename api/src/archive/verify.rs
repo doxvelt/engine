@@ -37,6 +37,11 @@ pub fn decode_archive(value: &Value) -> Result<SimulationArchive> {
 }
 
 pub fn verify_structure(archive: &SimulationArchive) -> Result<()> {
+    verify_structure_with_reader(&ArchiveReader::new(archive))
+}
+pub(super) fn verify_structure_with_reader(reader: &ArchiveReader<'_>) -> Result<()> {
+    let archive = reader.archive;
+    reader.check_cancelled()?;
     if ![4, 5, 6, 7].contains(&archive.schema_version) {
         return Err(invalid("schema is unsupported."));
     }
@@ -51,10 +56,10 @@ pub fn verify_structure(archive: &SimulationArchive) -> Result<()> {
     if fingerprint(&portable) != revision.digest {
         return Err(invalid("content digest is invalid."));
     }
-    let reader = ArchiveReader::new(archive);
     let mut commits = HashSet::new();
     let mut operations = HashSet::new();
     for commit in &archive.commits {
+        reader.check_cancelled()?;
         codec::commit(&value(commit))?;
         if !commits.insert(&commit.id)
             || commit.owner_scope != sim.owner_scope
@@ -85,9 +90,7 @@ pub fn verify_structure(archive: &SimulationArchive) -> Result<()> {
     }
     // Ancestry checks include missing parents and cycles on every path, including
     // commits that are not reachable from the selected/default branch.
-    for commit in &archive.commits {
-        reader.ancestry(&sim.owner_scope, &sim.id, &commit.id)?;
-    }
+    reader.ordered_commits()?;
     let mut branches = HashSet::new();
     for branch in &archive.branches {
         if !branches.insert(&branch.id)
@@ -184,34 +187,41 @@ pub fn verify_structure(archive: &SimulationArchive) -> Result<()> {
         }
     }
     verify_provenance(archive, &reader)?;
-    // Replaying every head checks membership cycles and other access invariants
-    // along each path without deriving visibility from a different branch.
+    // Carry the parent's access state through each edge once. Siblings share
+    // immutable state until a change, so access validation stays path-specific.
     crate::access::assert_valid_graph(&revision.compiled.access_links)?;
-    for commit in &archive.commits {
-        let mut links = revision.compiled.access_links.clone();
-        for c in reader.ancestry(&sim.owner_scope, &sim.id, &commit.id)? {
-            for event in c.events.iter().filter(|e| e["type"] == "access_changed") {
-                let change = crate::access::AccessChange {
-                    action: codec::decode(&event["action"])?,
-                    member: string(event, "member")?.into(),
-                    container: string(event, "container")?.into(),
-                    reason: event["reason"].as_str().map(str::to_owned),
-                };
-                links = crate::access::apply_validated_change(&links, &change)?;
-            }
+    let mut access_states = HashMap::new();
+    let initial = std::sync::Arc::new(revision.compiled.access_links.clone());
+    for commit in reader.ordered_commits()? {
+        reader.check_cancelled()?;
+        let mut links = commit
+            .parent_commit_id
+            .as_ref()
+            .and_then(|p| access_states.get(p.as_str()))
+            .cloned()
+            .unwrap_or_else(|| initial.clone());
+        for event in commit
+            .events
+            .iter()
+            .filter(|e| e["type"] == "access_changed")
+        {
+            let change = crate::access::AccessChange {
+                action: codec::decode(&event["action"])?,
+                member: string(event, "member")?.into(),
+                container: string(event, "container")?.into(),
+                reason: event["reason"].as_str().map(str::to_owned),
+            };
+            links = std::sync::Arc::new(crate::access::apply_validated_change(&links, &change)?);
         }
+        access_states.insert(commit.id.as_str(), links);
     }
     for branch in &archive.branches {
-        crate::projection::project_branch(&reader, &sim.owner_scope, &sim.id, &branch.id, None)?;
+        crate::projection::project_branch(reader, &sim.owner_scope, &sim.id, &branch.id, None)?;
     }
     Ok(())
 }
 pub fn ancestor(reader: &ArchiveReader<'_>, base: &str, head: &str) -> Result<bool> {
-    let sim = &reader.archive.simulation;
-    Ok(reader
-        .ancestry(&sim.owner_scope, &sim.id, head)?
-        .iter()
-        .any(|c| c.id == base))
+    reader.is_ancestor(base, head)
 }
 fn verify_provenance(archive: &SimulationArchive, reader: &ArchiveReader<'_>) -> Result<()> {
     let commands: HashMap<_, _> = archive
@@ -380,10 +390,15 @@ fn verify_provenance(archive: &SimulationArchive, reader: &ArchiveReader<'_>) ->
 /// Rebuild all ordinary manual, branch and accepted-draft commands. Memory
 /// closure results and historical receipts have their own validators.
 pub fn verify_commands(archive: &SimulationArchive) -> Result<()> {
+    verify_commands_with_reader(&ArchiveReader::new(archive))
+}
+pub(super) fn verify_commands_with_reader(reader: &ArchiveReader<'_>) -> Result<()> {
+    let archive = reader.archive;
     for record in &archive.command_results {
+        reader.check_cancelled()?;
         let input = &record.canonical_input;
         let kind = string(input, "kind")?;
-        let mut repository = ComparisonRepository::new(archive, &record.result, input)?;
+        let mut repository = ComparisonRepository::new(reader.clone(), &record.result, input)?;
         let envelope = || -> Result<Command> {
             let mut v = input.clone();
             v.as_object_mut().unwrap().remove("kind");
@@ -431,11 +446,7 @@ pub fn verify_commands(archive: &SimulationArchive) -> Result<()> {
                 let commit = codec::commit(&record.result["commit"])?;
                 // This verifier deliberately uses the final head: it proves the
                 // recorded basis AND the accepted commit are on the branch.
-                acceptance::verify_recorded_acceptance(
-                    &ArchiveReader::new(archive),
-                    input,
-                    &commit,
-                )?;
+                acceptance::verify_recorded_acceptance(reader, input, &commit)?;
             }
             "closure" => {
                 super::memory::verify_closure_command(archive, record)?;
@@ -462,8 +473,7 @@ struct ComparisonRepository<'a> {
     outcome: &'a Value,
 }
 impl<'a> ComparisonRepository<'a> {
-    fn new(archive: &'a SimulationArchive, outcome: &'a Value, input: &Value) -> Result<Self> {
-        let mut reader = ArchiveReader::new(archive);
+    fn new(mut reader: ArchiveReader<'a>, outcome: &'a Value, input: &Value) -> Result<Self> {
         if let Some(head) = input["expectedHead"].as_str() {
             let key = if input.get("sourceBranchId").is_some() {
                 "sourceBranchId"

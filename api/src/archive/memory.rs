@@ -391,13 +391,17 @@ pub fn verify_operation_basis(
 }
 
 pub fn verify_jobs(archive: &SimulationArchive) -> Result<()> {
+    verify_jobs_with_reader(&ArchiveReader::new(archive))
+}
+pub(super) fn verify_jobs_with_reader(reader: &ArchiveReader<'_>) -> Result<()> {
+    let archive = reader.archive;
     let (jobs, transitions, operations) = job_arrays(archive)?;
-    let reader = ArchiveReader::new(archive);
     let sim = &archive.simulation;
     let mut ids = HashSet::new();
     let mut transition_ids = HashSet::new();
     let mut operation_ids = HashSet::new();
     for transition in transitions {
+        reader.check_cancelled()?;
         for key in ["resultFingerprint", "result", "error"] {
             if transition.get(key).is_none() {
                 return Err(invalid("transition payload field is missing."));
@@ -419,6 +423,7 @@ pub fn verify_jobs(archive: &SimulationArchive) -> Result<()> {
         )?;
     }
     for operation in operations {
+        reader.check_cancelled()?;
         codec::memory_operation(operation)?;
         if !matches!(
             operation["type"].as_str(),
@@ -429,6 +434,7 @@ pub fn verify_jobs(archive: &SimulationArchive) -> Result<()> {
         }
     }
     for job in jobs {
+        reader.check_cancelled()?;
         codec::strings(
             job,
             &[

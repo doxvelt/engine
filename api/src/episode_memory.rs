@@ -110,6 +110,23 @@ pub fn scenes(
     query: &EpisodeQuery,
     dates: &HashMap<String, String>,
 ) -> Result<Vec<Scene>> {
+    Ok(project_scenes(reader, query, dates, false)?.0)
+}
+/// Archive validation can match publication dates against the same immutable
+/// projection without replaying history or rebuilding character source again.
+pub(crate) fn scenes_with_basis(
+    reader: &impl SimulationReader,
+    query: &EpisodeQuery,
+    dates: &HashMap<String, String>,
+) -> Result<(Vec<Scene>, Vec<Value>, Vec<Vec<String>>)> {
+    project_scenes(reader, query, dates, true)
+}
+fn project_scenes(
+    reader: &impl SimulationReader,
+    query: &EpisodeQuery,
+    dates: &HashMap<String, String>,
+    archive: bool,
+) -> Result<(Vec<Scene>, Vec<Value>, Vec<Vec<String>>)> {
     let p = project_branch(
         reader,
         &query.owner_scope,
@@ -146,6 +163,8 @@ pub fn scenes(
         .map(|c| &c["episode"])
         .collect::<Vec<_>>();
     let mut result = Vec::new();
+    let mut bases = Vec::new();
+    let mut prefix_heads = Vec::new();
     for index in 0..=episodes.len() {
         let episode = episodes.get(index);
         let episode_id = episode.map(|e| e["id"].as_str().unwrap().to_owned());
@@ -160,6 +179,29 @@ pub fn scenes(
             .iter()
             .filter(|t| t["episodeId"].as_str() == episode_id.as_deref())
             .collect::<Vec<_>>();
+        // A historical open scene is a prefix of this path's scene. Its most
+        // recent head is the parent of the next played turn, including any
+        // intervening non-turn effects. Re-project only a matching prefix.
+        let mut heads = if archive {
+            turns
+                .iter()
+                .map(|turn| {
+                    reader
+                        .commit(
+                            &query.owner_scope,
+                            &query.simulation_id,
+                            string(turn, "commitId")?,
+                        )?
+                        .and_then(|c| c.parent_commit_id)
+                        .ok_or_else(|| invalid("A played turn has no parent commit."))
+                })
+                .collect::<Result<Vec<_>>>()?
+        } else {
+            Vec::new()
+        };
+        if archive {
+            heads.push(p.head.id.clone());
+        }
         let name = episode
             .and_then(|e| e["label"].as_str())
             .map(str::to_owned)
@@ -233,16 +275,21 @@ pub fn scenes(
         if changed {
             identity.push(json!("public-role-labels-v1"));
         }
+        let identity = json!(identity);
         result.push(Scene {
             slot,
             label: name,
             date,
-            revision: json_hash(&json!(identity)),
+            revision: json_hash(&identity),
             episode_id,
             sources,
         });
+        if archive {
+            bases.push(identity);
+            prefix_heads.push(heads);
+        }
     }
-    Ok(result)
+    Ok((result, bases, prefix_heads))
 }
 pub fn public_memory(version: Option<&Value>) -> Vec<Value> {
     version.and_then(|v|v["characters"].as_array()).map(|c|c.iter().map(|c|json!({"characterId":c["characterId"],"memories":c["memories"],"impressions":c["impressions"]})).collect()).unwrap_or_default()

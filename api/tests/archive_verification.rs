@@ -12,6 +12,77 @@ fn verify(value: &Value) -> doxvelt_engine::error::Result<()> {
 }
 
 #[test]
+fn indexed_ancestry_matches_walks_on_every_path_and_rejects_disconnected_cycles() {
+    use doxvelt_engine::ports::SimulationReader;
+    let mut data = decode_archive(&fixture("complete")).unwrap();
+    let reader = archive::ArchiveReader::new(&data);
+    for head in &data.commits {
+        let path = reader
+            .ancestry(&head.owner_scope, &head.simulation_id, &head.id)
+            .unwrap();
+        for base in &data.commits {
+            assert_eq!(
+                reader.is_ancestor(&base.id, &head.id).unwrap(),
+                path.iter().any(|c| c.id == base.id)
+            );
+        }
+        assert!(!reader.is_ancestor("absent", &head.id).unwrap());
+    }
+    assert!(reader.is_ancestor(&data.commits[0].id, "absent").is_err());
+    let mut disconnected = data.commits[0].clone();
+    disconnected.id = "disconnected".into();
+    disconnected.parent_commit_id = Some(disconnected.id.clone());
+    data.commits.push(disconnected);
+    assert!(
+        archive::ArchiveReader::new(&data)
+            .is_ancestor(&data.commits[0].id, &data.commits[0].id)
+            .is_err()
+    );
+}
+
+#[test]
+fn cancellation_during_validation_and_import_leaves_no_simulation_and_can_retry() {
+    use doxvelt_engine::storage::Store;
+    use std::{cell::Cell, path::Path};
+    let data = decode_archive(&fixture("complete")).unwrap();
+    let calls = Cell::new(0usize);
+    archive::validate_cancellable(&data, &|| {
+        calls.set(calls.get() + 1);
+        false
+    })
+    .unwrap();
+    let total = calls.get();
+    assert!(total > data.commits.len() * 4);
+    // Stop within indexing, later semantic validation, and transactional insert.
+    for limit in [data.commits.len() / 2, total / 2, total + 10] {
+        let calls = Cell::new(0usize);
+        let cancel = || {
+            calls.set(calls.get() + 1);
+            calls.get() > limit
+        };
+        let mut store = Store::open(Path::new(":memory:")).unwrap();
+        let error = store
+            .import_simulation_cancellable(data.clone(), &cancel)
+            .unwrap_err();
+        assert!(error.message.contains("cancelled"), "{error:?}");
+        assert!(
+            store
+                .export_simulation(&data.simulation.owner_scope, &data.simulation.id)
+                .is_err()
+        );
+        store.import_simulation(data.clone()).unwrap();
+        assert_eq!(
+            json!(
+                store
+                    .export_simulation(&data.simulation.owner_scope, &data.simulation.id)
+                    .unwrap()
+            ),
+            json!(data)
+        );
+    }
+}
+
+#[test]
 fn accepted_history_from_the_reference_verifies_without_operational_rows_or_host_resources() {
     for name in ["memory", "complete"] {
         verify(&fixture(name)).unwrap_or_else(|e| panic!("{name}: {e:?}"));

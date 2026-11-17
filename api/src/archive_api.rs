@@ -40,6 +40,18 @@ async fn blocking<T: Send + 'static>(
         .map_err(|_| invalid("Workspace transfer worker failed."))?
         .map_err(Into::into)
 }
+async fn validation<T: Send + 'static>(
+    cancel: &Arc<AtomicBool>,
+    work: impl FnOnce(&dyn Fn() -> bool) -> doxvelt_engine::error::Result<T> + Send + 'static,
+) -> Result<T> {
+    let cancel = cancel.clone();
+    blocking(move || {
+        let cancelled = || cancel.load(Ordering::SeqCst);
+        doxvelt_engine::archive::check_cancelled(&cancelled)?;
+        work(&cancelled)
+    })
+    .await
+}
 fn configuration(directory: &Path, body: &Value) -> Result<MemoryConfiguration> {
     let config: MemoryConfiguration = serde_json::from_value(body["memory"].clone())
         .map_err(|_| invalid("The host must supply its Reverie service configuration."))?;
@@ -94,6 +106,12 @@ async fn run(
         let d = directory.clone();
         let mut snapshot = blocking(move || archive::capture(&d)).await?;
         let before = serde_json::to_value(&snapshot).unwrap();
+        let (prepared, sources) = validation(&cancel, move |cancel| {
+            let sources = archive::prepare_sources(&snapshot, cancel)?;
+            Ok((snapshot, sources))
+        })
+        .await?;
+        snapshot = prepared;
         let d = directory.clone();
         let p = parent.clone();
         let stage = blocking(move || archive::stage_source(&d, &p)).await?;
@@ -101,7 +119,8 @@ async fn run(
         let mut revisions = Vec::new();
         for story in &snapshot.stories {
             for version in array(&story.episode_memory, "publications")? {
-                let sources = archive::source_for(story, version)?;
+                let sources =
+                    sources.sources(&story.simulation.simulation.id, string(version, "id")?)?;
                 for character in array(version, "characters")? {
                     check(&cancel)?;
                     let actor = string(character, "characterId")?;
@@ -131,7 +150,11 @@ async fn run(
                 }
             }
         }
-        archive::validate_host(&snapshot)?;
+        snapshot = validation(&cancel, move |cancel| {
+            archive::validate_host_with_sources(&snapshot, &sources, cancel)?;
+            Ok(snapshot)
+        })
+        .await?;
         let d = directory.clone();
         let after = blocking(move || archive::capture(&d)).await?;
         if serde_json::to_value(after).unwrap() != before {
@@ -181,7 +204,8 @@ async fn run(
         ));
     }
     let p = package.clone();
-    let snapshot = blocking(move || archive::read(&p)).await?;
+    let (snapshot, sources) =
+        validation(&cancel, move |cancel| archive::read_cancellable(&p, cancel)).await?;
     if target.exists() {
         let receipt = safe_fs::read_regular(&target.join(".doxvelt/import.json"), true)
             .ok()
@@ -213,7 +237,7 @@ async fn run(
                 .iter()
                 .find(|v| v["id"] == memory.publication_id)
                 .unwrap();
-            let sources = archive::source_for(story, version)?;
+            let sources = sources.sources(&memory.simulation_id, &memory.publication_id)?;
             let source = sources
                 .iter()
                 .find(|s| s.character_id == memory.character_id)
@@ -243,7 +267,10 @@ async fn run(
     let a = snapshot.clone();
     let t = target.clone();
     let source = package.join("source");
-    let stage = blocking(move || archive::stage_import(&parent, &t, &a, &source)).await?;
+    let stage = validation(&cancel, move |cancel| {
+        archive::stage_import_cancellable(&parent, &t, &a, &source, cancel)
+    })
+    .await?;
     let root = stage.path().join("workspace");
     for memory in &snapshot.memories {
         check(&cancel)?;
@@ -260,7 +287,7 @@ async fn run(
             .iter()
             .find(|c| c["characterId"] == memory.character_id)
             .unwrap();
-        let sources = archive::source_for(story, version)?;
+        let sources = sources.sources(&memory.simulation_id, &memory.publication_id)?;
         let source = sources
             .iter()
             .find(|s| s.character_id == memory.character_id)
@@ -286,10 +313,11 @@ async fn run(
     // The exact reviewed archive and copied source must still be current. This
     // also catches source edits while the native memory callbacks were running.
     let p = package.clone();
-    let reread = blocking(move || archive::read(&p)).await?;
-    if reread.checksum != snapshot.checksum {
-        return Err(invalid("Archive changed during import. Preview again."));
-    }
+    let expected = snapshot.checksum.clone();
+    validation(&cancel, move |cancel| {
+        archive::verify_unchanged(&p, &expected, cancel)
+    })
+    .await?;
     // Verify the authored bytes actually copied into the restored workspace.
     let staged_files = archive::restored_source_files(&root)?;
     if staged_files != snapshot.source_files {

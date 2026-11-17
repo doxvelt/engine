@@ -111,8 +111,16 @@ impl Store {
             .collect()
     }
     pub fn import_simulation(&mut self, archive: SimulationArchive) -> Result<()> {
+        self.import_simulation_cancellable(archive, &|| false)
+    }
+    pub fn import_simulation_cancellable(
+        &mut self,
+        archive: SimulationArchive,
+        cancel: &dyn Fn() -> bool,
+    ) -> Result<()> {
         use crate::{archive, projection::string};
-        let archive = archive::normalize(archive)?;
+        let archive = archive::normalize_cancellable(archive, cancel)?;
+        archive::check_cancelled(cancel)?;
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -156,41 +164,27 @@ impl Store {
                 ],
             )
             .map_err(sql_error)?;
-        let mut inserted = std::collections::HashSet::new();
-        while inserted.len() < archive.commits.len() {
-            let ready: Vec<_> = archive
-                .commits
-                .iter()
-                .filter(|c| {
-                    !inserted.contains(&c.id)
-                        && c.parent_commit_id
-                            .as_ref()
-                            .is_none_or(|p| inserted.contains(p))
-                })
-                .collect();
-            if ready.is_empty() {
-                return Err(invalid("Archive commit ancestry is cyclic."));
-            }
-            for c in ready {
-                transaction
-                    .execute(
-                        "INSERT INTO commits VALUES (?,?,?,?,?,?,?,?)",
-                        params![
-                            c.id,
-                            c.owner_scope,
-                            c.simulation_id,
-                            c.parent_commit_id,
-                            c.kind,
-                            c.command_id,
-                            json_text(&c.events),
-                            c.created_at
-                        ],
-                    )
-                    .map_err(sql_error)?;
-                inserted.insert(c.id.clone());
-            }
+        let reader = archive::ArchiveReader::cancellable(&archive, cancel);
+        for c in reader.ordered_commits()? {
+            archive::check_cancelled(cancel)?;
+            transaction
+                .execute(
+                    "INSERT INTO commits VALUES (?,?,?,?,?,?,?,?)",
+                    params![
+                        c.id,
+                        c.owner_scope,
+                        c.simulation_id,
+                        c.parent_commit_id,
+                        c.kind,
+                        c.command_id,
+                        json_text(&c.events),
+                        c.created_at
+                    ],
+                )
+                .map_err(sql_error)?;
         }
         for b in &archive.branches {
+            archive::check_cancelled(cancel)?;
             transaction
                 .execute(
                     "INSERT INTO branches VALUES (?,?,?,?,?,?,?)",
@@ -207,6 +201,7 @@ impl Store {
                 .map_err(sql_error)?;
         }
         for w in &archive.stage_whispers {
+            archive::check_cancelled(cancel)?;
             transaction
                 .execute(
                     "INSERT INTO draft_stage_whispers VALUES (?,?,?,?,?,?,?,?,?)",
@@ -225,6 +220,7 @@ impl Store {
                 .map_err(sql_error)?;
         }
         for c in &archive.command_results {
+            archive::check_cancelled(cancel)?;
             transaction
                 .execute(
                     "INSERT INTO command_results VALUES (?,?,?,?,?,?,?)",
@@ -307,6 +303,7 @@ impl Store {
                 )
                 .map_err(sql_error)?;
         }
+        archive::check_cancelled(cancel)?;
         transaction.commit().map_err(sql_error)
     }
 

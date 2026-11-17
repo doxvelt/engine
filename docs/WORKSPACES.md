@@ -202,6 +202,22 @@ run the real two-process round trips, restart, failure and safe-retry checks.
 The workspace browser runner also exercises export, review and import through
 the maintained DSH controls without provider calls during transfer.
 
+History verification and source reconstruction run on a worker, with cancellation
+checks during graph indexing, command verification, source resolution, file
+hashing and staged database insertion. Accepted commits and branches are indexed
+per request. Access validation carries immutable parent state through each edge;
+publication sources reuse branch projections and project only matching historical
+prefixes. The cache is bound to the exact story data and is never persisted.
+Before publication, an integrity-only reread checks the archive checksum and
+authored files again; it does not repeat semantic history verification.
+
+The long-story round trip retains both an early publication and the latest one.
+Set `DOXVELT_ARCHIVE_SCALE=400,800` to run larger probes, and optionally set
+`DOXVELT_API_EXECUTABLE` to a release API build. Timings are diagnostics rather
+than hardware-dependent pass/fail thresholds. Rust tests also verify indexed
+ancestry against history walks and cancellation after work starts, including
+rollback and retry of a staged import.
+
 Focused checks run with `node --test tests/workspace-collection.test.ts
 tests/dsh-notation.test.ts tests/dsh-composer.test.ts`. The browser runner
 `scripts/dsh-gui-spike/workspace-test.mjs` exercises activation, inline creation,
