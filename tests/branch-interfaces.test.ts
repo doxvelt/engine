@@ -277,7 +277,7 @@ test("CLI edit, regenerate, fork, and logical import/export preserve sibling pat
 
 test("local API preserves source, play, closure, export, and pure branch projection behavior", async (t) => {
   const { root, db } = await temp(t);
-  const server = createLocalApiServer({ dbPath: db });
+  const server = createLocalApiServer({ dbPath: db, allowedOrigins: ["http://localhost:3000"] });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(
     () =>

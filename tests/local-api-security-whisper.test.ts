@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -90,12 +90,23 @@ test("local API rejects cross-site writes and enforces JSON mutation media types
     },
   });
   assert.equal(hostilePreflight.status, 403);
+  for (const origin of ["http://localhost:3000", "http://127.0.0.1:3000"]) {
+    const response = await fetch(`${base}/source/file`, {
+      method: "POST",
+      headers: { origin, "content-type": "application/json" },
+      body,
+    });
+    assert.equal(response.status, 403);
+    assert.equal(response.headers.get("access-control-allow-origin"), null);
+  }
   await assert.rejects(readFile(evilPath, "utf8"), /ENOENT/);
 
-  const allowedPlain = await fetch(`${base}/source/file`, {
+  const browserOrigin = "http://localhost:3000";
+  const configured = await apiFixture(t, path.join(root, "configured.sqlite"), [browserOrigin]);
+  const allowedPlain = await fetch(`${configured}/source/file`, {
     method: "POST",
     headers: {
-      origin: "http://localhost:3000",
+      origin: browserOrigin,
       "content-type": "text/plain",
     },
     body,
@@ -103,19 +114,19 @@ test("local API rejects cross-site writes and enforces JSON mutation media types
   assert.equal(allowedPlain.status, 415);
 
   const allowed = await jsonPost(
-    base,
+    configured,
     "/source/file",
     {
       workspacePath: workspace,
       path: "worlds/allowed.md",
       text: "allowed browser write",
     },
-    "http://localhost:3000",
+    browserOrigin,
   );
   assert.equal(allowed.status, 200);
   assert.equal(
     allowed.headers.get("access-control-allow-origin"),
-    "http://localhost:3000",
+    browserOrigin,
   );
   assert.match(allowed.headers.get("vary") || "", /Origin/i);
 
@@ -126,6 +137,12 @@ test("local API rejects cross-site writes and enforces JSON mutation media types
   });
   assert.equal(native.status, 200);
   assert.equal(native.headers.get("access-control-allow-origin"), null);
+  const sameOrigin = await jsonPost(base, "/source/file", {
+    workspacePath: workspace,
+    path: "worlds/same-origin.md",
+    text: "same-origin write",
+  }, base);
+  assert.equal(sameOrigin.status, 200);
   assert.equal(
     await readFile(path.join(workspace, "worlds", "allowed.md"), "utf8"),
     "allowed browser write",
@@ -134,6 +151,48 @@ test("local API rejects cross-site writes and enforces JSON mutation media types
     await readFile(path.join(workspace, "worlds", "native.md"), "utf8"),
     "native write",
   );
+});
+
+test("native HTTP rejects untrusted or ambiguous request headers before reading the body", async (t) => {
+  const { dbPath } = await temp(t);
+  const base = await apiFixture(t, dbPath, ["https://configured.test"]);
+  const { host, port } = new URL(base);
+  const status = (method: "GET" | "POST", headers: string[]) => new Promise<number | undefined>((resolve, reject) => {
+    const request = httpRequest(`${base}/health`, {
+      method, headers, setHost: false, signal: AbortSignal.timeout(5000),
+    }, (response) => {
+      response.resume();
+      response.once("end", () => {
+        resolve(response.statusCode);
+        request.destroy();
+      });
+      response.once("error", reject);
+    });
+    request.once("error", reject);
+    if (method === "GET") request.end();
+    else request.flushHeaders(); // Leave the declared body outstanding.
+  });
+
+  for (const accepted of [host, `LOCALHOST:${port}`]) {
+    assert.equal(await status("GET", ["Host", accepted]), 200);
+  }
+  for (const headers of [
+    [],
+    ["Host", `untrusted.test:${port}`],
+    ["Host", "127.0.0.1"],
+    ["Host", `${host}, ${host}`],
+    ["Host", host, "Host", host],
+    ["Host", `untrusted.test:${port}`, "X-Forwarded-Host", host],
+  ]) {
+    assert.equal(await status("GET", headers), 403, JSON.stringify(headers));
+  }
+  for (const headers of [
+    ["Host", `untrusted.test:${port}`, "Origin", "https://configured.test"],
+    ["Host", host, "Origin", "https://untrusted.test"],
+    ["Host", host, "Origin", "https://configured.test", "Origin", "https://untrusted.test"],
+  ]) {
+    assert.equal(await status("POST", [...headers, "Content-Type", "application/json", "Content-Length", "20"]), 403);
+  }
 });
 
 test("local API rejects caller-supplied owner scope across its surface", async (t) => {
