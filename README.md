@@ -11,11 +11,6 @@ The desktop package includes the Doxvelt plugin, native simulation engine and
 Reverie memory engine. You need DSH Desktop; you do not need Node.js, Bun, Rust,
 a source checkout or a separate Reverie installation.
 
-<!-- release-status -->
-**v0.2.0-alpha.2 is pending publication.** Until its assets are published, use the
-[previous desktop release](https://github.com/doxvelt/engine/releases/tag/v0.2.0-alpha.1).
-<!-- /release-status -->
-
 Install **v0.2.0-alpha.2** using the steps below. The older v0.1.0-alpha.1 is a
 source-run web alpha and does not contain this desktop package.
 
