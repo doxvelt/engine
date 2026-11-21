@@ -160,6 +160,15 @@ repeatable/comma-separated `--origin`, `--runtime-config`, `--runtime-base-url`,
 The default native HTTP port is 8787. `bun run dev` starts a DSH host and uses
 its own options; run `bun run dev -- --help` for those.
 
+The native listener allows cross-origin browser access only for exact HTTP(S)
+origins supplied with `--origin` (including any non-default port). The request's
+`Host` must identify the listener's configured hostname or the local address
+that accepted the connection, and must match the actual listener port.
+`localhost` is also accepted on loopback connections. When using a reverse
+proxy, set its upstream `Host` to an authority accepted by the native listener
+and explicitly configure any frontend origin sent by the browser. Forwarded
+headers do not change the native listener's Host or Origin checks.
+
 After a failed request, `GET /runtime` provides a fixed, bounded diagnostic for the
 most recent failure in that API process: authentication, unavailable endpoint, or
 other provider/configuration failure. Stage shows that diagnostic on failed drafts.

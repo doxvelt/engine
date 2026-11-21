@@ -12,16 +12,18 @@ mod workspace;
 use axum::{
     Router,
     body::{Body, to_bytes},
-    extract::{Request, State},
-    http::{HeaderMap, StatusCode},
+    extract::{ConnectInfo, Request, State, connect_info::Connected},
+    http::{HeaderMap, HeaderName, StatusCode, header, uri::Authority},
     response::{IntoResponse, Response},
     routing::any,
+    serve::IncomingStream,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, HashMap},
     io::{self, Write},
+    net::{IpAddr, SocketAddr},
     sync::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
@@ -177,11 +179,25 @@ impl From<doxvelt_engine::error::EngineError> for HostError {
     }
 }
 
-#[derive(Clone)]
 struct App {
     bridge: Bridge,
-    origins: Arc<Vec<String>>,
     connections: watch::Sender<u64>,
+}
+
+struct HttpApp {
+    app: App,
+    host: String,
+    origins: Vec<String>,
+}
+
+#[derive(Clone)]
+struct ListenerAddress(Option<SocketAddr>);
+
+impl Connected<IncomingStream<'_, TcpListener>> for ListenerAddress {
+    fn connect_info(stream: IncomingStream<'_, TcpListener>) -> Self {
+        // For a wildcard bind, use the concrete interface the client reached.
+        Self(stream.io().local_addr().ok())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -224,10 +240,81 @@ impl Reply {
     }
 }
 
+fn single_header(headers: &HeaderMap, name: HeaderName) -> Result<Option<&str>, ()> {
+    let all = headers.get_all(name);
+    let mut values = all.iter();
+    let first = values.next().map(|value| value.to_str());
+    if values.next().is_some() {
+        return Err(());
+    }
+    first.transpose().map_err(|_| ())
+}
+
+fn authority_port(authority: &Authority, default: u16) -> Option<u16> {
+    // A missing port and an invalid port both yield None from Authority::port.
+    // Checking the suffix also excludes userinfo and empty port strings.
+    match authority.as_str().strip_prefix(authority.host())? {
+        "" => Some(default),
+        suffix => {
+            let port = suffix.strip_prefix(':')?;
+            authority
+                .port_u16()
+                .filter(|_| port.bytes().all(|byte| byte.is_ascii_digit()))
+        }
+    }
+}
+
+fn ip_literal(host: &str) -> Option<IpAddr> {
+    let ip = match host.strip_prefix('[') {
+        Some(bracketed) => IpAddr::V6(bracketed.strip_suffix(']')?.parse().ok()?),
+        None => host.parse().ok()?,
+    };
+    Some(ip.to_canonical())
+}
+
+fn allowed_host(authority: &Authority, configured: &str, address: SocketAddr) -> bool {
+    if authority_port(authority, 80) != Some(address.port()) {
+        return false;
+    }
+    let host = authority.host();
+    let local_ip = address.ip().to_canonical();
+    match ip_literal(host) {
+        Some(ip) => ip == local_ip,
+        None => {
+            host.eq_ignore_ascii_case(configured)
+                || (local_ip.is_loopback() && host.eq_ignore_ascii_case("localhost"))
+        }
+    }
+}
+
+fn allowed_origin(origin: &str, origins: &[String], host: Option<&Authority>) -> bool {
+    let Some((scheme, authority)) = origin.split_once("://") else {
+        return false;
+    };
+    let default_port = match scheme {
+        "http" => 80,
+        "https" => 443,
+        _ => return false,
+    };
+    let Ok(authority) = authority.parse::<Authority>() else {
+        return false;
+    };
+    let Some(port) = authority_port(&authority, default_port) else {
+        return false;
+    };
+    origins.iter().any(|allowed| allowed == origin)
+        || (scheme == "http"
+            && host.is_some_and(|host| {
+                authority.host().eq_ignore_ascii_case(host.host())
+                    && authority_port(host, 80) == Some(port)
+            }))
+}
+
 fn boundary(
     method: &str,
-    headers: &BTreeMap<String, String>,
+    headers: &HeaderMap,
     origins: &[String],
+    host: Option<&Authority>,
 ) -> Result<BTreeMap<String, String>, Reply> {
     let mut result = BTreeMap::from([
         ("vary".into(), "Origin".into()),
@@ -237,23 +324,28 @@ fn boundary(
         ),
         ("access-control-allow-headers".into(), "content-type".into()),
     ]);
-    if let Some(origin) = headers.get("origin") {
-        if !origins.contains(origin) {
-            return Err(Reply::error(
-                403,
-                &format!("Origin is not allowed: {origin}"),
-            ));
+    match single_header(headers, header::ORIGIN) {
+        Ok(None) => (),
+        Ok(Some(origin)) if allowed_origin(origin, origins, host) => {
+            result.insert("access-control-allow-origin".into(), origin.into());
         }
-        result.insert("access-control-allow-origin".into(), origin.clone());
+        _ => {
+            let mut reply = Reply::error(403, "Origin is not allowed.");
+            reply.headers.insert("vary".into(), "Origin".into());
+            return Err(reply);
+        }
     }
     if ["POST", "PUT", "PATCH", "DELETE"].contains(&method)
-        && !headers.get("content-type").is_some_and(|t| {
-            t.split(';')
-                .next()
-                .unwrap_or("")
-                .trim()
-                .eq_ignore_ascii_case("application/json")
-        })
+        && !single_header(headers, header::CONTENT_TYPE)
+            .ok()
+            .flatten()
+            .is_some_and(|t| {
+                t.split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .eq_ignore_ascii_case("application/json")
+            })
     {
         return Err(Reply::error(
             415,
@@ -263,21 +355,8 @@ fn boundary(
     Ok(result)
 }
 
-async fn dispatch(
-    app: &App,
-    method: &str,
-    target: &str,
-    headers: BTreeMap<String, String>,
-    bytes: &[u8],
-) -> Reply {
-    let cors = match boundary(method, &headers, &app.origins) {
-        Ok(cors) => cors,
-        Err(mut reply) => {
-            reply.headers.insert("vary".into(), "Origin".into());
-            return reply;
-        }
-    };
-    let mut reply = if method == "OPTIONS" {
+async fn dispatch(app: &App, method: &str, target: &str, bytes: &[u8]) -> Reply {
+    if method == "OPTIONS" {
         Reply {
             status: 204,
             body: Value::Null,
@@ -305,42 +384,62 @@ async fn dispatch(
                 }
             },
         }
+    }
+}
+
+async fn protocol_request(app: &App, params: &Value, origins: &[String]) -> Reply {
+    let method = params["method"].as_str().unwrap_or("GET");
+    let target = params["target"].as_str().unwrap_or("/");
+    let values: BTreeMap<String, String> =
+        serde_json::from_value(params["headers"].clone()).unwrap_or_default();
+    let mut headers = HeaderMap::new();
+    for (name, value) in values {
+        let (Ok(name), Ok(value)) = (name.parse::<HeaderName>(), value.parse()) else {
+            return Reply::error(400, "Invalid request header.");
+        };
+        headers.append(name, value);
+    }
+    let cors = match boundary(method, &headers, origins, None) {
+        Ok(cors) => cors,
+        Err(reply) => return reply,
     };
+    let body = params["body"].as_str().unwrap_or("");
+    let mut reply = dispatch(app, method, target, body.as_bytes()).await;
     reply.headers.extend(cors);
     reply
 }
 
-fn header_values(headers: &HeaderMap) -> BTreeMap<String, String> {
-    headers
-        .iter()
-        .map(|(key, value)| {
-            (
-                key.as_str().to_owned(),
-                value.to_str().unwrap_or("").to_owned(),
-            )
-        })
-        .collect()
-}
-async fn http_request(State(app): State<App>, request: Request) -> Response {
+async fn http_request(
+    State(http): State<Arc<HttpApp>>,
+    ConnectInfo(ListenerAddress(address)): ConnectInfo<ListenerAddress>,
+    request: Request,
+) -> Response {
     let (parts, body) = request.into_parts();
     let method = parts.method.as_str();
-    let headers = header_values(&parts.headers);
     // Reject the boundary before buffering an untrusted body.
-    if let Err(reply) = boundary(method, &headers, &app.origins) {
-        return reply.response();
+    let host = single_header(&parts.headers, header::HOST)
+        .ok()
+        .flatten()
+        .and_then(|host| host.parse::<Authority>().ok());
+    let (Some(host), Some(address)) = (host, address) else {
+        return Reply::error(403, "Host is not allowed.").response();
+    };
+    if !allowed_host(&host, &http.host, address) {
+        return Reply::error(403, "Host is not allowed.").response();
     }
-    match to_bytes(body, BODY_LIMIT).await {
-        Ok(bytes) => dispatch(&app, method, &parts.uri.to_string(), headers, &bytes)
-            .await
-            .response(),
-        Err(_) => {
-            let mut reply = Reply::error(413, "Body too large.");
-            if let Ok(cors) = boundary(method, &headers, &app.origins) {
-                reply.headers = cors;
-            }
-            reply.response()
-        }
+    if parts.uri.authority().is_some() {
+        return Reply::error(400, "Expected a local request path.").response();
     }
+    let cors = match boundary(method, &parts.headers, &http.origins, Some(&host)) {
+        Ok(cors) => cors,
+        Err(reply) => return reply.response(),
+    };
+    let mut reply = match to_bytes(body, BODY_LIMIT).await {
+        Ok(bytes) => dispatch(&http.app, method, &parts.uri.to_string(), &bytes).await,
+        Err(_) => Reply::error(413, "Body too large."),
+    };
+    reply.headers.extend(cors);
+    reply.response()
 }
 
 #[tokio::main(worker_threads = 2)]
@@ -404,15 +503,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             let origins: Vec<String> = params
                 .get("allowedOrigins")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
-                .unwrap_or_else(|| {
-                    vec![
-                        "http://localhost:3000".into(),
-                        "http://127.0.0.1:3000".into(),
-                    ]
-                });
+                .unwrap_or_default();
             let app = App {
                 bridge: app_bridge,
-                origins: Arc::new(origins),
                 connections: connections.clone(),
             };
             let result = match message["method"].as_str().unwrap_or("") {
@@ -431,17 +524,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     let reply = tokio::select! {reply=episode_api::execute_private(&app.bridge,&database,params.clone())=>reply,_=abort.changed()=>Reply::error(503,"Episode operation was cancelled.")};
                     Ok(serde_json::to_value(reply).unwrap())
                 }
-                "request" => {
-                    let method = params["method"].as_str().unwrap_or("GET");
-                    let target = params["target"].as_str().unwrap_or("/");
-                    let headers =
-                        serde_json::from_value(params["headers"].clone()).unwrap_or_default();
-                    let body = params["body"].as_str().unwrap_or("");
-                    Ok(serde_json::to_value(
-                        dispatch(&app, method, target, headers, body.as_bytes()).await,
-                    )
-                    .unwrap())
-                }
+                "request" => Ok(serde_json::to_value(
+                    protocol_request(&app, params, &origins).await,
+                )
+                .unwrap()),
                 "listen" => {
                     let mut task = listener.lock().await;
                     if task.is_some() {
@@ -456,6 +542,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 Err(error) => Err(format!("API could not listen: {error}")),
                                 Ok(socket) => {
                                     let address = socket.local_addr().unwrap();
+                                    let http = HttpApp {
+                                        app,
+                                        host: host.into(),
+                                        origins,
+                                    };
                                     let mut stop = stopping.subscribe();
                                     *task = Some(tokio::spawn(async move {
                                         let shutdown = async move {
@@ -469,7 +560,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                                             socket,
                                             Router::new()
                                                 .fallback(any(http_request))
-                                                .with_state(app),
+                                                .with_state(Arc::new(http))
+                                                .into_make_service_with_connect_info::<ListenerAddress>(),
                                         )
                                         .with_graceful_shutdown(shutdown)
                                         .await
@@ -523,7 +615,6 @@ mod tests {
     fn app() -> App {
         App {
             bridge: Bridge::default(),
-            origins: Arc::new(vec!["http://localhost:3000".into()]),
             connections: watch::channel(0).0,
         }
     }
@@ -531,15 +622,13 @@ mod tests {
     #[tokio::test]
     async fn health_and_preflight_need_no_application_callback() {
         let app = app();
-        let health = dispatch(&app, "GET", "/health", BTreeMap::new(), b"").await;
+        let health = protocol_request(&app, &json!({"target": "/health"}), &[]).await;
         assert_eq!(health.status, 200);
         assert_eq!(health.body, json!({"ok": true}));
-        let preflight = dispatch(
+        let preflight = protocol_request(
             &app,
-            "OPTIONS",
-            "/simulations",
-            BTreeMap::from([("origin".into(), "http://localhost:3000".into())]),
-            b"",
+            &json!({"method": "OPTIONS", "target": "/simulations", "headers": {"origin": "http://localhost:3000"}}),
+            &["http://localhost:3000".into()],
         )
         .await;
         assert_eq!(preflight.status, 204);
@@ -556,56 +645,66 @@ mod tests {
     #[tokio::test]
     async fn invalid_requests_never_dispatch_application_operations() {
         let app = app();
-        let json_headers = BTreeMap::from([("content-type".into(), "application/json".into())]);
-        assert_eq!(
-            dispatch(&app, "POST", "/simulations/start", BTreeMap::new(), b"{}")
-                .await
-                .status,
-            415
-        );
-        for body in [
-            b"[]".as_slice(),
-            b"null",
-            b"{bad",
-            b"{\"ownerScope\":\"other\"}",
-        ] {
-            assert_eq!(
-                dispatch(
-                    &app,
-                    "POST",
-                    "/simulations/start",
-                    json_headers.clone(),
-                    body
-                )
-                .await
-                .status,
-                400
-            );
+        let mut params = json!({"method": "POST", "target": "/simulations/start", "body": "{}"});
+        assert_eq!(protocol_request(&app, &params, &[]).await.status, 415);
+        params["headers"] = json!({"content-type": "application/json"});
+        for body in ["[]", "null", "{bad", r#"{"ownerScope":"other"}"#] {
+            params["body"] = json!(body);
+            assert_eq!(protocol_request(&app, &params, &[]).await.status, 400);
         }
+        params["body"] = json!("x".repeat(BODY_LIMIT + 1));
+        assert_eq!(protocol_request(&app, &params, &[]).await.status, 413);
         assert_eq!(
-            dispatch(
+            protocol_request(
                 &app,
-                "POST",
-                "/simulations/start",
-                json_headers,
-                &vec![b'x'; BODY_LIMIT + 1]
-            )
-            .await
-            .status,
-            413
-        );
-        assert_eq!(
-            dispatch(
-                &app,
-                "GET",
-                "/health",
-                BTreeMap::from([("origin".into(), "https://untrusted.invalid".into()),]),
-                b""
+                &json!({"target": "/health", "headers": {"origin": "https://untrusted.invalid"}}),
+                &[],
             )
             .await
             .status,
             403
         );
         assert!(app.bridge.pending.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn host_policy_validates_the_address_and_port() {
+        let address = "[::1]:8787".parse().unwrap();
+        for host in ["[::1]:8787", "[0:0:0:0:0:0:0:1]:8787", "LOCALHOST:8787"] {
+            assert!(
+                allowed_host(&host.parse().unwrap(), "::1", address),
+                "{host}"
+            );
+        }
+        for host in ["[::1]", "[::1]:80", "127.0.0.1:8787", "example.test:8787"] {
+            assert!(
+                !allowed_host(&host.parse().unwrap(), "::1", address),
+                "{host}"
+            );
+        }
+        let address = "192.0.2.1:80".parse().unwrap();
+        assert!(allowed_host(
+            &"192.0.2.1".parse().unwrap(),
+            "0.0.0.0",
+            address
+        ));
+        assert!(allowed_host(
+            &"API.example.test".parse().unwrap(),
+            "api.example.test",
+            address
+        ));
+        for host in [
+            "localhost",
+            "192.0.2.2",
+            "0.0.0.0",
+            "192.0.2.1:",
+            "[192.0.2.1]",
+            "user@192.0.2.1",
+            "192.0.2.1:+80",
+        ] {
+            if let Ok(host) = host.parse() {
+                assert!(!allowed_host(&host, "0.0.0.0", address), "{host}");
+            }
+        }
     }
 }
